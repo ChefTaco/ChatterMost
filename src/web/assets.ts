@@ -2692,6 +2692,7 @@ const state = {
   lastInviteCode: '',
   drafts: {},
   pendingFiles: {},
+  sendingChannels: {},
   threadDrafts: {},
   threadError: '',
   composerError: '',
@@ -4243,6 +4244,7 @@ function renderComposer() {
     }
   });
   form.addEventListener('paste', (event) => {
+    if (state.sendingChannels[composerChannelId]) return;
     const files = Array.from(event.clipboardData?.files || []);
     if (files.length > 0) {
       addPendingFiles(files, composerChannelId);
@@ -4260,6 +4262,7 @@ function renderComposer() {
   form.addEventListener('drop', (event) => {
     event.preventDefault();
     form.classList.remove('dragging');
+    if (state.sendingChannels[composerChannelId]) return;
     const files = Array.from(event.dataTransfer?.files || []);
     if (files.length > 0) {
       addPendingFiles(files, composerChannelId);
@@ -4267,8 +4270,13 @@ function renderComposer() {
       renderApp();
     }
   });
+  if (state.sendingChannels[composerChannelId]) {
+    form.querySelectorAll('input, textarea, button').forEach((control) => { control.disabled = true; });
+  }
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
+    if (state.sendingChannels[composerChannelId]) return;
+    state.sendingChannels[composerChannelId] = true;
     const submit = form.querySelector('button[type="submit"]');
     if (submit) submit.disabled = true;
     try {
@@ -4289,6 +4297,7 @@ function renderComposer() {
         renderApp();
         return;
       }
+      form.querySelectorAll('input, textarea, button').forEach((control) => { control.disabled = true; });
       if (files.length) {
         state.uploadStatus = 'Uploading ' + files.length + ' file' + (files.length === 1 ? '' : 's') + '...';
         renderApp();
@@ -4315,7 +4324,7 @@ function renderComposer() {
       clearPendingFiles(composerChannelId);
       form.reset();
       const activeComposer = document.querySelector('.composer textarea[name="message"]');
-      if (activeComposer instanceof HTMLTextAreaElement) activeComposer.value = '';
+      if (state.activeChannelId === composerChannelId && activeComposer instanceof HTMLTextAreaElement) activeComposer.value = '';
       await loadPosts();
       renderApp();
       scrollPostListToBottom();
@@ -4324,7 +4333,9 @@ function renderComposer() {
       state.composerError = error.message || String(error);
       renderApp();
     } finally {
+      delete state.sendingChannels[composerChannelId];
       if (submit) submit.disabled = false;
+      renderApp();
     }
   });
   return form;

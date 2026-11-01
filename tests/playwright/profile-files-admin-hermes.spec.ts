@@ -213,3 +213,45 @@ test('Hermes bot posts via REST, receives WebSocket event, and replies in thread
     await botRequest.dispose();
   }
 });
+
+test('keeps the composer busy across renders until attachment submission finishes', async ({ page }) => {
+  await loginAsAdmin(page);
+  const marker = `Pending attachment ${Date.now()}`;
+  let responseHeld = false;
+  let releaseResponse: () => void = () => undefined;
+  const heldResponse = new Promise<void>((resolve) => { releaseResponse = resolve; });
+  await page.route('**/api/v4/posts', async (route) => {
+    const request = route.request();
+    if (request.method() !== 'POST' || !request.postData()?.includes(marker)) {
+      await route.continue();
+      return;
+    }
+    const response = await route.fetch();
+    responseHeld = true;
+    await heldResponse;
+    await route.fulfill({ response });
+  });
+  await page.getByLabel('Message').fill(marker);
+  await page.locator('input[type=file][name=files]').setInputFiles({ name: 'pending.png', mimeType: 'image/png', buffer: tinyPng });
+  await page.getByRole('button', { name: 'Send' }).click();
+  try {
+    // HTTP completion is held after persistence. Upload and inspector renders
+    // must retain the submission lock even though they replaced the original form.
+    await expect.poll(() => responseHeld).toBeTruthy();
+    await page.getByRole('button', { name: 'Members', exact: true }).click();
+    await expect(page.getByLabel('Message')).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Send' })).toBeDisabled();
+  } finally {
+    releaseResponse();
+  }
+  await expect(page.getByLabel('Message')).toBeEnabled();
+  await expect(page.getByLabel('Message')).toHaveValue('');
+  await expect(page.getByLabel('Selected attachments')).toHaveCount(0);
+  const next = `Next plain attachment ${Date.now()}`;
+  await page.getByLabel('Message').fill(next);
+  await page.locator('input[type=file][name=files]').setInputFiles({ name: 'next.txt', mimeType: 'text/plain', buffer: Buffer.from('next synthetic attachment') });
+  await page.getByRole('button', { name: 'Send' }).click();
+  const post = page.getByTestId('post').filter({ hasText: next });
+  await expect(post.getByRole('link', { name: 'Attachment next.txt' })).toBeVisible();
+  await expect(post.getByAltText('Attachment preview')).toHaveCount(0);
+});
