@@ -9,6 +9,7 @@ import subprocess
 import sys
 import tempfile
 
+subprocess.run(['python3', 'tests/container/context.py'], check=True)
 version = sys.argv[1]
 work = Path(tempfile.mkdtemp(prefix='chattermost-native-'))
 root = work / 'installation'

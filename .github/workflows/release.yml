@@ -33,7 +33,9 @@ jobs:
       - name: Native execution identity
         run: uname -m
       - name: Set immutable version
-        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+        run: |
+          echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          echo "CREATED=$(git log -1 --format=%cI)" >> "$GITHUB_ENV"
       - name: Refuse overwriting published version
         env: {GH_TOKEN: '${{ github.token }}'}
         run: |
@@ -51,7 +53,7 @@ jobs:
           build-args: |
             VERSION=${{ env.VERSION }}
             REVISION=${{ github.sha }}
-            CREATED=${{ github.event.head_commit.timestamp }}
+            CREATED=${{ env.CREATED }}
       - name: Build migration image
         uses: docker/build-push-action@v7
         with:
@@ -63,6 +65,7 @@ jobs:
           build-args: |
             VERSION=${{ env.VERSION }}
             REVISION=${{ github.sha }}
+            CREATED=${{ env.CREATED }}
       - name: Scan application
         uses: aquasecurity/trivy-action@v0.36.0
         with:
@@ -101,7 +104,7 @@ jobs:
           build-args: |
             VERSION=${{ env.VERSION }}
             REVISION=${{ github.sha }}
-            CREATED=${{ github.event.head_commit.timestamp }}
+            CREATED=${{ env.CREATED }}
       - name: Publish native migrator with SBOM and provenance
         uses: docker/build-push-action@v7
         with:
@@ -115,6 +118,7 @@ jobs:
           build-args: |
             VERSION=${{ env.VERSION }}
             REVISION=${{ github.sha }}
+            CREATED=${{ env.CREATED }}
       - uses: actions/upload-artifact@v4
         with:
           name: scans-${{ matrix.arch }}
@@ -139,8 +143,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish immutable multi-platform manifests and bundle
+        env: {GH_TOKEN: '${{ github.token }}'}
         run: |
           VERSION="${GITHUB_REF_NAME#v}"
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo 'Release already exists; select a new version.' >&2; exit 1
+          fi
           for NAME in chattermost chattermost-migrator; do
             docker buildx imagetools create -t "ghcr.io/cheftaco/$NAME:$VERSION" "ghcr.io/cheftaco/$NAME:$VERSION-amd64" "ghcr.io/cheftaco/$NAME:$VERSION-arm64"
           done

@@ -5,20 +5,15 @@
 !tsconfig.json
 !src/
 !src/**
-!scripts/
 !scripts/container.ts
 !scripts/image-notices.ts
 !scripts/schema-policy.mjs
-!prisma/
 !prisma/schema.prisma
-!prisma/migrations/
 !prisma/migrations/**
-!deploy/
 !deploy/Dockerfile
 !deploy/schema-policy.json
 !LICENSE
 !NOTICE
-!distribution/
 
 # Defense in depth if private material is accidentally placed inside source dirs.
 **/.env*

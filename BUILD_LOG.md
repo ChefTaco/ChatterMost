@@ -10,7 +10,7 @@ Development tooling pins `minimatch` to `11.0.3` because the current lint packag
 
 Live conversation refreshes preserve the focused composer and its selection synchronously, including a refresh between Shift and Enter. Browser regression coverage forces that refresh and checks that the newline lands at the original caret.
 
-Container baseline 0.2.1 adds a separate digest-pinned Compose distribution and
+Container baseline 0.2.2 adds a separate digest-pinned Compose distribution and
 native AMD64/ARM64 release pipeline. The application image runs without root,
 excludes build tools, generates its native Prisma engine, and carries Apache-2.0
 and dependency notices. Protected installation secrets, private networks, explicit
@@ -21,3 +21,7 @@ The existing SSH/systemd deployment and operator installation remain unchanged.
 The container release gate exposed an attachment submission race. Composer busy
 state now survives live refreshes, preventing the next message from inheriting a
 prior in-flight attachment. A held-response browser regression verifies the race.
+The build context is verified by exporting Docker's actual view and checking an
+allowlist with excluded synthetic sentinels. Directory-level ignore exceptions
+were removed so private deployment files cannot enter even an intermediate build
+context. Release tar headers omit host user/group metadata.
