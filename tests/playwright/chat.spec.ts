@@ -175,7 +175,7 @@ test('composer keeps its caret and Shift Enter across a live refresh', async ({ 
     if (element instanceof HTMLTextAreaElement) element.setSelectionRange(10, 10);
   });
   await page.keyboard.down('Shift');
-  const marker = `Live composer refresh ${Date.now()}`;
+  const marker = `Live composer refresh ${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const posted = await request.post('/api/v4/posts', {
     headers: { Authorization: `Bearer ${token}` },
     data: { channel_id: channelId, message: marker }

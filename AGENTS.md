@@ -170,3 +170,12 @@ retains its development/SSH deployment contract. Build `deploy/Dockerfile` targe
 Compose project names and synthetic data for verification. Do not run distribution
 commands in the source checkout or touch the existing installation without an
 explicit migration instruction. Publication-only work must not trigger deployment.
+
+The standalone lifecycle manager is `distribution/chattermost`. Its release policy
+is explicit in `distribution/release-policy.json`; update the package version and
+reviewed upgrade paths together. Run `python3 -m unittest discover -s tests/container
+-p 'test_*.py'` for lifecycle boundary coverage. Native release jobs exercise the
+published baseline plus candidate images before assembling a versioned release;
+`tests/container/lifecycle.py VERSION` repeats the proof against public artifacts.
+Backups, migration evidence and transaction records are private installation state.
+Never auto-restore a database after a failed upgrade or bypass schema validation.

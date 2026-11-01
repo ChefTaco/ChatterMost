@@ -17,15 +17,31 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22.23.4, cache: npm}
+      - run: npm ci
       - name: Anonymous release and registry install, real persistence and WebSocket proof
         env:
           VERSION: ${{ inputs.version }}
         run: python3 tests/container/published.py "$VERSION" --keep /tmp/chattermost-public-proof
+      - name: Install native browser for public lifecycle proof
+        if: ${{ !startsWith(inputs.version, '0.2.') }}
+        run: npx playwright install --with-deps chromium
+      - name: Real published lifecycle and CLI proof
+        if: ${{ !startsWith(inputs.version, '0.2.') }}
+        env:
+          VERSION: ${{ inputs.version }}
+          CHATTERMOST_LIFECYCLE_PORT: '18067'
+          CHATTERMOST_LIFECYCLE_BROWSER: 'true'
+          CHATTERMOST_LIFECYCLE_REPORT: /tmp/chattermost-public-proof/lifecycle-proof.json
+        run: python3 tests/container/lifecycle.py "$VERSION"
       - name: Upload sanitized synthetic evidence
         uses: actions/upload-artifact@v4
         with:
           name: public-proof-${{ matrix.runner }}
-          path: /tmp/chattermost-public-proof/public-verification.json
+          path: |
+            /tmp/chattermost-public-proof/public-verification.json
+            /tmp/chattermost-public-proof/lifecycle-proof.json
       - name: Stop only the synthetic test installation
         if: always()
         run: |

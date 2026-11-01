@@ -19,14 +19,26 @@ for name in ('LICENSE', 'NOTICE'):
     shutil.copyfile(name, stage / name)
 shutil.copyfile('docs/containers.md', stage / 'README.md')
 schema = json.loads(subprocess.check_output(['node', 'scripts/schema-policy.mjs', 'inspect', '.']))
+ancestry = []
+head = hashlib.sha256(b'chattermost-schema-lineage-v1\0').hexdigest()
+for file in sorted(Path('prisma/migrations').glob('*/migration.sql')):
+    checksum = hashlib.sha256(file.read_bytes()).hexdigest()
+    head = hashlib.sha256(f'{head}\0{file.parent.name}\0{checksum}\0'.encode()).hexdigest()
+    ancestry.append(head)
+assert head == schema['schema_lineage_digest']
+policy = json.loads(Path('distribution/release-policy.json').read_text())
+if version != policy['version']:
+    raise SystemExit('Version does not match the reviewed distribution release policy')
+if version != json.loads(Path('package.json').read_text())['version']:
+    raise SystemExit('Tag version does not match package version')
 manifest = {
-    'format': 1, 'version': version,
+    'format': 1, 'version': version, 'lineage_ancestry': ancestry, 'lifecycle_format': 2,
     'revision': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
     'app_image': f'ghcr.io/cheftaco/chattermost@{app_digest}',
     'migrator_image': f'ghcr.io/cheftaco/chattermost-migrator@{migrator_digest}',
     'postgres_image': 'postgres:16-alpine@sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab',
     'redis_image': 'redis:7.4-alpine@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f',
-    'postgres_major': 16, 'schema': schema, 'upgrade_from': [] if version.startswith('0.2.') else ['0.2.3'],
+    'postgres_major': 16, 'schema': schema, 'upgrade_from': policy['upgrade_from'],
     'platforms': ['linux/amd64', 'linux/arm64'], 'instances': 1
 }
 (stage / 'release.json').write_text(json.dumps(manifest, indent=2) + '\n')

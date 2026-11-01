@@ -17,8 +17,8 @@ Never install from a mutable `latest` image tag. `release.json` records the exac
 application, migrator, database and Redis image digests.
 
 ```bash
-tar xzf chattermost-0.2.3.tar.gz
-cd chattermost-0.2.3
+tar xzf chattermost-0.3.0.tar.gz
+cd chattermost-0.3.0
 ./chattermost --directory /srv/chattermost setup --server-url https://chat.example.test
 /srv/chattermost/chattermost --directory /srv/chattermost start
 /srv/chattermost/chattermost --directory /srv/chattermost status
@@ -89,3 +89,83 @@ Release images include OCI version/revision/license labels, dependency notices,
 SBOM and provenance attestations. Vulnerability scanning gates fixed high/critical
 findings; scan output is published separately. No operator configuration, runtime
 state, private history, logs or screenshots enter release bundles or build inputs.
+
+## Lifecycle commands (0.3.0 and later)
+
+Use `/srv/chattermost/chattermost --directory /srv/chattermost COMMAND`. The
+interface provides `start`, `status`, `upgrade VERSION`, `backup`,
+`restore BACKUP_DIRECTORY --confirm-database-replacement`, `rollback`, and
+`recover`. Setup remains a one-time operation; it refuses existing directories.
+
+For the initial upgrade from the published 0.2.3 baseline, download and verify the
+0.3.0 bundle as above, then run its new manager against the existing installation:
+
+```bash
+./chattermost-0.3.0/chattermost --directory /srv/chattermost upgrade 0.3.0
+```
+
+After successful activation the new manager is installed in the installation
+root. It stays available when rolling the application back to 0.2.3. Release
+policy explicitly permits 0.2.3 → 0.3.0. Unsupported paths, mutable version names,
+changed published versions, unexpected archive members, altered cached files,
+image/manifest schema mismatches and infrastructure image changes fail closed.
+Downloads verify GitHub's SHA-256 asset digest over HTTPS and retain the digest
+and per-file hashes privately. Archive publisher attestations can additionally
+be verified with `gh attestation verify`. No unattended updater or `latest` tag is
+used. Postgres major upgrades and infrastructure image changes are separate
+maintenance operations.
+
+An upgrade pulls the selected images before downtime, stops and drains the only
+writer, validates the actual schema, and takes a database/file backup while a
+connection-held database lock prevents concurrent migration/recovery. It then
+checks the migration image's declared policy, runs migrations under their own
+lock, activates the selected application, and checks HTTP, release/revision
+identity, authenticated login and WebSocket connectivity. Accounts, bot tokens,
+messages, file volumes and protected secrets are preserved. The protected runtime
+file must contain the current administrator login credentials for readiness;
+update that private configuration if the administrator changed their password.
+
+`backup` stops application writes while capturing `pg_dump` and the complete file
+volume, including profile images, then resumes a previously running application.
+A forced or otherwise unclean application shutdown is refused as a bootable
+recovery point. The private backup directory includes the matching secrets, installation state,
+release cache, migration evidence and integrity manifest. Keep the whole directory
+in protected storage; it contains private data and credentials. Backups are not
+encrypted by this tool. Provision encryption and off-host storage according to
+your requirements. Backups are retained until the operator deliberately removes
+them; allow enough disk for the dump, attachments and pre-restoration safety copy.
+
+`rollback` selects the recorded previous application image without restoring the
+database. Its supported schema generation and lineage must include the current
+database. Upgrades automatically return to the prior image after a failure only
+when migration history and an actual schema comparison prove compatibility. An
+unknown, failed, drifted or incompatible schema leaves the application stopped
+with private evidence and recovery instructions. No database is automatically
+restored. The manager's transaction record blocks start or another upgrade after
+an interruption; `recover` repeats those checks before reactivating a prior image.
+
+`restore` is a separate, explicit destructive operation. It verifies all backup
+hashes and archive paths, requires the same installation identity, database
+credentials, origin and Postgres major, captures a safety copy, replaces the
+public database schema and file volume together while writes are stopped,
+restores matching secrets, and validates the selected release before resuming.
+Restoration failure leaves the application stopped. A pre-restoration snapshot
+with an unknown/incompatible schema is forensic recovery material and requires
+DBA assistance, rather than being silently treated as a bootable backup.
+Cross-installation migration, changing the public origin, credential rotation,
+and Postgres major upgrades require separate operator procedures. These commands
+never discover or alter another installation.
+
+Typical explicit operations after installation:
+
+```bash
+/srv/chattermost/chattermost --directory /srv/chattermost backup
+/srv/chattermost/chattermost --directory /srv/chattermost status
+/srv/chattermost/chattermost --directory /srv/chattermost rollback
+/srv/chattermost/chattermost --directory /srv/chattermost restore /srv/chattermost/backups/SELECTED_BACKUP --confirm-database-replacement
+```
+
+Select a real backup path printed by `backup`; the placeholder above is not an
+automatic backup selection policy. Release checksums cover the bundle, standalone
+tooling, Compose file, manifest, scan reports and native lifecycle reports. The
+checksum manifest and installation archive both carry publisher attestations.

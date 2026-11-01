@@ -250,3 +250,8 @@ For new installations using published, digest-pinned images, see
 directory, secrets, Compose project and lifecycle. Existing SSH/systemd scripts
 and their schema/secret contracts remain unchanged. Moving an existing deployment
 to containers requires a separately authorized migration.
+
+The distribution's lifecycle manager supports explicit-version upgrades, consistent
+backups, explicit database/file restoration and schema-checked application
+rollback. It does not call the SSH deployment scripts, rotate established secrets,
+or migrate an existing installation. See [lifecycle commands](containers.md#lifecycle-commands-030-and-later).

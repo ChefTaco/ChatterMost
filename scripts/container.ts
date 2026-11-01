@@ -37,7 +37,7 @@ async function configure(): Promise<string> {
   return env.DATABASE_URL;
 }
 
-async function migrate(url: string): Promise<void> {
+async function migrate(url: string, apply: boolean): Promise<void> {
   const policy = spawnSync(process.execPath, ['scripts/schema-policy.mjs', 'inspect', '/app'], { encoding: 'utf8' });
   if (policy.status !== 0) throw new Error('Expansion-only schema policy rejected this image');
   const prisma = new PrismaClient({ datasources: { db: { url } } });
@@ -75,12 +75,13 @@ async function migrate(url: string): Promise<void> {
       for (const row of applied) await cp(`prisma/migrations/${row.migration_name}`, path.join(scratchDir, 'migrations', row.migration_name), { recursive: true });
       if (applied.length > 0) runPrisma(['migrate', 'deploy', '--schema', path.join(scratchDir, 'schema.prisma')], scratchUrl.toString());
       runPrisma(['migrate', 'diff', '--from-url', scratchUrl.toString(), '--to-url', url, '--exit-code'], url);
+      if (!apply) return;
       runPrisma(['migrate', 'deploy'], url);
       // Validate the final schema too; never activate a drifted deployment.
       runPrisma(['migrate', 'deploy'], scratchUrl.toString());
       runPrisma(['migrate', 'diff', '--from-url', scratchUrl.toString(), '--to-url', url, '--exit-code'], url);
     }, { timeout: 600_000, maxWait: 10_000 });
-    process.stdout.write('Migration validation and deployment complete\n');
+    process.stdout.write(apply ? 'Migration validation and deployment complete\n' : 'Read-only target schema validation complete\n');
   } finally {
     if (scratchCreated) await prisma.$executeRawUnsafe(`DROP DATABASE "${scratchName}" WITH (FORCE)`);
     await prisma.$disconnect();
@@ -119,7 +120,7 @@ try {
   else if (command === 'schema') process.stdout.write(await readFile('/app/schema.json', 'utf8'));
   else {
     const url = await configure();
-    if (command === 'migrate') await migrate(url);
+    if (command === 'migrate' || command === 'validate') await migrate(url, command === 'migrate');
     else if (command === 'serve') await import('../src/server/index.js');
     else throw new Error('Unknown container command');
   }

@@ -39,6 +39,7 @@ jobs:
       - run: npm audit --audit-level=moderate
       - run: npm run privacy:check
       - run: npm run privacy:test
+      - run: npm run container:test
       - run: npx prisma validate
       - name: Create disposable shadow database
         run: |

@@ -15,6 +15,7 @@ import urllib.request
 parser = argparse.ArgumentParser()
 parser.add_argument('version')
 parser.add_argument('--keep', type=Path)
+parser.add_argument('--port', type=int, default=18065)
 args = parser.parse_args()
 work = args.keep.resolve() if args.keep else Path(tempfile.mkdtemp(prefix='chattermost-public-'))
 work.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -44,7 +45,7 @@ with tarfile.open(archive) as tar:
     tar.extractall(work, filter='data')
 package = work / prefix
 try:
-    subprocess.run([str(package / 'chattermost'), '--directory', str(root), 'setup', '--server-url', 'http://127.0.0.1:18065', '--port', '18065'], check=True)
+    subprocess.run([str(package / 'chattermost'), '--directory', str(root), 'setup', '--server-url', f'http://127.0.0.1:{args.port}', '--port', str(args.port)], check=True)
     root_created = True
     subprocess.run([str(root / 'chattermost'), '--directory', str(root), 'start'], check=True)
     subprocess.run(['python3', 'tests/container/smoke.py', str(root), 'seed'], check=True)

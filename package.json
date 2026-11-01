@@ -1,6 +1,6 @@
 {
   "name": "chattermost",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Mattermost-compatible supervised chat facade for Hermes Agent and web users.",
@@ -23,7 +23,8 @@
     "import:mm-export": "node scripts/import-mattermost-export.mjs",
     "deploy": "bash scripts/deploy.sh",
     "privacy:check": "node scripts/check-privacy.mjs",
-    "privacy:test": "node --test tests/privacy/*.test.mjs"
+    "privacy:test": "node --test tests/privacy/*.test.mjs",
+    "container:test": "python3 -m unittest discover -s tests/container -p 'test_*.py'"
   },
   "dependencies": {
     "@hono/node-server": "^2.0.11",

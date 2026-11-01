@@ -30,3 +30,20 @@ tooling left by npm, and remove the base image's package managers. Local Trivy
 scans of both application and migrator pass the fixed high/critical gate. The
 2,001-write retention test has a targeted integration timeout for hosted runners;
 all retention assertions remain intact.
+
+Lifecycle release 0.3.0 builds on the published 0.2.3 container baseline. The
+standalone manager adds explicit-version upgrades, private consistent backups,
+explicit database/file restoration, schema-checked app rollback, and interrupted
+transaction recovery. Release and cache integrity, generation/lineage contracts,
+actual schema comparison, image identity, protected secrets, database locks,
+clean writer shutdown and durable private transaction records gate activation.
+The existing SSH deployment contracts and installation remain untouched.
+
+Native release jobs verify the published baseline against candidate image digests
+before assembling a release. Synthetic coverage includes retained accounts, bot
+authentication, messages, attachments/profile images, unchanged secrets, restart
+persistence, backup restoration, compatible rollback, genuine failing Prisma SQL,
+health failure recovery, incompatible-generation refusal, browser login and live
+browser WebSocket delivery. Public archive/CLI verification repeats after release.
+Release artifacts include native lifecycle reports alongside scans and signed
+checksums. Image version reuse is refused; only reviewed upgrade paths are allowed.

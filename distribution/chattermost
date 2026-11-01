@@ -4,9 +4,12 @@ import argparse
 import contextlib
 import fcntl
 import hashlib
+import io
+import select
+import tarfile
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import secrets
 import shutil
@@ -16,16 +19,27 @@ import time
 import urllib.request
 
 REPOSITORY = 'ChefTaco/ChatterMost'
-VERSION = re.compile(r'^0\.[2-9][0-9]*\.[0-9]+$')
+VERSION = re.compile(r'^0\.(?:[2-9]|[1-9][0-9]+)\.[0-9]+$')
+
+
+def sync_directory(directory):
+    descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def private_write(file, data):
     file = Path(file)
-    temporary = file.with_name(file.name + '.tmp')
-    with open(temporary, 'w', opener=lambda p, f: os.open(p, f, 0o600)) as stream:
+    temporary = file.with_name(file.name + '.' + secrets.token_hex(8) + '.tmp')
+    with open(temporary, 'x', opener=lambda p, f: os.open(p, f, 0o600)) as stream:
         stream.write(data if isinstance(data, str) else json.dumps(data, indent=2) + '\n')
+        stream.flush()
+        os.fsync(stream.fileno())
     os.chmod(temporary, 0o600)
     os.replace(temporary, file)
+    sync_directory(file.parent)
 
 
 def check_private(file):
@@ -33,18 +47,18 @@ def check_private(file):
         raise RuntimeError(f'Protected file must be a regular mode-600 file: {file.name}')
 
 
-def compose(root, *args, capture=False, input_data=None):
+def compose(root, *args, capture=False, input_data=None, stdout_file=None, stdin_file=None):
     check_private(root / 'installation.json')
     config = json.loads((root / 'installation.json').read_text())
     cmd = ['docker', 'compose', '--project-name', config['project'], '--env-file', str(root / 'compose.env'), '-f', str(root / 'compose.yaml')]
     if config['redis']:
         cmd += ['--profile', 'redis']
-    result = subprocess.run(cmd + list(args), cwd=root, input=input_data, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    result = subprocess.run(cmd + list(args), cwd=root, input=input_data, stdin=stdin_file, stdout=stdout_file or subprocess.PIPE, stderr=subprocess.PIPE)
     if result.returncode:
         # Container diagnostics can include private operator configuration.
         journal(root, 'command_failed', command=list(args[:2]), exit_code=result.returncode)
         with open(root / 'diagnostics.log', 'ab', opener=lambda p, f: os.open(p, f, 0o600)) as stream:
-            stream.write(result.stdout + result.stderr)
+            stream.write((result.stdout or b'') + (result.stderr or b''))
         raise RuntimeError('Compose operation failed; inspect private diagnostics.log')
     if capture:
         return result.stdout
@@ -54,22 +68,47 @@ def compose(root, *args, capture=False, input_data=None):
 def journal(root, event, **fields):
     with open(root / 'transactions.jsonl', 'a', opener=lambda p, f: os.open(p, f, 0o600)) as stream:
         stream.write(json.dumps({'time': int(time.time()), 'event': event, **fields}) + '\n')
+        stream.flush()
+        os.fsync(stream.fileno())
 
 
 def metadata(directory):
     data = json.loads((directory / 'release.json').read_text())
     if data.get('format') != 1 or not VERSION.fullmatch(data.get('version', '')):
         raise RuntimeError('Unsupported release manifest')
-    for field in ('app_image', 'migrator_image'):
-        if not re.fullmatch(r'ghcr.io/cheftaco/chattermost(?:-migrator)?@sha256:[a-f0-9]{64}', data[field]):
-            raise RuntimeError('Release image must be digest pinned')
+    for field, name in (('app_image', 'chattermost'), ('migrator_image', 'chattermost-migrator')):
+        if not re.fullmatch(r'ghcr.io/cheftaco/' + name + r'@sha256:[a-f0-9]{64}', data.get(field, '')):
+            raise RuntimeError('Release image must be digest pinned to its expected repository')
+    if not re.fullmatch(r'[a-f0-9]{40}', data.get('revision', '')):
+        raise RuntimeError('Release requires a full source revision')
+    if data.get('instances') != 1 or set(data.get('platforms', [])) != {'linux/amd64', 'linux/arm64'}:
+        raise RuntimeError('Unsupported instance or architecture contract')
+    if data.get('postgres_major') != 16 or not re.fullmatch(r'postgres:16-alpine@sha256:[a-f0-9]{64}', data.get('postgres_image', '')):
+        raise RuntimeError('Unsupported or mutable database image')
+    if not re.fullmatch(r'redis:7\.4-alpine@sha256:[a-f0-9]{64}', data.get('redis_image', '')):
+        raise RuntimeError('Unsupported or mutable Redis image')
+    if data.get('lifecycle_format', 1) not in (1, 2):
+        raise RuntimeError('This release requires a newer installation manager')
+    policy = data.get('schema', {})
+    if policy.get('migration_policy') != 'expansion-only' or policy.get('schema_lineage_algorithm') != 'sha256-chain-v1':
+        raise RuntimeError('Unsupported schema policy')
+    for field in ('schema_generation', 'compatible_schema_generation_min', 'compatible_schema_generation_max', 'schema_lineage_depth'):
+        if type(policy.get(field)) is not int or policy[field] < 1:
+            raise RuntimeError('Invalid schema generation or lineage depth')
+    if not policy['compatible_schema_generation_min'] <= policy['schema_generation'] <= policy['compatible_schema_generation_max']:
+        raise RuntimeError('Release does not support its own schema generation')
+    for field in ('migration_set_digest', 'schema_lineage_digest'):
+        if not re.fullmatch(r'[a-f0-9]{64}', policy.get(field, '')):
+            raise RuntimeError('Invalid schema digest')
+    if not isinstance(data.get('upgrade_from'), list) or any(not isinstance(v, str) or not VERSION.fullmatch(v) for v in data['upgrade_from']):
+        raise RuntimeError('Invalid explicit upgrade path policy')
     return data
 
 
 def activate_files(root, release):
     config = json.loads((root / 'installation.json').read_text())
     data = metadata(release)
-    shutil.copyfile(release / 'compose.yaml', root / 'compose.yaml')
+    private_write(root / 'compose.yaml', (release / 'compose.yaml').read_text())
     values = {
         'APP_IMAGE': data['app_image'], 'MIGRATOR_IMAGE': data['migrator_image'],
         'POSTGRES_IMAGE': data['postgres_image'], 'REDIS_IMAGE': data['redis_image'],
@@ -79,15 +118,30 @@ def activate_files(root, release):
     private_write(root / 'compose.env', ''.join(f'{k}={v}\n' for k, v in values.items()))
 
 
-def ready(root):
+def ready(root, release=None):
     compose(root, 'up', '-d', '--no-deps', '--wait', '--wait-timeout', '120', 'app')
     compose(root, 'exec', '-T', 'app', 'node', 'dist/scripts/container.js', 'ready')
-    journal(root, 'ready')
+    if release is None:
+        release = metadata(root / 'releases' / read_state(root)['current'])
+    config = json.loads((root / 'installation.json').read_text())
+    host = config['bind'] if config['bind'] != '0.0.0.0' else '127.0.0.1'
+    with urllib.request.urlopen(f'http://{host}:{config["port"]}/api/v4/config/client?format=old', timeout=10) as response:
+        advertised = json.load(response)
+    if advertised.get('BuildHash') != release['revision'] or advertised.get('ReleaseId') != release['version']:
+        raise RuntimeError('Running application identity does not match selected release')
+    journal(root, 'ready', version=release['version'])
 
 
 def start(root):
+    assert_unblocked(root)
     running = compose(root, 'ps', '--status', 'running', '--services', capture=True).decode().splitlines()
     if 'app' in running:
+        try:
+            require_schema(root, read_state(root)['schema'])
+        except Exception:
+            compose(root, 'stop', 'app')
+            private_write(root / 'state.json', {**read_state(root), 'recovery_required': True})
+            raise RuntimeError('Application remains stopped: migration history is unknown; inspect and explicitly restore or repair') from None
         ready(root)
         return
     compose(root, 'pull')
@@ -95,6 +149,7 @@ def start(root):
     compose(root, 'up', '-d', '--wait', *infrastructure)
     compose(root, 'run', '--rm', 'initialize')
     compose(root, 'run', '--rm', 'migrate')
+    require_schema(root, read_state(root)['schema'])
     ready(root)
 
 
@@ -129,13 +184,451 @@ def setup(args):
             os.chown(file, uid, gid)
     destination = root / 'releases' / data['version']
     shutil.copytree(source, destination)
-    private_write(root / 'state.json', {'current': data['version'], 'previous': None, 'schema': data['schema']})
+    private_write(root / 'state.json', {'current': data['version'], 'previous': None, 'schema': schema_record(data)})
     shutil.copyfile(source / 'chattermost', root / 'chattermost')
     os.chmod(root / 'chattermost', 0o700)
     activate_files(root, destination)
     journal(root, 'setup', version=data['version'])
     print('Installation prepared. Credentials are in secrets/runtime.env; keep this directory private.')
 
+
+# Apache-2.0. Included in the standalone installation manager at release time.
+PUBLIC_FILES = {'chattermost', 'compose.yaml', 'release.json', 'README.md', 'LICENSE', 'NOTICE'}
+
+
+def read_state(root):
+    return json.loads((root / 'state.json').read_text())
+
+
+def schema_record(release):
+    return {**release['schema'], 'lineage_ancestry': release.get('lineage_ancestry', [release['schema']['schema_lineage_digest']])}
+
+
+def file_digest(file):
+    with open(file, 'rb') as stream:
+        return hashlib.file_digest(stream, 'sha256').hexdigest()
+
+
+def hashes(directory):
+    result = {}
+    for file in sorted(directory.rglob('*')):
+        if file.is_symlink():
+            raise RuntimeError('Symlinks are forbidden in recovery material')
+        if file.is_file():
+            result[file.relative_to(directory).as_posix()] = file_digest(file)
+    return result
+
+
+def cached_release(root, version):
+    directory = root / 'releases' / version
+    check_private(directory / '.verified.json')
+    receipt = json.loads((directory / '.verified.json').read_text())
+    for name in PUBLIC_FILES:
+        file = directory / name
+        if file.is_symlink() or file_digest(file) != receipt['files'][name]:
+            raise RuntimeError('Cached release integrity mismatch')
+    return metadata(directory)
+
+
+def fetch_release(root, version):
+    if not VERSION.fullmatch(version):
+        raise RuntimeError('An explicit supported release version is required; latest is forbidden')
+    api = f'https://api.github.com/repos/{REPOSITORY}/releases/tags/v{version}'
+    request = urllib.request.Request(api, headers={'User-Agent': 'ChatterMost-installation-manager', 'Accept': 'application/vnd.github+json'})
+    with urllib.request.urlopen(request, timeout=30) as response:
+        release = json.load(response)
+    if release.get('draft') or release.get('prerelease') or release.get('tag_name') != f'v{version}':
+        raise RuntimeError('Only explicit stable releases are supported')
+    asset = next((a for a in release['assets'] if a['name'] == f'chattermost-{version}.tar.gz'), None)
+    if asset is None:
+        raise RuntimeError('Published release has no installation bundle')
+    if not re.fullmatch(r'sha256:[a-f0-9]{64}', asset.get('digest', '')):
+        raise RuntimeError('GitHub did not provide an asset integrity digest')
+    if not asset['browser_download_url'].startswith(f'https://github.com/{REPOSITORY}/releases/download/v{version}/'):
+        raise RuntimeError('Unexpected release asset origin')
+    with urllib.request.urlopen(asset['browser_download_url'], timeout=60) as response:
+        data = response.read(8 * 1024 * 1024 + 1)
+    if len(data) > 8 * 1024 * 1024 or 'sha256:' + hashlib.sha256(data).hexdigest() != asset['digest']:
+        raise RuntimeError('Release archive integrity mismatch')
+    stage = root / 'releases' / ('.download-' + secrets.token_hex(8))
+    stage.mkdir(mode=0o700)
+    try:
+        with tarfile.open(fileobj=io.BytesIO(data), mode='r:gz') as tar:
+            prefix = f'chattermost-{version}'
+            allowed = {prefix, *(prefix + '/' + name for name in PUBLIC_FILES)}
+            members = tar.getmembers()
+            if {m.name for m in members} != allowed or len(members) != len(allowed):
+                raise RuntimeError('Release archive contains unexpected or duplicate members')
+            if any(not (m.isfile() or m.isdir()) or m.size > 2 * 1024 * 1024 for m in members):
+                raise RuntimeError('Unsafe release archive member')
+            tar.extractall(stage, filter='data')
+        extracted = stage / prefix
+        manifest = metadata(extracted)
+        if manifest['version'] != version:
+            raise RuntimeError('Release version does not match requested version')
+        receipt = {'asset_digest': asset['digest'], 'files': hashes(extracted)}
+        destination = root / 'releases' / version
+        if destination.exists():
+            if (destination / '.verified.json').exists():
+                previous = json.loads((destination / '.verified.json').read_text())
+                if previous['asset_digest'] != receipt['asset_digest']:
+                    raise RuntimeError('Published version changed; refusing replacement of an immutable release')
+            for name in PUBLIC_FILES:
+                file = destination / name
+                if file.is_symlink() or file.read_bytes() != (extracted / name).read_bytes():
+                    raise RuntimeError('Installed release differs from its public archive')
+        else:
+            extracted.rename(destination)
+        private_write(destination / '.verified.json', receipt)
+        return cached_release(root, version)
+    finally:
+        shutil.rmtree(stage)
+
+
+def compose_command(root):
+    config = json.loads((root / 'installation.json').read_text())
+    command = ['docker', 'compose', '--project-name', config['project'], '--env-file', str(root / 'compose.env'), '-f', str(root / 'compose.yaml')]
+    if config['redis']:
+        command += ['--profile', 'redis']
+    return command
+
+
+@contextlib.contextmanager
+def database_lock(root):
+    # Same key as the one-off migrator. A live psql connection holds the lock
+    # throughout database/file capture or restoration, including subprocesses.
+    process = subprocess.Popen(compose_command(root) + ['exec', '-T', 'postgres', 'psql', '-X', '-qAt', '-U', 'chattermost_app', '-d', 'chattermost'], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    try:
+        process.stdin.write('SELECT pg_try_advisory_lock(734258419);\n')
+        process.stdin.flush()
+        readable, _, _ = select.select([process.stdout], [], [], 15)
+        if not readable or process.stdout.readline().strip() != 't':
+            raise RuntimeError('Another migration or recovery operation holds the database lock')
+        yield
+    finally:
+        if process.poll() is None:
+            try:
+                process.stdin.write('\\q\n')
+                process.stdin.flush()
+                process.wait(timeout=10)
+            except (BrokenPipeError, subprocess.TimeoutExpired):
+                process.kill()
+                process.wait()
+        process.stdin.close()
+        process.stdout.close()
+
+
+def database_state(root):
+    sql = '''SELECT COALESCE(jsonb_agg(to_jsonb(m) ORDER BY migration_name), '[]'::jsonb) FROM
+        (SELECT migration_name, checksum, started_at, finished_at, rolled_back_at, applied_steps_count
+         FROM "_prisma_migrations") m;'''
+    rows = json.loads(compose(root, 'exec', '-T', 'postgres', 'psql', '-X', '-qAt', '-U', 'chattermost_app', '-d', 'chattermost', '-c', sql, capture=True))
+    failed = any(r['finished_at'] is None and r['rolled_back_at'] is None for r in rows)
+    applied = [r for r in rows if r['finished_at'] is not None and r['rolled_back_at'] is None]
+    digest = hashlib.sha256(''.join(f'{r["migration_name"]}\0{r["checksum"]}\0' for r in applied).encode()).hexdigest()
+    lineage = hashlib.sha256(b'chattermost-schema-lineage-v1\0').hexdigest()
+    for row in applied:
+        lineage = hashlib.sha256(f'{lineage}\0{row["migration_name"]}\0{row["checksum"]}\0'.encode()).hexdigest()
+    return {'rows': rows, 'failed': failed, 'migration_set_digest': digest, 'schema_lineage_digest': lineage}
+
+
+def matches_schema(observed, schema):
+    return not observed['failed'] and all(observed[k] == schema[k] for k in ('migration_set_digest', 'schema_lineage_digest'))
+
+
+def require_schema(root, schema):
+    observed = database_state(root)
+    if not matches_schema(observed, schema):
+        raise RuntimeError('Database migration history differs from the recorded schema; stop and inspect private recovery evidence')
+    return observed
+
+
+def validate_schema(root, schema):
+    # New images provide a target-read-only validator. The initial 0.2 baseline
+    # can validate its complete, already-applied migration set as a no-op only.
+    require_schema(root, schema)
+    candidates = []
+    for directory in (root / 'releases').iterdir():
+        if not directory.is_dir() or not (directory / '.verified.json').exists():
+            continue
+        release = cached_release(root, directory.name)
+        ancestry = release.get('lineage_ancestry', [release['schema']['schema_lineage_digest']])
+        if schema['schema_lineage_digest'] not in ancestry:
+            continue
+        if release.get('lifecycle_format', 1) >= 2:
+            candidates.insert(0, (release, 'validate'))
+        elif release['schema']['migration_set_digest'] == schema['migration_set_digest']:
+            candidates.append((release, 'migrate'))
+    if not candidates:
+        raise RuntimeError('No verified schema validator is available for the recorded database lineage')
+    release, command = candidates[0]
+    original = {name: (root / name).read_text() for name in ('compose.yaml', 'compose.env')}
+    try:
+        activate_files(root, root / 'releases' / release['version'])
+        image_policy = json.loads(compose(root, 'run', '--rm', '--no-deps', 'migrate', 'schema', capture=True))
+        if image_policy != release['schema']:
+            raise RuntimeError('Schema validator image does not match its verified manifest')
+        compose(root, 'run', '--rm', '--no-deps', 'migrate', command)
+    finally:
+        for name, data in original.items():
+            private_write(root / name, data)
+
+
+def compatible(release, schema):
+    policy = release['schema']
+    generation = schema['schema_generation']
+    ancestry = schema.get('lineage_ancestry', [schema['schema_lineage_digest']])
+    return (policy['compatible_schema_generation_min'] <= generation <= policy['compatible_schema_generation_max']
+            and policy['schema_lineage_digest'] in ancestry)
+
+
+def assert_unblocked(root):
+    if read_state(root).get('recovery_required') or (root / 'pending.json').exists():
+        raise RuntimeError('Recovery is pending. Use status, recover, or explicit restore; start/upgrade/rollback are blocked')
+
+
+def snapshot(root, resume=True, allow_unknown=False):
+    state = read_state(root)
+    running = 'app' in compose(root, 'ps', '--status', 'running', '--services', capture=True).decode().splitlines()
+    compose(root, 'stop', 'app')
+    container = compose(root, 'ps', '--all', '-q', 'app', capture=True).decode().strip()
+    exit_code = None
+    if container:
+        inspection = subprocess.run(['docker', 'inspect', '--format', '{{.State.ExitCode}}', container], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, check=True)
+        exit_code = int(inspection.stdout)
+    clean_shutdown = exit_code == 0
+    if not clean_shutdown and not allow_unknown:
+        private_write(root / 'state.json', {**state, 'recovery_required': True})
+        raise RuntimeError('Application did not stop cleanly; refusing a bootable backup. Inspect and explicitly recover from a verified recovery point')
+    destination = root / 'backups' / (time.strftime('%Y%m%dT%H%M%SZ', time.gmtime()) + '-' + secrets.token_hex(4))
+    destination.mkdir(mode=0o700)
+    try:
+        if not allow_unknown:
+            validate_schema(root, state['schema'])
+        with database_lock(root):
+            observed = database_state(root)
+            recoverable = clean_shutdown and matches_schema(observed, state['schema']) and compatible(metadata(root / 'releases' / state['current']), state['schema'])
+            if not recoverable and not allow_unknown:
+                raise RuntimeError('Unknown or failed migration state; refusing a routine backup')
+            major = int(compose(root, 'exec', '-T', 'postgres', 'psql', '-X', '-qAt', '-U', 'chattermost_app', '-d', 'chattermost', '-c', 'SHOW server_version_num', capture=True)) // 10000
+            with open(destination / 'database.dump', 'wb') as dump:
+                compose(root, 'exec', '-T', 'postgres', 'pg_dump', '-U', 'chattermost_app', '-d', 'chattermost', '--format=custom', '--no-owner', '--no-privileges', stdout_file=dump)
+            with open(destination / 'files.tar.gz', 'wb') as files:
+                compose(root, 'run', '--rm', '--no-deps', '--entrypoint', 'tar', 'app', '-czf', '-', '-C', '/var/lib/chattermost', '.', stdout_file=files)
+            for name in ('installation.json', 'state.json'):
+                shutil.copyfile(root / name, destination / name)
+            shutil.copytree(root / 'secrets', destination / 'secrets')
+            shutil.copytree(root / 'releases', destination / 'releases')
+            for file in destination.rglob('*'):
+                if file.is_file():
+                    os.chmod(file, 0o600)
+                    with open(file, 'rb') as stream:
+                        os.fsync(stream.fileno())
+                elif file.is_dir():
+                    os.chmod(file, 0o700)
+            record = {'backup_format': 1, 'clean_shutdown': clean_shutdown, 'project': json.loads((root / 'installation.json').read_text())['project'], 'postgres_major': major, 'recoverable': recoverable, 'database_state': observed, 'files': hashes(destination)}
+            for directory in sorted((d for d in destination.rglob('*') if d.is_dir()), reverse=True):
+                sync_directory(directory)
+            private_write(destination / 'backup.json', record)
+            sync_directory(destination.parent)
+        journal(root, 'backup_complete', backup=destination.name, version=state['current'], recoverable=recoverable)
+        if running and resume:
+            ready(root)
+        return destination
+    except Exception:
+        journal(root, 'backup_failed', backup=destination.name)
+        raise RuntimeError('Backup failed; application remains stopped. Inspect private diagnostics and use start only after resolving the cause') from None
+
+
+def archive_pending(root, outcome):
+    evidence = root / 'evidence'
+    evidence.mkdir(mode=0o700, exist_ok=True)
+    pending = json.loads((root / 'pending.json').read_text())
+    pending['outcome'] = outcome
+    private_write(root / 'pending.json', pending)
+    (root / 'pending.json').rename(evidence / (time.strftime('%Y%m%dT%H%M%SZ', time.gmtime()) + '-' + secrets.token_hex(4) + '.json'))
+    sync_directory(evidence)
+    sync_directory(root)
+
+
+def recover(root):
+    if not (root / 'pending.json').exists():
+        raise RuntimeError('No pending image transition can be recovered; use explicit restore or DBA repair for a blocked schema')
+    pending = json.loads((root / 'pending.json').read_text())
+    if pending['kind'] == 'restore':
+        raise RuntimeError('Interrupted database restore requires an explicit restore from a verified backup; application remains stopped')
+    compose(root, 'stop', 'app')
+    observed = database_state(root)
+    private_write(root / 'migration-evidence.json', observed)
+    old_state = pending['old_state']
+    old = cached_release(root, old_state['current'])
+    candidate = cached_release(root, pending['target'])
+    known = [old_state['schema'], schema_record(candidate)]
+    schema = next((s for s in known if matches_schema(observed, s)), None)
+    if schema is None or not compatible(old, schema):
+        private_write(root / 'state.json', {**old_state, 'recovery_required': True})
+        journal(root, 'recovery_refused', target=pending['target'])
+        raise RuntimeError('Application remains stopped: prior image compatibility cannot be proven. Inspect pending.json and migration-evidence.json; explicitly restore the recorded pre-upgrade backup or repair with a DBA')
+    try:
+        validate_schema(root, schema)
+    except Exception:
+        private_write(root / 'state.json', {**old_state, 'recovery_required': True})
+        raise RuntimeError('Actual schema validation failed; application remains stopped. Inspect private evidence and explicitly restore or repair the database') from None
+    activate_files(root, root / 'releases' / old_state['current'])
+    try:
+        ready(root, old)
+    except Exception:
+        compose(root, 'stop', 'app')
+        private_write(root / 'state.json', {**old_state, 'recovery_required': True})
+        raise RuntimeError('Prior image readiness failed; application remains stopped. Inspect private diagnostics and current protected readiness credentials') from None
+    private_write(root / 'state.json', {**old_state, 'schema': schema, 'recovery_required': False})
+    archive_pending(root, 'prior_image_restored')
+    sync_directory(root)
+    sync_directory(root / 'evidence')
+    journal(root, 'prior_image_restored', version=old_state['current'])
+
+
+def switch_release(root, version, rollback=False):
+    assert_unblocked(root)
+    state = read_state(root)
+    current = fetch_release(root, state['current'])
+    target = fetch_release(root, version)
+    if version == state['current']:
+        raise RuntimeError('Requested version is already selected')
+    if any(target[k] != current[k] for k in ('postgres_major', 'postgres_image', 'redis_image')):
+        raise RuntimeError('Database/infrastructure image changes require separate explicit maintenance')
+    if rollback:
+        if not compatible(target, state['schema']):
+            raise RuntimeError('Rollback refused: selected image is incompatible with the current schema generation or lineage. Use an explicit database restore if data rollback is intended')
+    else:
+        if state['current'] not in target['upgrade_from']:
+            raise RuntimeError('This explicit upgrade path is not supported by the release')
+        if state['schema']['schema_lineage_digest'] not in target.get('lineage_ancestry', [target['schema']['schema_lineage_digest']]):
+            raise RuntimeError('Target schema does not extend the installed migration lineage')
+        if target['schema']['schema_generation'] < state['schema']['schema_generation']:
+            raise RuntimeError('Upgrade cannot downgrade the database schema generation')
+    try:
+        require_schema(root, state['schema'])
+    except Exception:
+        compose(root, 'stop', 'app')
+        private_write(root / 'migration-evidence.json', database_state(root))
+        private_write(root / 'state.json', {**state, 'recovery_required': True})
+        journal(root, 'schema_mismatch_refused')
+        raise RuntimeError('Application remains stopped: database schema history is unknown or failed. Inspect private migration-evidence.json and explicitly restore or repair') from None
+    # Pull before stopping the application, without modifying its Compose selection.
+    for image in (target['app_image'], target['migrator_image']):
+        result = subprocess.run(['docker', 'pull', image], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        if result.returncode:
+            raise RuntimeError('Unable to pull the verified release image; existing installation is unchanged')
+    pending = {'kind': 'rollback' if rollback else 'upgrade', 'old_state': state, 'target': version, 'phase': 'prepared'}
+    private_write(root / 'pending.json', pending)
+    try:
+        backup = snapshot(root, resume=False)
+        pending.update(phase='backed_up', backup=str(backup))
+        private_write(root / 'pending.json', pending)
+        activate_files(root, root / 'releases' / version)
+        if not rollback:
+            image_policy = json.loads(compose(root, 'run', '--rm', '--no-deps', 'migrate', 'schema', capture=True))
+            if image_policy != target['schema']:
+                raise RuntimeError('Migration image schema differs from the verified release manifest')
+            compose(root, 'run', '--rm', 'migrate')
+            schema = schema_record(target)
+        else:
+            schema = state['schema']
+        observed = require_schema(root, schema)
+        private_write(root / 'migration-evidence.json', observed)
+        pending['phase'] = 'migrated'
+        private_write(root / 'pending.json', pending)
+        ready(root, target)
+        private_write(root / 'state.json', {**state, 'current': version, 'previous': state['current'], 'schema': schema, 'last_backup': str(backup), 'recovery_required': False})
+        if not rollback:
+            shutil.copyfile(root / 'releases' / version / 'chattermost', root / 'chattermost')
+            os.chmod(root / 'chattermost', 0o700)
+        archive_pending(root, 'activated')
+        journal(root, 'activated', version=version, previous=state['current'])
+    except Exception:
+        journal(root, 'activation_failed', target=version)
+        try:
+            recover(root)
+        except Exception as recovery_error:
+            raise RuntimeError(str(recovery_error)) from None
+        raise RuntimeError('Release activation failed; the prior application image was restored after schema checks. The database was not restored. Inspect private evidence') from None
+
+
+def verify_backup(root, source):
+    check_private(source / 'backup.json')
+    record = json.loads((source / 'backup.json').read_text())
+    if record.get('backup_format') != 1 or not record.get('recoverable') or record.get('clean_shutdown') is not True:
+        raise RuntimeError('Backup has unknown schema state; manual database recovery is required')
+    current_config = json.loads((root / 'installation.json').read_text())
+    if record['project'] != current_config['project']:
+        raise RuntimeError('Backup belongs to a different installation; cross-installation migration is a separate operation')
+    actual = hashes(source)
+    actual.pop('backup.json', None)
+    required = {'database.dump', 'files.tar.gz', 'state.json', 'installation.json', 'secrets/runtime.env', 'secrets/postgres_password'}
+    if not required <= record['files'].keys() or actual != record['files']:
+        raise RuntimeError('Backup inventory or integrity mismatch')
+    for name, digest in record['files'].items():
+        relative = PurePosixPath(name)
+        if relative.is_absolute() or '..' in relative.parts:
+            raise RuntimeError('Unsafe backup path')
+        file = source / name
+        check_private(file)
+        if file_digest(file) != digest:
+            raise RuntimeError('Backup integrity mismatch')
+    if record['postgres_major'] != 16:
+        raise RuntimeError('Postgres major-version restoration requires separate maintenance')
+    if (source / 'secrets/postgres_password').read_bytes() != (root / 'secrets/postgres_password').read_bytes():
+        raise RuntimeError('Database credential differs; use explicit credential recovery before restoring')
+    if json.loads((source / 'installation.json').read_text())['server_url'] != current_config['server_url']:
+        raise RuntimeError('Origin reconfiguration is a separate explicit operation')
+    with tarfile.open(source / 'files.tar.gz') as tar:
+        for member in tar.getmembers():
+            relative = PurePosixPath(member.name)
+            if relative.is_absolute() or '..' in relative.parts or not (member.isfile() or member.isdir()):
+                raise RuntimeError('Unsafe attachment archive')
+    state = json.loads((source / 'state.json').read_text())
+    return record, state
+
+
+def restore(root, source):
+    record, state = verify_backup(root, source)
+    target = fetch_release(root, state['current'])
+    if not compatible(target, state['schema']):
+        raise RuntimeError('Backup application cannot read its recorded database schema')
+    safety = snapshot(root, resume=False, allow_unknown=True)
+    if (root / 'pending.json').exists():
+        archive_pending(root, 'superseded_by_explicit_restore')
+    private_write(root / 'pending.json', {'kind': 'restore', 'source': str(source), 'safety_backup': str(safety), 'phase': 'restoring'})
+    try:
+        with database_lock(root):
+            actual_major = int(compose(root, 'exec', '-T', 'postgres', 'psql', '-X', '-qAt', '-U', 'chattermost_app', '-d', 'chattermost', '-c', 'SHOW server_version_num', capture=True)) // 10000
+            if actual_major != record['postgres_major']:
+                raise RuntimeError('Running Postgres major differs from the backup')
+            compose(root, 'exec', '-T', 'postgres', 'psql', '-X', '-v', 'ON_ERROR_STOP=1', '-U', 'chattermost_app', '-d', 'chattermost', '-c', 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
+            with open(source / 'database.dump', 'rb') as dump:
+                compose(root, 'exec', '-T', 'postgres', 'pg_restore', '-U', 'chattermost_app', '-d', 'chattermost', '--clean', '--if-exists', '--no-owner', '--no-privileges', '--exit-on-error', stdin_file=dump)
+            activate_files(root, root / 'releases' / state['current'])
+            compose(root, 'run', '--rm', '--no-deps', '--entrypoint', 'node', 'app', '-e', "const fs=require('fs');for(const name of fs.readdirSync('/var/lib/chattermost'))fs.rmSync('/var/lib/chattermost/'+name,{recursive:true,force:true});")
+            with open(source / 'files.tar.gz', 'rb') as files:
+                compose(root, 'run', '--rm', '--no-deps', '--entrypoint', 'tar', 'app', '-xzf', '-', '--no-same-owner', '-C', '/var/lib/chattermost', stdin_file=files)
+            config = json.loads((root / 'installation.json').read_text())
+            for file in (source / 'secrets').iterdir():
+                target_file = root / 'secrets' / file.name
+                private_write(target_file, file.read_text())
+                if os.getuid() == 0:
+                    os.chown(target_file, config['uid'], config['gid'])
+            require_schema(root, state['schema'])
+        validate_schema(root, state['schema'])
+        ready(root, target)
+        private_write(root / 'state.json', {**state, 'recovery_required': False, 'last_restore': str(source), 'pre_restore_backup': str(safety)})
+        archive_pending(root, 'restored')
+        journal(root, 'restored', version=state['current'], source=str(source), safety_backup=str(safety))
+    except Exception:
+        compose(root, 'stop', 'app')
+        private_write(root / 'state.json', {**read_state(root), 'recovery_required': True})
+        journal(root, 'restore_failed', safety_backup=str(safety))
+        raise RuntimeError('Restore failed; application remains stopped. Inspect private pending.json and diagnostics.log, then explicitly restore a verified recovery point') from None
 
 def main():
     os.umask(0o077)
@@ -148,7 +641,12 @@ def main():
     setup_parser.add_argument('--bind', default='127.0.0.1')
     setup_parser.add_argument('--redis', action='store_true')
     setup_parser.add_argument('--trusted-proxies', default='')
-    for name in ('start', 'status'):
+    upgrade_parser = sub.add_parser('upgrade')
+    upgrade_parser.add_argument('version')
+    restore_parser = sub.add_parser('restore')
+    restore_parser.add_argument('backup', type=Path)
+    restore_parser.add_argument('--confirm-database-replacement', action='store_true')
+    for name in ('start', 'status', 'backup', 'rollback', 'recover'):
         sub.add_parser(name)
     args = parser.parse_args()
     args.directory = args.directory.resolve()
@@ -156,15 +654,40 @@ def main():
         setup(args)
         return
     root = args.directory
+    if root.stat().st_mode & 0o077:
+        raise RuntimeError('Installation directory must be mode 700')
     for name in ('installation.json', 'compose.env', 'state.json', 'secrets/runtime.env', 'secrets/postgres_password'):
         check_private(root / name)
-    with open(root / '.lock', 'a') as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    with os.fdopen(os.open(root / '.lock', os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600), 'w') as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise RuntimeError('Another management operation holds this installation lock') from None
         if args.command == 'start':
             start(root)
+        elif args.command == 'upgrade':
+            switch_release(root, args.version)
+        elif args.command == 'rollback':
+            previous = read_state(root).get('previous')
+            if not previous:
+                raise RuntimeError('No previous application release is recorded')
+            switch_release(root, previous, rollback=True)
+        elif args.command == 'backup':
+            assert_unblocked(root)
+            fetch_release(root, read_state(root)['current'])
+            print(snapshot(root))
+        elif args.command == 'restore':
+            if not args.confirm_database_replacement:
+                raise RuntimeError('Database restoration is explicit: pass --confirm-database-replacement')
+            restore(root, args.backup.resolve())
+        elif args.command == 'recover':
+            recover(root)
         elif args.command == 'status':
             rows = compose(root, 'ps', '--all', '--format', 'json', capture=True)
-            print(rows.decode())
+            raw = rows.decode().strip()
+            services = json.loads(raw) if raw.startswith('[') else [json.loads(line) for line in raw.splitlines() if line]
+            state = read_state(root)
+            print(json.dumps({'version': state['current'], 'previous': state.get('previous'), 'recovery_required': state.get('recovery_required', False) or (root / 'pending.json').exists(), 'services': [{k: row.get(k) for k in ('Service', 'State', 'Health', 'Image')} for row in services]}, indent=2))
 
 
 if __name__ == '__main__':

@@ -36,6 +36,10 @@ jobs:
         run: |
           echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
           echo "CREATED=$(git log -1 --format=%cI)" >> "$GITHUB_ENV"
+      - name: Refuse reuse of a native image version
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: python3 distribution/check-image-version.py "$VERSION-$ARCH"
       - name: Refuse overwriting published version
         env: {GH_TOKEN: '${{ github.token }}'}
         run: |
@@ -92,6 +96,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish native application with SBOM and provenance
+        id: publish_app
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -106,6 +111,7 @@ jobs:
             REVISION=${{ github.sha }}
             CREATED=${{ env.CREATED }}
       - name: Publish native migrator with SBOM and provenance
+        id: publish_migrator
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -119,10 +125,23 @@ jobs:
             VERSION=${{ env.VERSION }}
             REVISION=${{ github.sha }}
             CREATED=${{ env.CREATED }}
+      - name: Install native browser for lifecycle proof
+        if: ${{ !startsWith(env.VERSION, '0.2.') }}
+        run: npx playwright install --with-deps chromium
+      - name: Exercise lifecycle against published baseline and native candidate
+        if: ${{ !startsWith(env.VERSION, '0.2.') }}
+        env:
+          CHATTERMOST_LIFECYCLE_BROWSER: 'true'
+          CHATTERMOST_LIFECYCLE_REPORT: lifecycle-proof-${{ matrix.arch }}.json
+          APP_DIGEST: ${{ steps.publish_app.outputs.digest }}
+          MIGRATOR_DIGEST: ${{ steps.publish_migrator.outputs.digest }}
+        run: python3 tests/container/lifecycle.py "$VERSION" "$APP_DIGEST" "$MIGRATOR_DIGEST"
       - uses: actions/upload-artifact@v4
         with:
           name: scans-${{ matrix.arch }}
-          path: scan-*.json
+          path: |
+            scan-*.json
+            lifecycle-proof-*.json
   publish:
     needs: native
     runs-on: ubuntu-24.04
@@ -149,6 +168,7 @@ jobs:
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             echo 'Release already exists; select a new version.' >&2; exit 1
           fi
+          python3 distribution/check-image-version.py "$VERSION"
           for NAME in chattermost chattermost-migrator; do
             docker buildx imagetools create -t "ghcr.io/cheftaco/$NAME:$VERSION" "ghcr.io/cheftaco/$NAME:$VERSION-amd64" "ghcr.io/cheftaco/$NAME:$VERSION-arm64"
           done
@@ -160,10 +180,21 @@ jobs:
           pattern: scans-*
           path: public-release/scans
           merge-multiple: true
+      - name: Bind every public artifact with checksums
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          root = Path('public-release')
+          files = list(root.glob('*.tar.gz')) + [root / name for name in ('release.json', 'compose.yaml', 'chattermost')] + list((root / 'scans').glob('*.json'))
+          (root / 'SHA256SUMS').write_text(''.join(f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n' for p in sorted(files)))
+          PY
       - name: Attest release archive
         uses: actions/attest-build-provenance@v4
         with:
-          subject-path: public-release/*.tar.gz
+          subject-path: |
+            public-release/*.tar.gz
+            public-release/SHA256SUMS
       - name: Publish release artifacts
         env: {GH_TOKEN: '${{ github.token }}'}
         run: |
