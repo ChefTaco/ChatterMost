@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import urllib.request
 
 version = sys.argv[1]
 app_digest = sys.argv[2] if len(sys.argv) > 2 else None
@@ -85,6 +86,18 @@ try:
     smoke()
     module['switch_release'](root, version)
     smoke()
+    # Prove point-in-time recovery: remove a retained post through the API and
+    # physically erase the disposable files before restoring the saved backup.
+    credentials = dict((k, json.loads(v)) for k, v in (line.split('=', 1) for line in (root / 'secrets/runtime.env').read_text().splitlines()))
+    fixture = json.loads((root / 'synthetic-fixture.json').read_text())
+    origin = f'http://127.0.0.1:{port}'
+    login = urllib.request.Request(origin + '/api/v4/users/login', data=json.dumps({'login_id': credentials['ADMIN_USERNAME'], 'password': credentials['ADMIN_PASSWORD']}).encode(), headers={'Content-Type': 'application/json', 'Origin': origin}, method='POST')
+    with urllib.request.urlopen(login, timeout=15) as response:
+        token = response.headers['token']
+    delete = urllib.request.Request(origin + '/api/v4/posts/' + fixture['post_id'], headers={'Authorization': 'Bearer ' + token}, method='DELETE')
+    with urllib.request.urlopen(delete, timeout=15) as response:
+        assert response.status == 200
+    actual_compose(root, 'exec', '-T', 'app', 'node', '-e', "const fs=require('fs');for(const name of ['files','profile-images']){const dir='/var/lib/chattermost/'+name;fs.rmSync(dir,{recursive:true,force:true});fs.mkdirSync(dir);if(fs.readdirSync(dir).length)process.exit(1);}")
     module['restore'](root, backup)
     smoke()
     assert secret_hashes == module['hashes'](root / 'secrets')

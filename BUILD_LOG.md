@@ -31,7 +31,7 @@ scans of both application and migrator pass the fixed high/critical gate. The
 2,001-write retention test has a targeted integration timeout for hosted runners;
 all retention assertions remain intact.
 
-Lifecycle release 0.3.0 builds on the published 0.2.3 container baseline. The
+Lifecycle release 0.3.1 builds on the published 0.2.3 container baseline. The
 standalone manager adds explicit-version upgrades, private consistent backups,
 explicit database/file restoration, schema-checked app rollback, and interrupted
 transaction recovery. Release and cache integrity, generation/lineage contracts,
@@ -47,3 +47,8 @@ health failure recovery, incompatible-generation refusal, browser login and live
 browser WebSocket delivery. Public archive/CLI verification repeats after release.
 Release artifacts include native lifecycle reports alongside scans and signed
 checksums. Image version reuse is refused; only reviewed upgrade paths are allowed.
+The release gate uses isolated browser files for the shared synthetic server and
+keeps concurrent two-browser WebSocket coverage. Multi-hash authentication tests
+retain real hashing and assertions with targeted hosted integration timeouts.
+Backup restoration is proven after deleting a retained post and erasing attachment
+and profile files. GitHub release immutability is enabled for new publications.

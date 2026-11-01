@@ -77,6 +77,8 @@ fixture = json.loads(fixture_file.read_text())
 assert fixture['admin_id'] == me['id']
 post, _ = request('GET', '/api/v4/posts/' + fixture['post_id'], token=token)
 assert post['message'] == 'Synthetic distribution persistence proof'
+assert post['delete_at'] == 0
+assert fixture['file_id'] in post['file_ids']
 content, _ = request('GET', '/api/v4/files/' + fixture['file_id'], token=token)
 assert content == b'synthetic attachment recovery proof\n'
 content, _ = request('GET', f'/api/v4/users/{me["id"]}/image', token=token)

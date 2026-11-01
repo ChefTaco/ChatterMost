@@ -17,8 +17,8 @@ Never install from a mutable `latest` image tag. `release.json` records the exac
 application, migrator, database and Redis image digests.
 
 ```bash
-tar xzf chattermost-0.3.0.tar.gz
-cd chattermost-0.3.0
+tar xzf chattermost-0.3.1.tar.gz
+cd chattermost-0.3.1
 ./chattermost --directory /srv/chattermost setup --server-url https://chat.example.test
 /srv/chattermost/chattermost --directory /srv/chattermost start
 /srv/chattermost/chattermost --directory /srv/chattermost status
@@ -90,7 +90,7 @@ SBOM and provenance attestations. Vulnerability scanning gates fixed high/critic
 findings; scan output is published separately. No operator configuration, runtime
 state, private history, logs or screenshots enter release bundles or build inputs.
 
-## Lifecycle commands (0.3.0 and later)
+## Lifecycle commands (0.3.1 and later)
 
 Use `/srv/chattermost/chattermost --directory /srv/chattermost COMMAND`. The
 interface provides `start`, `status`, `upgrade VERSION`, `backup`,
@@ -98,15 +98,15 @@ interface provides `start`, `status`, `upgrade VERSION`, `backup`,
 `recover`. Setup remains a one-time operation; it refuses existing directories.
 
 For the initial upgrade from the published 0.2.3 baseline, download and verify the
-0.3.0 bundle as above, then run its new manager against the existing installation:
+0.3.1 bundle as above, then run its new manager against the existing installation:
 
 ```bash
-./chattermost-0.3.0/chattermost --directory /srv/chattermost upgrade 0.3.0
+./chattermost-0.3.1/chattermost --directory /srv/chattermost upgrade 0.3.1
 ```
 
 After successful activation the new manager is installed in the installation
 root. It stays available when rolling the application back to 0.2.3. Release
-policy explicitly permits 0.2.3 → 0.3.0. Unsupported paths, mutable version names,
+policy explicitly permits 0.2.3 → 0.3.1. Unsupported paths, mutable version names,
 changed published versions, unexpected archive members, altered cached files,
 image/manifest schema mismatches and infrastructure image changes fail closed.
 Downloads verify GitHub's SHA-256 asset digest over HTTPS and retain the digest

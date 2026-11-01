@@ -304,6 +304,7 @@ describe('Security and correctness hardening', () => {
   });
 
   it('requires the current password for a self-service password change', async () => {
+    // Multiple real password hashes need an integration timeout on hosted CPUs.
     const server = await createTestServer();
     const adminToken = await login(server);
     const alice = await createMember(server, adminToken, 'alicepw');
@@ -342,7 +343,7 @@ describe('Security and correctness hardening', () => {
       body: JSON.stringify({ new_password: 'AdminSetAlice123!' })
     });
     expect(adminReset.status).toBe(200);
-  });
+  }, 20_000);
 
   it('lets any channel member pin a post without marking it edited', async () => {
     const server = await createTestServer();

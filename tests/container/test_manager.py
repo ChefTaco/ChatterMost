@@ -18,8 +18,9 @@ class ManagerTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.work = Path(tempfile.mkdtemp(prefix='chattermost-manager-unit-'))
-        subprocess.run(['python3', 'distribution/package.py', '0.3.0', 'sha256:' + '0' * 64, 'sha256:' + '1' * 64, str(cls.work / 'bundle')], check=True, stdout=subprocess.DEVNULL)
-        cls.package = cls.work / 'bundle/chattermost-0.3.0'
+        cls.version = json.loads(Path('package.json').read_text())['version']
+        subprocess.run(['python3', 'distribution/package.py', cls.version, 'sha256:' + '0' * 64, 'sha256:' + '1' * 64, str(cls.work / 'bundle')], check=True, stdout=subprocess.DEVNULL)
+        cls.package = cls.work / 'bundle' / f'chattermost-{cls.version}'
         cls.module = runpy.run_path(str(cls.package / 'chattermost'), run_name='manager_test')
 
     @classmethod
@@ -65,17 +66,17 @@ class ManagerTests(unittest.TestCase):
 
     def test_release_hash_and_cached_bytes_are_both_checked(self):
         root = self.install('integrity')
-        archive = (self.work / 'bundle/chattermost-0.3.0.tar.gz').read_bytes()
-        asset = {'name': 'chattermost-0.3.0.tar.gz', 'digest': 'sha256:' + hashlib.sha256(archive).hexdigest(), 'browser_download_url': 'https://github.com/ChefTaco/ChatterMost/releases/download/v0.3.0/chattermost-0.3.0.tar.gz'}
-        release = json.dumps({'tag_name': 'v0.3.0', 'assets': [asset]}).encode()
+        archive = (self.work / 'bundle' / f'chattermost-{self.version}.tar.gz').read_bytes()
+        asset = {'name': f'chattermost-{self.version}.tar.gz', 'digest': 'sha256:' + hashlib.sha256(archive).hexdigest(), 'browser_download_url': f'https://github.com/ChefTaco/ChatterMost/releases/download/v{self.version}/chattermost-{self.version}.tar.gz'}
+        release = json.dumps({'tag_name': f'v{self.version}', 'assets': [asset]}).encode()
         with patch('urllib.request.urlopen', side_effect=[io.BytesIO(release), io.BytesIO(archive)]):
-            self.module['fetch_release'](root, '0.3.0')
-        (root / 'releases/0.3.0/compose.yaml').write_text('tampered')
+            self.module['fetch_release'](root, self.version)
+        (root / 'releases' / self.version / 'compose.yaml').write_text('tampered')
         with self.assertRaisesRegex(RuntimeError, 'integrity mismatch'):
-            self.module['cached_release'](root, '0.3.0')
+            self.module['cached_release'](root, self.version)
         with patch('urllib.request.urlopen', side_effect=[io.BytesIO(release), io.BytesIO(archive + b'tampered')]):
             with self.assertRaisesRegex(RuntimeError, 'archive integrity mismatch'):
-                self.module['fetch_release'](root, '0.3.0')
+                self.module['fetch_release'](root, self.version)
 
     def test_backup_rejects_unhashed_secret_files(self):
         root = self.install('backup-boundary')
