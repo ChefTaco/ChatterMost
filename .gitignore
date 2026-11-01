@@ -39,3 +39,13 @@ output/
 .DS_Store
 
 __pycache__/
+
+# Private Compose installation markers, wherever an installation is placed
+**/secrets/runtime.env
+**/secrets/postgres_password
+**/installation.json
+**/compose.env
+**/transactions.jsonl
+**/migration-evidence.json
+**/pending.json
+**/.verified.json

@@ -77,3 +77,14 @@ test('rejects personal identities, private networks, keys, tokens, and binary du
     assert.ok(result.stderr.includes(rule), rule);
   }
 }));
+
+test('rejects force-added container installation secrets and receipts at arbitrary depths', () => fixture(({ git, write, scan }) => {
+  const secret = 'synthetic-container-' + 'unique-private-value';
+  const files = ['new-install/secrets/runtime.env', 'new-install/secrets/postgres_password', 'nested/new-install/installation.json', 'nested/new-install/compose.env', 'nested/new-install/transactions.jsonl', 'nested/new-install/pending.json', 'nested/new-install/migration-evidence.json', 'nested/new-install/releases/0.3.0/.verified.json'];
+  for (const file of files) write(file, secret);
+  git('add', '-f', ...files);
+  const result = scan();
+  assert.equal(result.status, 1);
+  assert.equal(result.stderr.match(/private container installation state/gu)?.length, files.length);
+  assert.ok(!result.stderr.includes(secret));
+}));

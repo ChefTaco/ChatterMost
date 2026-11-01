@@ -9,6 +9,7 @@ Before submitting changes, stage only intended files and run:
 ```bash
 npm run privacy:check
 npm run privacy:test
+npm run container:test
 npm run typecheck
 npm run lint
 npm run test:unit

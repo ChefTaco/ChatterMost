@@ -38,6 +38,7 @@ for (const entry of entries) {
   if (stage !== '0') { reject('unresolved merge'); continue; }
   if (mode !== '100644' && mode !== '100755') { reject('unsupported link or submodule'); continue; }
   if (/(?:^|\/)(?:\.env(?:\..*)?|\.envrc)$/u.test(file) && file !== '.env.example') reject('private environment file');
+  if (/(?:^|\/)(?:secrets\/(?:runtime\.env|postgres_password)|installation\.json|compose\.env|transactions\.jsonl|migration-evidence\.json|pending\.json|\.verified\.json)$/u.test(file)) reject('private container installation state');
   if (/^(?:data|dist|output|coverage|node_modules|playwright-report|test-results|private|backups|shared|releases|mmcli_linux_bin|\.playwright-cli)\//u.test(file) || /^(?:deploy\/ssh_known_hosts|ethersage\.project\.yaml)$/u.test(file)) reject('private or generated artifact');
   if (/\.(?:pem|key|p12|pfx|crt|cer|har|bundle|dump|sqlite3?|db|zip|tar(?:\.gz)?|sql\.gz)$/iu.test(file)) reject('sensitive archive, database, certificate, or key');
   const size = Number(git('cat-file', '-s', oid).toString('utf8').trim());

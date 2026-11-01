@@ -10,6 +10,17 @@ Do not publish real hostnames, tailnet names, internal IP addresses, account nam
 
 Use reserved domains such as `chat.example.test`, synthetic people and bot accounts, documentation IP ranges, and clearly disposable test credentials. Reconstruct small fixtures from scratch rather than redacting live exports. A screenshot or browser trace can expose names, conversations, tokens, URLs, storage, and network traffic; use a synthetic local instance and inspect the complete artifact before sharing. Never attach live evidence to a public issue or PR.
 
+## Compose installation state
+
+Keep the complete installation directory outside Git worktrees. Protected
+`secrets/runtime.env`, `secrets/postgres_password`, `installation.json`, `compose.env`,
+transaction journals, pending transitions, migration evidence, verified-release
+receipts and backup directories are private operator state. A generated password
+can be sensitive even when no provider-token pattern recognizes it. The index
+scanner blocks these specific installation markers at arbitrary directory depths,
+including force-added ignored files. Use disposable synthetic installations for
+container and lifecycle verification; publish only the sanitized report fields.
+
 ## Before every commit
 
 1. Select files explicitly with `git add <paths>`; avoid blanket staging.
