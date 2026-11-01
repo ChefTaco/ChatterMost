@@ -9,3 +9,11 @@ The source uses generic deployment examples and includes Apache-2.0 licensing, c
 Development tooling pins `minimatch` to `11.0.3` because the current lint packages still request the affected 10.x line. CI checks the full dependency audit at moderate severity and above, alongside privacy and application checks.
 
 Live conversation refreshes preserve the focused composer and its selection synchronously, including a refresh between Shift and Enter. Browser regression coverage forces that refresh and checks that the newline lands at the original caret.
+
+Container baseline 0.2.0 adds a separate digest-pinned Compose distribution and
+native AMD64/ARM64 release pipeline. The application image runs without root,
+excludes build tools, generates its native Prisma engine, and carries Apache-2.0
+and dependency notices. Protected installation secrets, private networks, explicit
+locked/checksummed/drift-checked migrations, persistent file storage, synthetic
+container smoke verification and release SBOM/provenance/scanning are included.
+The existing SSH/systemd deployment and operator installation remain unchanged.

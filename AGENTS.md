@@ -161,3 +161,12 @@ Describe this project as **Mattermost-compatible**. Keep necessary protocol iden
 - Prefer existing service boundaries over direct route-handler storage changes.
 - Add route tests when changing API behavior; add Playwright tests when changing user-visible flows.
 - If a task changes deployment, update `docs/deployment.md`, `.env.example`, and this file when the topology or commands change.
+
+## Container distribution
+
+The independent distribution is `distribution/compose.yaml`; `docker-compose.yml`
+retains its development/SSH deployment contract. Build `deploy/Dockerfile` targets
+`runtime` and `migrator` separately. Read `docs/containers.md`. Use isolated unique
+Compose project names and synthetic data for verification. Do not run distribution
+commands in the source checkout or touch the existing installation without an
+explicit migration instruction. Publication-only work must not trigger deployment.

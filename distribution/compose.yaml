@@ -1,0 +1,102 @@
+# ChatterMost distribution. Do not use with the source checkout's operator .env.
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE:?release postgres image required}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: chattermost
+      POSTGRES_USER: chattermost_app
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets: [postgres_password]
+    volumes:
+      - database:/var/lib/postgresql/data
+    networks: [backend]
+    healthcheck:
+      test: [CMD-SHELL, 'pg_isready -U chattermost_app -d chattermost']
+      interval: 3s
+      timeout: 3s
+      retries: 40
+    stop_grace_period: 60s
+  initialize:
+    image: ${APP_IMAGE:?release application image required}
+    user: '0:0'
+    entrypoint: [/bin/sh, -ec]
+    command: ['mkdir -p /storage/files /storage/profile-images; chown -R "$${APP_UID}:$${APP_GID}" /storage; chmod 700 /storage /storage/files /storage/profile-images']
+    environment:
+      APP_UID: ${APP_UID:?required}
+      APP_GID: ${APP_GID:?required}
+    volumes: [files:/storage]
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER]
+    security_opt: [no-new-privileges:true]
+  migrate:
+    image: ${MIGRATOR_IMAGE:?release migration image required}
+    command: [migrate]
+    user: '${APP_UID}:${APP_GID}'
+    environment: &runtime_environment
+      CHATTERMOST_ENV_FILE: /run/secrets/runtime
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      STORE_BACKEND: postgres
+      FILE_STORAGE_PATH: /var/lib/chattermost/files
+      PROFILE_IMAGE_STORAGE_PATH: /var/lib/chattermost/profile-images
+      STORE_PATH: /var/lib/chattermost/store.json
+      ENABLE_DISTRIBUTED_RATE_LIMIT: ${ENABLE_REDIS:-false}
+      REDIS_URL: redis://redis:6379
+      ENABLE_REDIS_FANOUT: 'false'
+    secrets: [runtime, postgres_password]
+    depends_on:
+      postgres: {condition: service_healthy}
+    networks: [backend]
+    read_only: true
+    tmpfs: [/tmp:mode=1777]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: 'no'
+  app:
+    image: ${APP_IMAGE}
+    restart: unless-stopped
+    init: true
+    user: '${APP_UID}:${APP_GID}'
+    environment: *runtime_environment
+    secrets: [runtime, postgres_password]
+    volumes: [files:/var/lib/chattermost]
+    ports: ['${BIND_ADDRESS:-127.0.0.1}:${HTTP_PORT:-8065}:8065']
+    networks: [backend, frontend]
+    depends_on:
+      postgres: {condition: service_healthy}
+      initialize: {condition: service_completed_successfully}
+      migrate: {condition: service_completed_successfully}
+    read_only: true
+    tmpfs: [/tmp:mode=1777]
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    stop_grace_period: 45s
+    deploy:
+      replicas: 1
+  redis:
+    image: ${REDIS_IMAGE:?release redis image required}
+    user: redis
+    read_only: true
+    tmpfs: ['/data:uid=999,gid=999,mode=700', '/tmp:mode=1777']
+    profiles: [redis]
+    restart: unless-stopped
+    command: [redis-server, --save, '', --appendonly, 'no']
+    networks: [backend]
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+networks:
+  backend: {internal: true}
+  frontend: {}
+volumes:
+  database: {}
+  files: {}
+secrets:
+  runtime: {file: ./secrets/runtime.env}
+  postgres_password: {file: ./secrets/postgres_password}

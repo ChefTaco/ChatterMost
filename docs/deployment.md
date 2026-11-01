@@ -242,3 +242,11 @@ release ledger predecessor, identical schema lineage/configuration, and
 previous app and infrastructure links, restarts, probes internal and public
 health, and retains the forward PostgreSQL database. A migration-bearing
 release is held for reviewed database/code reconciliation instead.
+
+## Independent container distribution
+
+For new installations using published, digest-pinned images, see
+[container installation](containers.md). The distribution has its own installation
+directory, secrets, Compose project and lifecycle. Existing SSH/systemd scripts
+and their schema/secret contracts remain unchanged. Moving an existing deployment
+to containers requires a separately authorized migration.

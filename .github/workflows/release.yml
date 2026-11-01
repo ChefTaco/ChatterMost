@@ -1,0 +1,162 @@
+name: container-release
+on:
+  push:
+    tags: ['v0.*']
+permissions:
+  contents: read
+concurrency:
+  group: container-release
+  cancel-in-progress: false
+jobs:
+  gates:
+    uses: ./.github/workflows/ci.yml
+  native:
+    needs: gates
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22.23.4, cache: npm}
+      - run: npm ci
+      - uses: docker/setup-buildx-action@v4
+      - name: Native execution identity
+        run: uname -m
+      - name: Set immutable version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+      - name: Refuse overwriting published version
+        env: {GH_TOKEN: '${{ github.token }}'}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo 'Release already exists; select a new version.' >&2; exit 1
+          fi
+      - name: Build application
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/Dockerfile
+          target: runtime
+          load: true
+          tags: chattermost-local:release
+          build-args: |
+            VERSION=${{ env.VERSION }}
+            REVISION=${{ github.sha }}
+            CREATED=${{ github.event.head_commit.timestamp }}
+      - name: Build migration image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/Dockerfile
+          target: migrator
+          load: true
+          tags: chattermost-migrator-local:release
+          build-args: |
+            VERSION=${{ env.VERSION }}
+            REVISION=${{ github.sha }}
+      - name: Scan application
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: chattermost-local:release
+          format: json
+          output: scan-app-${{ matrix.arch }}.json
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+      - name: Scan migrator
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          image-ref: chattermost-migrator-local:release
+          format: json
+          output: scan-migrator-${{ matrix.arch }}.json
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: '1'
+      - name: Exercise native installation before publishing
+        run: python3 tests/container/native.py "$VERSION"
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish native application with SBOM and provenance
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/Dockerfile
+          target: runtime
+          push: true
+          tags: ghcr.io/cheftaco/chattermost:${{ env.VERSION }}-${{ matrix.arch }}
+          sbom: true
+          provenance: mode=max
+          build-args: |
+            VERSION=${{ env.VERSION }}
+            REVISION=${{ github.sha }}
+            CREATED=${{ github.event.head_commit.timestamp }}
+      - name: Publish native migrator with SBOM and provenance
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: deploy/Dockerfile
+          target: migrator
+          push: true
+          tags: ghcr.io/cheftaco/chattermost-migrator:${{ env.VERSION }}-${{ matrix.arch }}
+          sbom: true
+          provenance: mode=max
+          build-args: |
+            VERSION=${{ env.VERSION }}
+            REVISION=${{ github.sha }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scans-${{ matrix.arch }}
+          path: scan-*.json
+  publish:
+    needs: native
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 22.23.4, cache: npm}
+      - run: npm ci
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish immutable multi-platform manifests and bundle
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          for NAME in chattermost chattermost-migrator; do
+            docker buildx imagetools create -t "ghcr.io/cheftaco/$NAME:$VERSION" "ghcr.io/cheftaco/$NAME:$VERSION-amd64" "ghcr.io/cheftaco/$NAME:$VERSION-arm64"
+          done
+          APP_DIGEST="$(docker buildx imagetools inspect "ghcr.io/cheftaco/chattermost:$VERSION" --format '{{.Manifest.Digest}}')"
+          MIGRATOR_DIGEST="$(docker buildx imagetools inspect "ghcr.io/cheftaco/chattermost-migrator:$VERSION" --format '{{.Manifest.Digest}}')"
+          python3 distribution/package.py "$VERSION" "$APP_DIGEST" "$MIGRATOR_DIGEST" public-release
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: scans-*
+          path: public-release/scans
+          merge-multiple: true
+      - name: Attest release archive
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: public-release/*.tar.gz
+      - name: Publish release artifacts
+        env: {GH_TOKEN: '${{ github.token }}'}
+        run: |
+          gh release create "$GITHUB_REF_NAME" public-release/*.tar.gz public-release/SHA256SUMS public-release/release.json public-release/compose.yaml public-release/chattermost public-release/scans/*.json --title "ChatterMost ${GITHUB_REF_NAME#v}" --notes 'Mattermost-compatible container distribution. Digest-pinned AMD64 and ARM64 images, Compose installation bundle, integrity checksums, vulnerability scans, SBOM and provenance. See the installation guide in the bundle.'

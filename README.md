@@ -82,3 +82,10 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) and [PRIVACY.md](PRIVACY.md) before open
 Copyright 2026 ChatterMost contributors. Licensed under the [Apache License, Version 2.0](LICENSE). Dependencies retain their own licenses; third-party tools are installed separately.
 
 ChatterMost is Mattermost-compatible. Mattermost is a trademark of Mattermost, Inc. ChatterMost is independently developed and is not affiliated with, endorsed by, or sponsored by Mattermost, Inc. Compatibility describes the implemented interfaces, not complete feature parity or certification. Protocol names and identifiers are retained where required for interoperability. See [compatibility](docs/compatibility.md) for the supported surface.
+
+## Container distribution
+
+Install published images without a source checkout using the versioned bundles in
+[Releases](https://github.com/ChefTaco/ChatterMost/releases). See the
+[container installation guide](docs/containers.md) for private setup, HTTPS proxy
+requirements, migration safeguards, and release verification.

@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""Private, single-writer ChatterMost Compose installation manager (Apache-2.0)."""
+import argparse
+import contextlib
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import secrets
+import shutil
+import subprocess
+import sys
+import time
+import urllib.request
+
+REPOSITORY = 'ChefTaco/ChatterMost'
+VERSION = re.compile(r'^0\.[2-9][0-9]*\.[0-9]+$')
+
+
+def private_write(file, data):
+    file = Path(file)
+    temporary = file.with_name(file.name + '.tmp')
+    with open(temporary, 'w', opener=lambda p, f: os.open(p, f, 0o600)) as stream:
+        stream.write(data if isinstance(data, str) else json.dumps(data, indent=2) + '\n')
+    os.chmod(temporary, 0o600)
+    os.replace(temporary, file)
+
+
+def check_private(file):
+    if file.is_symlink() or not file.is_file() or file.stat().st_mode & 0o077:
+        raise RuntimeError(f'Protected file must be a regular mode-600 file: {file.name}')
+
+
+def compose(root, *args, capture=False, input_data=None):
+    check_private(root / 'installation.json')
+    config = json.loads((root / 'installation.json').read_text())
+    cmd = ['docker', 'compose', '--project-name', config['project'], '--env-file', str(root / 'compose.env'), '-f', str(root / 'compose.yaml')]
+    if config['redis']:
+        cmd += ['--profile', 'redis']
+    result = subprocess.run(cmd + list(args), cwd=root, input=input_data, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if result.returncode:
+        # Container diagnostics can include private operator configuration.
+        journal(root, 'command_failed', command=list(args[:2]), exit_code=result.returncode)
+        with open(root / 'diagnostics.log', 'ab', opener=lambda p, f: os.open(p, f, 0o600)) as stream:
+            stream.write(result.stdout + result.stderr)
+        raise RuntimeError('Compose operation failed; inspect private diagnostics.log')
+    if capture:
+        return result.stdout
+    return None
+
+
+def journal(root, event, **fields):
+    with open(root / 'transactions.jsonl', 'a', opener=lambda p, f: os.open(p, f, 0o600)) as stream:
+        stream.write(json.dumps({'time': int(time.time()), 'event': event, **fields}) + '\n')
+
+
+def metadata(directory):
+    data = json.loads((directory / 'release.json').read_text())
+    if data.get('format') != 1 or not VERSION.fullmatch(data.get('version', '')):
+        raise RuntimeError('Unsupported release manifest')
+    for field in ('app_image', 'migrator_image'):
+        if not re.fullmatch(r'ghcr.io/cheftaco/chattermost(?:-migrator)?@sha256:[a-f0-9]{64}', data[field]):
+            raise RuntimeError('Release image must be digest pinned')
+    return data
+
+
+def activate_files(root, release):
+    config = json.loads((root / 'installation.json').read_text())
+    data = metadata(release)
+    shutil.copyfile(release / 'compose.yaml', root / 'compose.yaml')
+    values = {
+        'APP_IMAGE': data['app_image'], 'MIGRATOR_IMAGE': data['migrator_image'],
+        'POSTGRES_IMAGE': data['postgres_image'], 'REDIS_IMAGE': data['redis_image'],
+        'APP_UID': config['uid'], 'APP_GID': config['gid'], 'HTTP_PORT': config['port'],
+        'BIND_ADDRESS': config['bind'], 'ENABLE_REDIS': str(config['redis']).lower()
+    }
+    private_write(root / 'compose.env', ''.join(f'{k}={v}\n' for k, v in values.items()))
+
+
+def ready(root):
+    compose(root, 'up', '-d', '--no-deps', '--wait', '--wait-timeout', '120', 'app')
+    compose(root, 'exec', '-T', 'app', 'node', 'dist/scripts/container.js', 'ready')
+    journal(root, 'ready')
+
+
+def start(root):
+    running = compose(root, 'ps', '--status', 'running', '--services', capture=True).decode().splitlines()
+    if 'app' in running:
+        ready(root)
+        return
+    compose(root, 'pull')
+    infrastructure = ['postgres'] + (['redis'] if json.loads((root / 'installation.json').read_text())['redis'] else [])
+    compose(root, 'up', '-d', '--wait', *infrastructure)
+    compose(root, 'run', '--rm', 'initialize')
+    compose(root, 'run', '--rm', 'migrate')
+    ready(root)
+
+
+def setup(args):
+    root = args.directory
+    if root.exists():
+        raise RuntimeError('Installation directory already exists; refusing credential replacement')
+    source = Path(__file__).resolve().parent
+    data = metadata(source)
+    if not args.server_url.startswith(('https://', 'http://localhost:', 'http://127.0.0.1:')):
+        raise RuntimeError('Use an HTTPS server URL (HTTP is supported only for local testing)')
+    root.mkdir(mode=0o700, parents=True)
+    for name in ('secrets', 'releases', 'backups'):
+        (root / name).mkdir(mode=0o700)
+    uid, gid = os.getuid() or 1000, os.getgid() or 1000
+    private_write(root / 'installation.json', {
+        'project': 'chattermost-' + secrets.token_hex(6), 'uid': uid, 'gid': gid,
+        'port': args.port, 'bind': args.bind, 'redis': args.redis, 'server_url': args.server_url
+    })
+    password = secrets.token_hex(32)
+    values = {
+        'SERVER_URL': args.server_url, 'ADMIN_USERNAME': 'admin', 'ADMIN_EMAIL': 'admin@example.test',
+        'ADMIN_PASSWORD': secrets.token_urlsafe(36), 'COOKIE_SECRET': secrets.token_hex(32),
+        'TOKEN_HASH_SECRET': secrets.token_hex(32), 'HERMES_BOT_TOKEN': secrets.token_hex(32),
+        'ENABLE_DEV_DEFAULTS': 'false', 'ALLOW_VERSION_ADVERTISEMENT': 'true',
+        'TRUSTED_PROXIES': args.trusted_proxies
+    }
+    private_write(root / 'secrets/runtime.env', ''.join(f'{k}={json.dumps(v)}\n' for k, v in values.items()))
+    private_write(root / 'secrets/postgres_password', password + '\n')
+    if os.getuid() == 0:
+        for file in (root / 'secrets').iterdir():
+            os.chown(file, uid, gid)
+    destination = root / 'releases' / data['version']
+    shutil.copytree(source, destination)
+    private_write(root / 'state.json', {'current': data['version'], 'previous': None, 'schema': data['schema']})
+    shutil.copyfile(source / 'chattermost', root / 'chattermost')
+    os.chmod(root / 'chattermost', 0o700)
+    activate_files(root, destination)
+    journal(root, 'setup', version=data['version'])
+    print('Installation prepared. Credentials are in secrets/runtime.env; keep this directory private.')
+
+
+def main():
+    os.umask(0o077)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--directory', type=Path, default=Path.cwd())
+    sub = parser.add_subparsers(dest='command', required=True)
+    setup_parser = sub.add_parser('setup')
+    setup_parser.add_argument('--server-url', required=True)
+    setup_parser.add_argument('--port', type=int, default=8065)
+    setup_parser.add_argument('--bind', default='127.0.0.1')
+    setup_parser.add_argument('--redis', action='store_true')
+    setup_parser.add_argument('--trusted-proxies', default='')
+    for name in ('start', 'status'):
+        sub.add_parser(name)
+    args = parser.parse_args()
+    args.directory = args.directory.resolve()
+    if args.command == 'setup':
+        setup(args)
+        return
+    root = args.directory
+    for name in ('installation.json', 'compose.env', 'state.json', 'secrets/runtime.env', 'secrets/postgres_password'):
+        check_private(root / name)
+    with open(root / '.lock', 'a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        if args.command == 'start':
+            start(root)
+        elif args.command == 'status':
+            rows = compose(root, 'ps', '--all', '--format', 'json', capture=True)
+            print(rows.decode())
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except (RuntimeError, OSError, ValueError) as error:
+        print(str(error), file=sys.stderr)
+        sys.exit(1)
