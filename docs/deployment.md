@@ -1,6 +1,11 @@
 # Deployment
 
-ChatterMost deploys from this checkout to your deployment host through `scripts/deploy.sh`. Release archives exclude local environment files, SSH trust pins, private operator directories, and separately installed CLI binaries. The script builds once locally, transfers one immutable artifact and release manifest, verifies their SHA-256 digests remotely, then holds a non-blocking remote `flock` across migration, isolated preflight, reversible infrastructure promotion, and activation. Failed restart or health validation restores the previous code, environment, systemd unit, and nginx site only when the previous release declares support for the current schema generation.
+Check private `CHAT_SERVER_DEPLOY_MODE` first. For `compose`, use the published
+manager at `CHAT_SERVER_COMPOSE_PATH` and [container operations](containers.md).
+The native workflow below does not interpret that metadata and must not be run
+against a migrated installation.
+
+Native installations deploy from this checkout through `scripts/deploy.sh`. Release archives exclude local environment files, SSH trust pins, private operator directories, and separately installed CLI binaries. The script builds once locally, transfers one immutable artifact and release manifest, verifies their SHA-256 digests remotely, then holds a non-blocking remote `flock` across migration, isolated preflight, reversible infrastructure promotion, and activation. Failed restart or health validation restores the previous code, environment, systemd unit, and nginx site only when the previous release declares support for the current schema generation.
 
 All hostnames and identities below are synthetic. Store real values only in the ignored `.env` and private operator notes. `deploy/ssh_known_hosts`, private SSH keys, certificates, release receipts, and backups must never be committed. The public default key path is `~/.ssh/chattermost_deploy_ed25519`; set `CHAT_SERVER_DEPLOY_SSH_KEY` in `.env` for a different existing key. Provision a sudo-capable deploy account and a writable `CHAT_SERVER_DEPLOY_PATH` before the first deployment.
 
@@ -255,3 +260,11 @@ The distribution's lifecycle manager supports explicit-version upgrades, consist
 backups, explicit database/file restoration and schema-checked application
 rollback. It does not call the SSH deployment scripts, rotate established secrets,
 or migrate an existing installation. See [lifecycle commands](containers.md#lifecycle-commands-032-and-later).
+
+For an explicitly authorized native-to-Compose move, follow the
+[container migration procedure](container-migration.md). Check private
+`CHAT_SERVER_DEPLOY_MODE` and `CHAT_SERVER_COMPOSE_PATH` before choosing commands.
+When Compose is selected, use that installation's published manager; the preserved
+native deployer remains native-only and does not interpret the routing metadata.
+Native migration recovery requires the protected forward-preserving rollback
+procedure, rather than a container-version rollback command.

@@ -141,7 +141,17 @@ After visual changes, inspect at least:
 
 Deployment settings are private operator configuration in the ignored, mode-600 `.env`. Use `docs/deployment.md` for generic setup and `deploy/ROLLBACK.md` for schema-aware rollback. Never copy a real host, tailnet domain, account, certificate, public host-key pin, or deployment receipt into tracked documentation.
 
-Run `scripts/setup-ssh-cert-auth.sh` when key authentication has not been proven, then `scripts/deploy.sh --force` for an authorized deployment. Create the ignored `deploy/ssh_known_hosts` from a host key verified through an independent trusted channel. Scripts require that pin and strict SSH host checking. Never bypass host verification.
+Check `CHAT_SERVER_DEPLOY_MODE` before choosing a deployment workflow. When it is
+`compose`, manage the installation at `CHAT_SERVER_COMPOSE_PATH` with its published
+`chattermost` manager over the existing pinned SSH connection. Do not invoke the
+native `scripts/deploy.sh` workflow or start the retired native service. The mode
+is operator routing metadata; legacy scripts intentionally retain their contracts
+and do not interpret it. Read `docs/container-migration.md` before crossing a
+native/Compose boundary. The container manager's `rollback` command covers prior
+container releases, not the retired native installation; migration recovery needs
+the protected, installation-specific procedure and current forward data.
+
+For native-mode installations, run `scripts/setup-ssh-cert-auth.sh` when key authentication has not been proven, then `scripts/deploy.sh --force` for an authorized deployment. Create the ignored `deploy/ssh_known_hosts` from a host key verified through an independent trusted channel. Scripts require that pin and strict SSH host checking. Never bypass host verification.
 
 Routine deploys fail closed on established Postgres, cookie, or token-hash secret mismatches. Use the explicit secret-rotation scripts for coordinated rotation; do not generate replacements to work around a failed deployment. Preserve the stable Compose project name, immutable release manifests, digest verification, transaction lock, schema lineage and compatibility checks, read-only preflight, and atomic activation/rollback boundaries.
 
