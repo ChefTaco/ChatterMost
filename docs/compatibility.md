@@ -23,7 +23,11 @@ Unsupported enterprise-only behavior returns compatible empty or free-tier respo
 Version advertisement is controlled by `ALLOW_VERSION_ADVERTISEMENT`.
 
 - Development default: off, returns `0.0.0-compatible`.
-- Deployment script default: on, returns `11.8.0` and `mattermost-v11.8`.
+- Native deploy script and Compose setup default: on, returns `11.8.0` and `mattermost-v11.8`.
+
+The compatibility profile is distinct from the ChatterMost release (for example,
+0.3.2). Container `BuildHash` is the full source revision and `ReleaseId` is the
+selected distribution version. Use the release manifest for upgrade identity.
 
 Keep mobile smoke tests passing before advertising a Mattermost-compatible version.
 
@@ -36,7 +40,7 @@ One-to-one bot DMs preserve the command exactly. Group DMs and channels with one
 ## Authentication And CSRF
 
 - The Web UI authenticates with a `HttpOnly`, `SameSite=Lax` session cookie (`SESSION_COOKIE_NAME`, default `MMSID`).
-- Cookie-authenticated writes (`POST`/`PUT`/`DELETE`) must carry a same-origin `Origin` or `Referer` matching `SERVER_URL`.
+- Cookie-authenticated methods other than `GET`/`HEAD`/`OPTIONS` must carry a same-origin `Origin` or `Referer` matching `SERVER_URL`.
 - Cookie-authenticated WebSocket upgrades must also be same-origin to prevent Cross-Site WebSocket Hijacking.
 - Bearer-token API clients such as Hermes, `mmctl`, and scripted tests are exempt from CSRF/CSWSH origin checks because browsers do not attach bearer tokens automatically.
 - WebSocket clients may authenticate either with a bearer token on upgrade or by sending an `authentication_challenge` frame.
@@ -55,7 +59,7 @@ One-to-one bot DMs preserve the command exactly. Group DMs and channels with one
 - Proxies must preserve `Origin` and `Referer`.
 - The web UI has responsive mobile layouts, a fixed mobile composer, attachment selection, and emoji picker controls.
 - Mobile app request/response fixtures for login type, login, client config, and websocket upgrade guard live in `tests/fixtures/mobile-app-compatibility.json` and are replayed by `tests/vitest/mobile-fixtures.test.ts`.
-- Client config includes stable, non-empty `DiagnosticId` and `TelemetryId` values plus string-valued email/username login capability flags so the official Mattermost-compatible mobile app can identify the server and present its password login form.
+- Client config includes stable, non-empty `DiagnosticId` and `TelemetryId` values plus string-valued email/username login capability flags so Mattermost-compatible native mobile clients can identify the server and present its password login form.
 - Team selection supports the native mobile channel bootstrap contract: joined channels, the current user's channel memberships, and Mattermost-compatible sidebar categories are returned together.
 - WebSocket authentication and heartbeat handling follow the native client's challenge, `ping`, and Mattermost-compatible `pong` sequence so mobile connections remain online.
 - Server event sequence numbers are contiguous and connection-local, begin at zero after a fresh connection, and do not develop gaps when events for other users are filtered out; repeated bearer authentication does not emit a duplicate `hello`.

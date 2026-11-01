@@ -16,7 +16,7 @@ excludes build tools, generates its native Prisma engine, and carries Apache-2.0
 and dependency notices. Protected installation secrets, private networks, explicit
 locked/checksummed/drift-checked migrations, persistent file storage, synthetic
 container smoke verification and release SBOM/provenance/scanning are included.
-The existing SSH/systemd deployment and operator installation remain unchanged.
+The existing SSH/systemd script contracts remain separate from the distribution.
 
 The container release gate exposed an attachment submission race. Composer busy
 state now survives live refreshes, preventing the next message from inheriting a
@@ -37,7 +37,8 @@ explicit database/file restoration, schema-checked app rollback, and interrupted
 transaction recovery. Release and cache integrity, generation/lineage contracts,
 actual schema comparison, image identity, protected secrets, database locks,
 clean writer shutdown and durable private transaction records gate activation.
-The existing SSH deployment contracts and installation remain untouched.
+Existing SSH deployment contracts remain separate; native-to-Compose moves use
+the authorized migration procedure.
 
 Native release jobs verify the published baseline against candidate image digests
 before assembling a release. Synthetic coverage includes retained accounts, bot
@@ -45,7 +46,7 @@ authentication, messages, attachments/profile images, unchanged secrets, restart
 persistence, backup restoration, compatible rollback, genuine failing Prisma SQL,
 health failure recovery, incompatible-generation refusal, browser login and live
 browser WebSocket delivery. Public archive/CLI verification repeats after release.
-Release artifacts include native lifecycle reports alongside scans and signed
+Release artifacts include native lifecycle reports alongside scans and publisher-attested
 checksums. Image version reuse is refused; only reviewed upgrade paths are allowed.
 The release gate uses isolated browser files for the shared synthetic server and
 keeps concurrent two-browser WebSocket coverage. Multi-hash authentication tests
@@ -57,3 +58,12 @@ one container; new Compose installs disable volume copy-up. This prevents image
 UID 1000 from replacing another operator UID while a volume is temporarily empty.
 Coverage includes restoring the original baseline template and independent member
 and custom-bot credentials that startup cannot recreate from configuration.
+
+Documentation now leads with the public Compose/GHCR distribution and keeps native
+operations explicitly separate. Upgrade guidance defines the reviewed source/target
+matrix, first lifecycle-manager bootstrap, consistent recovery boundaries and
+future policy/test requirements. Maintainer guidance covers public package access,
+release artifacts, integrity/attestations, immutable versions and post-publication
+verification. Source setup, runtime configuration and seeded bot-token restart
+behavior are documented against their actual implementation. Private operational
+receipts and verification data remain outside the public documentation.

@@ -1,4 +1,4 @@
-# Deployment
+# Deployment routing and native operations
 
 Check private `CHAT_SERVER_DEPLOY_MODE` first. For `compose`, use the published
 manager at `CHAT_SERVER_COMPOSE_PATH` and [container operations](containers.md).
@@ -12,10 +12,12 @@ All hostnames and identities below are synthetic. Store real values only in the 
 ## Required Local State
 
 - `.env` exists and is mode `600`.
-- Node 22 or newer is available locally.
+- A patched Node version supported by `package.json` is available locally and on
+  the native host. The deploy script checks the Node major floor, not all patch
+  requirements; use the package engine ranges when provisioning it.
 - SSH key auth to `CHAT_SERVER_DEPLOY_USER@CHAT_SERVER_DEPLOY_HOST` works, or `scripts/setup-ssh-cert-auth.sh` can install it. Create the ignored `deploy/ssh_known_hosts` with your server's ED25519 public host key, verified through an independent trusted channel; an unexpected host-key change fails closed. A host key obtained by `ssh-keyscan` alone is not verified.
 - Docker is available on the deployment host for Postgres.
-- Redis is available on the deployment host at `redis://127.0.0.1:6379` for distributed rate-limit counters. WebSocket fanout remains local to one Node process; `ENABLE_REDIS_FANOUT=true` is invalid, and multiple application instances would require sticky connections until real pub/sub fanout exists.
+- Redis is available on the deployment host at `redis://127.0.0.1:6379` for distributed rate-limit counters. WebSocket fanout remains local to one Node process; `ENABLE_REDIS_FANOUT=true` is invalid, and multiple application writers are unsupported; sticky connections alone do not make the full-document store safe.
 
 The deploy script requires these deployment variables:
 
@@ -40,7 +42,8 @@ helpers may enable the defaults only outside production.
 
 `TOKEN_HASH_SECRET` independently keys API, bot, invite, and webhook token hashes. Existing installations are migrated by preserving the prior cookie secret as this token key, so a later cookie-secret rotation can invalidate browser sessions without silently breaking Hermes or personal access tokens.
 
-Routine deployment compares the established token-hash secret exactly like the Postgres and cookie secrets and rejects any mismatch. Rotate it only through its dedicated preview and confirmation workflow:
+Native rotation scripts below operate the systemd/native database layout; they
+are not Compose rotation commands. Routine native deployment compares the established token-hash secret exactly like the Postgres and cookie secrets and rejects any mismatch. Rotate it only through its dedicated preview and confirmation workflow:
 
 ```bash
 scripts/rotate-token-hash-secret.sh --preview
@@ -117,7 +120,7 @@ npm run build
 
 Run `npx playwright test` separately before or after deploy for the browser gate.
 
-The lockfile currently resolves `@hono/node-server` 2.x, whose engine floor is Node 20. ChatterMost requires Node 22 or newer and the deploy script verifies that minimum on the deployment host. Run `npm audit` after dependency changes; the supported tree is expected to report zero known vulnerabilities.
+The lockfile currently resolves `@hono/node-server` 2.x. ChatterMost's supported patched Node ranges are in `package.json`; `.nvmrc` pins source development and the Dockerfile pins the container runtime. The native deploy script checks Node major 22 or newer, which is not a substitute for satisfying the package engine ranges. Run `npm audit` after dependency changes; the supported tree is expected to report zero known vulnerabilities.
 
 ## Security Fusion Provisioning And Export
 
@@ -156,11 +159,14 @@ After deployment, prove ChatterMost is live:
 ```bash
 curl -fsS https://chat.example.test:9443/api/v4/system/ping
 curl -fsS https://chat.example.test:9443/api/v4/config/client
-ssh -i ~/.ssh/chattermost_deploy_ed25519 -o BatchMode=yes chattermost@chat.example.test 'systemctl is-active chattermost.service'
-node --input-type=module -e 'import WebSocket from "ws"; const ws = new WebSocket("wss://chat.example.test:9443/api/v4/websocket"); ws.once("open", () => { console.log("wss open"); ws.close(); }); ws.once("error", (error) => { console.error(error.message); process.exit(1); });'
+ssh -i ~/.ssh/chattermost_deploy_ed25519 -o BatchMode=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=deploy/ssh_known_hosts -o HostKeyAlgorithms=ssh-ed25519 chattermost@chat.example.test 'systemctl is-active chattermost.service'
 ```
 
-Expected service state: `active`.
+Expected native service state: `active`. These ping/config/service probes do not
+prove authentication or event delivery. Also verify browser login, an existing bot
+token and an authenticated WSS `posted` event using a private synthetic
+conversation. See [upgrade verification](upgrading.md#container-upgrade-procedure)
+and the gateway smoke below; an anonymous WSS `open` alone is not sufficient.
 
 The ChatterMost ping includes:
 
@@ -194,7 +200,8 @@ CHATTERMOST_POSTGRES_TEST_URL="postgresql://chattermost_app:dev-postgres-passwor
   npx vitest run tests/vitest/postgres-store.test.ts
 ```
 
-Operator smoke scripts:
+Operator smoke scripts (supply the required protected credential environment first;
+these TypeScript scripts do not automatically load the operator `.env`):
 
 ```bash
 node --import tsx scripts/cleanup-test-artifacts.ts
@@ -223,13 +230,21 @@ Production sets `ENABLE_DISTRIBUTED_RATE_LIMIT=true`, so the counters are atomic
 
 ## Backups And Rollback
 
-Backups:
+Before a native upgrade, arrange a consistent recovery point: hold the deployment
+lock, stop/drain the app, hold the database migration/recovery lock, and capture a
+Postgres dump, full attachments/profile trees, protected environment, prior code
+and infrastructure. Verify hashes, a restore rehearsal and a protected off-host
+copy before activation. Preserve credentials and take a fresh checkpoint after a
+rehearsal if the original writer resumed.
 
-```bash
-scripts/backup.sh
-```
+The legacy `scripts/backup.sh` helper does not stop the app, coordinate DB/files,
+retain a full credential environment or produce an integrity/restore receipt. It
+also expects a shell-compatible env file. Do not treat it alone as a verified
+recovery point, source arbitrary dotenv content into a shell, or use it for Compose
+installations. Compose operators use the installed manager's `backup` command.
 
-Rollback instructions live in `deploy/ROLLBACK.md`.
+Use [upgrade/recovery paths](upgrading.md) and [guarded native rollback](../deploy/ROLLBACK.md).
+A database restore is explicit and distinct from application rollback.
 ## Code-only rollback
 
 `COUNCIL_CODE_RELEASE=1 scripts/deploy.sh --stage` stages an inactive, immutable

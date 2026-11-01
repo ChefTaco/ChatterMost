@@ -1,6 +1,11 @@
 # Admin Guide
 
-Admins sign in with the account bootstrapped from `.env` or the deploy-time `CHAT_SERVER_ADMIN_*` variables.
+Admins sign in with the configured administrator account. Compose setup stores
+its initial credentials in the protected installation `secrets/runtime.env`;
+source/native installations bootstrap from `.env` or `CHAT_SERVER_ADMIN_*` values.
+Keep the current administrator password in the protected readiness configuration
+when changing it through the UI. See [container operations](containers.md) and
+[upgrades/recovery](upgrading.md) before installation-level changes.
 
 ## Navigation
 
@@ -61,14 +66,25 @@ Use Supervision to switch between audit-only and pre-moderation from the current
 
 Use Agents to register native AI agents, edit structured permissions/allowlists/memory policy, and run policy simulation.
 
-Use Hermes to review bot-token configuration, bot accounts, WSS connection count, last bot post, recent agent events, and to rotate the bot token intentionally. A rotated token is shown only in the rotation response; update Hermes immediately. Privileged bot API mutations also return an operation ID; administrators can reconcile it at `GET /admin/bot-operations/{operation_id}` without exposing the one-time token again.
+Use Hermes to review bot-token configuration, bot accounts, WSS connection count, last bot post, recent agent events, and to rotate the bot token intentionally. A rotated token is shown only in the rotation response; update Hermes immediately.
+For the environment-seeded bot, also coordinate `HERMES_BOT_TOKEN` in the
+protected server configuration before the next restart: bootstrap otherwise
+reapplies the old environment token. See [seeded bot configuration](hermes-compatibility.md#chattermost-bot-setup). Privileged bot API mutations also return an operation ID; administrators can reconcile it at `GET /admin/bot-operations/{operation_id}` without exposing the one-time token again.
 
 ## Import
 
-Use the Mattermost-compatible import helper to inspect a JSONL export:
+The import helper runs from a source/operator checkout, not inside the production
+image (which has no npm/TypeScript toolchain). It imports a supported subset of
+channels/posts; it is not a complete account, credential or attachment migration.
+Use the Mattermost-compatible helper to inspect a JSONL export:
 
 ```bash
 npm run import:mm-export -- --file export.jsonl
 ```
 
 Add `--server-url`, `--token`, and `--apply` to submit normalized channels and posts to `/api/v4/import/mattermost`.
+
+The dry run prints sample channel/post content. Treat exports and output as private;
+use synthetic exports in public reports. Supplying `--token` exposes that argument
+to the local process argument list and potentially shell history, so use a protected operator workflow.
+This helper does not replace a consistent installation backup/restore.

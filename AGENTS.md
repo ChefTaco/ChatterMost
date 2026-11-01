@@ -47,7 +47,8 @@ The lint gate is strict typed ESLint with `--max-warnings=0`. Do not weaken rule
 
 ## Local Runtime
 
-Use Node 22 or newer. The production service entrypoint is:
+Use a patched Node version supported by `package.json`; `.nvmrc` pins source
+development, while the Dockerfile pins the container runtime. The production service entrypoint is:
 
 ```bash
 node dist/src/server/index.js
@@ -155,7 +156,12 @@ For native-mode installations, run `scripts/setup-ssh-cert-auth.sh` when key aut
 
 Routine deploys fail closed on established Postgres, cookie, or token-hash secret mismatches. Use the explicit secret-rotation scripts for coordinated rotation; do not generate replacements to work around a failed deployment. Preserve the stable Compose project name, immutable release manifests, digest verification, transaction lock, schema lineage and compatibility checks, read-only preflight, and atomic activation/rollback boundaries.
 
-After an authorized deployment, verify ping, client config, the active service, and the resolved `current` release against its build hash and release ID using the private operator configuration. Redis provides abuse counters only; WebSocket delivery remains process-local. Preserve `ENABLE_REDIS_FANOUT=true` rejection and the false multi-process safety flags.
+After an authorized deployment, verify ping, client config and the active service
+against the build hash and release ID using private operator configuration. For
+Compose, check installed `state.json`, the verified release manifest, selected
+image digests and manager `status`; the native `current` symlink is not the active
+container release selector. For native installs, verify the resolved `current`
+release and native manifest. Redis provides abuse counters only; WebSocket delivery remains process-local. Preserve `ENABLE_REDIS_FANOUT=true` rejection and the false multi-process safety flags.
 
 ## Publication privacy and naming
 
@@ -189,3 +195,10 @@ published baseline plus candidate images before assembling a versioned release;
 `tests/container/lifecycle.py VERSION` repeats the proof against public artifacts.
 Backups, migration evidence and transaction records are private installation state.
 Never auto-restore a database after a failed upgrade or bypass schema validation.
+
+Documentation entry points are `README.md`, `docs/containers.md`,
+`docs/upgrading.md` and `docs/releases.md`. Keep supported upgrade sources explicit
+and tested; do not infer support from version ordering. The lifecycle fixture
+currently starts from published 0.2.3, so a future policy supporting 0.3.2 must add
+matching baseline coverage before publication. Keep cross-guide links usable when
+`docs/containers.md` is packaged as the distribution's root `README.md`.

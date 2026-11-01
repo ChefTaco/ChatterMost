@@ -42,3 +42,18 @@ Admins can change privacy-related settings from the System panel:
 - Public links.
 - Custom emoji.
 - Bot account creation.
+
+## Container configuration, logs and recovery data
+
+Runtime privacy is separate from [contribution/publication privacy](../PRIVACY.md).
+Compose installs keep configuration in protected `secrets/runtime.env` and
+`secrets/postgres_password`, not the source checkout's `.env`. Files/profile images
+and database state persist in separate named volumes. Redis holds transient abuse
+counters only; it is not the message store or a distributed WebSocket transport.
+
+Backups include messages, files and matching credentials in plaintext protected
+files; they are not encrypted by the manager. Supply encryption, restricted
+access and off-host retention. Private diagnostics, access logs, transaction
+records and browser evidence can identify infrastructure or users even when
+message bodies are not logged. Do not upload them to public reports. Explicit
+point-in-time restoration can discard newer writes; see [recovery](upgrading.md).

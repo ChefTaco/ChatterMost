@@ -4,7 +4,10 @@ ChatterMost supports Hermes Agent through Hermes' Mattermost-compatible platform
 
 ## ChatterMost Bot Setup
 
-Set these ChatterMost env values before startup or deployment:
+For Compose, manage these values in the installation's protected
+`secrets/runtime.env`, retaining mode 600 and the selected app UID/GID. The source
+checkout's `.env` is not the container configuration. For source/native installs,
+use their protected runtime env. Set these before startup or deployment:
 
 ```bash
 HERMES_BOT_USERNAME=hermes
@@ -14,7 +17,13 @@ HERMES_BOT_TOKEN=<secret bot token>
 
 When `HERMES_BOT_TOKEN` is present, ChatterMost creates or updates the bot account and bot token hash during bootstrap. The bot is added to default teams and default public channels.
 
-Admins can rotate the bot token from the Hermes panel. The new token is returned once in the UI/API response; it is stored hashed after that. Update the Hermes host's `MATTERMOST_TOKEN` and restart the Hermes gateway immediately after rotation.
+Admins can rotate the bot token from the Hermes panel. The new token is returned once in the UI/API response; it is stored hashed after that. Update the Hermes host's `MATTERMOST_TOKEN` and restart the Hermes gateway immediately
+after rotation. For the environment-seeded bot, update the protected server
+`HERMES_BOT_TOKEN` to the same value before its next restart; bootstrap reapplies
+that configured token hash. Coordinate the server configuration recreation and
+readiness check in a maintenance operation. Do not rotate `COOKIE_SECRET` or
+`TOKEN_HASH_SECRET` to rotate one bot. Additional API-provisioned bots keep their
+own persisted token hashes and are not seeded by this environment value.
 
 For additional Hermes hosts, provision a dedicated hostname bot with `POST /admin/bots` using an admin bearer token:
 
@@ -77,7 +86,7 @@ Hermes authenticates by opening `/api/v4/websocket` and sending:
 {"seq":1,"action":"authentication_challenge","data":{"token":"<bot token>"}}
 ```
 
-ChatterMost responds with `OK` and a `hello` event. Post events are Mattermost-compatible:
+ChatterMost emits `hello` before the challenge's `OK` response. Post events are Mattermost-compatible:
 
 ```json
 {

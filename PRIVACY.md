@@ -21,6 +21,22 @@ scanner blocks these specific installation markers at arbitrary directory depths
 including force-added ignored files. Use disposable synthetic installations for
 container and lifecycle verification; publish only the sanitized report fields.
 
+## Container builds and public release surfaces
+
+Do not send an operator worktree wholesale as a build context. Preserve the
+Docker input allowlist and explicit COPY sources, and check Docker's actual view
+with `python3 tests/container/context.py` when changing build inputs. Images,
+SBOM/provenance, release archives, Actions logs and workflow artifacts are public
+publication surfaces. Maximum build provenance includes build arguments; never
+put credentials, private endpoints or operator paths in them. The release workflow
+uses only public version, revision and creation metadata as build arguments.
+
+Keep live verification evidence private. Release/public-install tests use disposable
+synthetic data and publish only their sanitized report fields. Review scan/report
+paths and metadata too. Changing a package to public exposes its published content;
+repository visibility alone does not establish image visibility or privacy.
+Follow [maintainer releases](docs/releases.md) before publishing new versions.
+
 ## Before every commit
 
 1. Select files explicitly with `git add <paths>`; avoid blanket staging.
@@ -38,6 +54,10 @@ The scanner also compares staged text against sufficiently long credential and p
 Audit every branch and tag intended for publication, including commit messages, authors, deleted files, binary objects, and large-file storage. Deleting private material at the branch tip leaves earlier copies in history. Prefer a reviewed source snapshot with a new root commit when historical privacy cannot be established. Keep recovery history outside the public repository and never push it as an archival branch or tag.
 
 Review hosting-service surfaces separately: pull requests, issues, releases and assets, Actions logs/artifacts/caches, packages, wikis, descriptions, websites, and Git LFS storage. Replacing Git history does not remove these copies or clones. Coordinate any replacement of a shared branch and retire old publication refs deliberately. A clean snapshot is preparation; changing repository visibility is a separate publication action.
+
+After publication, ordinary changes retain the reviewed public history. Do not
+rewrite shared history, retag releases or publish old private recovery refs as
+routine cleanup. A history replacement needs its own explicit authorization.
 
 ## If private information is exposed
 
