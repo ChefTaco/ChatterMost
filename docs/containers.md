@@ -17,8 +17,8 @@ Never install from a mutable `latest` image tag. `release.json` records the exac
 application, migrator, database and Redis image digests.
 
 ```bash
-tar xzf chattermost-0.2.2.tar.gz
-cd chattermost-0.2.2
+tar xzf chattermost-0.2.3.tar.gz
+cd chattermost-0.2.3
 ./chattermost --directory /srv/chattermost setup --server-url https://chat.example.test
 /srv/chattermost/chattermost --directory /srv/chattermost start
 /srv/chattermost/chattermost --directory /srv/chattermost status

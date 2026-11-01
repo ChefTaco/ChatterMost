@@ -44,6 +44,7 @@ describe('Security Fusion audit export', () => {
   });
 
   it('returns a typed retention-gap response instead of replaying for an expired cursor', async () => {
+    // This retention boundary performs 2,001 durable writes on hosted runners.
     const token = 'security-fusion-test-credential';
     const server = await createTestServer({
       SECURITY_FUSION_SERVICE_TOKEN_HASH: createHash('sha256').update(token).digest('hex'),
@@ -70,5 +71,5 @@ describe('Security Fusion audit export', () => {
     });
     expect(body.earliest_available_sequence).toBeGreaterThan(expired.exportSequence);
     expect(Number(body.earliest_available_cursor)).toBe(body.earliest_available_sequence - 1);
-  });
+  }, 20_000);
 });

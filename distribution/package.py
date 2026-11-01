@@ -26,7 +26,7 @@ manifest = {
     'migrator_image': f'ghcr.io/cheftaco/chattermost-migrator@{migrator_digest}',
     'postgres_image': 'postgres:16-alpine@sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab',
     'redis_image': 'redis:7.4-alpine@sha256:8da19c7399dca900c6822a1cf30f9d2285585e2c4b457ff4095b0f4500054d3f',
-    'postgres_major': 16, 'schema': schema, 'upgrade_from': [] if version.startswith('0.2.') else ['0.2.2'],
+    'postgres_major': 16, 'schema': schema, 'upgrade_from': [] if version.startswith('0.2.') else ['0.2.3'],
     'platforms': ['linux/amd64', 'linux/arm64'], 'instances': 1
 }
 (stage / 'release.json').write_text(json.dumps(manifest, indent=2) + '\n')

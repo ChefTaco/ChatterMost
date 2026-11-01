@@ -21,12 +21,11 @@ RUN node scripts/schema-policy.mjs inspect /app > schema.json
 FROM build AS production-deps
 # Prisma client declares tooling as optional peers; npm retains them even with omit.
 RUN npm prune --omit=dev --omit=peer --ignore-scripts && npm cache clean --force
-RUN rm -rf node_modules/prisma node_modules/typescript node_modules/@prisma/config node_modules/@prisma/engines node_modules/.bin
-RUN node dist/scripts/image-notices.js
+RUN node dist/scripts/image-notices.js prune
 
 FROM build AS migration-deps
 RUN npm pkg set dependencies.prisma="$(node -p "require('prisma/package.json').version")" && npm pkg delete devDependencies.prisma && npm prune --omit=dev --omit=peer --ignore-scripts && npm cache clean --force
-RUN node dist/scripts/image-notices.js
+RUN node dist/scripts/image-notices.js prune
 
 FROM base AS runtime
 ARG VERSION=development
@@ -45,6 +44,7 @@ COPY --from=build /app/dist/ dist/
 COPY --from=build /app/schema.json schema.json
 COPY --from=production-deps /app/THIRD_PARTY_NOTICES.json ./
 COPY package.json LICENSE NOTICE ./
+RUN rm -rf /usr/local/lib/node_modules /opt/yarn* && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg
 RUN mkdir -p /var/lib/chattermost/files /var/lib/chattermost/profile-images && chown -R node:node /var/lib/chattermost
 USER 1000:1000
 EXPOSE 8065

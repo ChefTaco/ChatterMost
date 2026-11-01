@@ -10,7 +10,7 @@ Development tooling pins `minimatch` to `11.0.3` because the current lint packag
 
 Live conversation refreshes preserve the focused composer and its selection synchronously, including a refresh between Shift and Enter. Browser regression coverage forces that refresh and checks that the newline lands at the original caret.
 
-Container baseline 0.2.2 adds a separate digest-pinned Compose distribution and
+Container baseline 0.2.3 adds a separate digest-pinned Compose distribution and
 native AMD64/ARM64 release pipeline. The application image runs without root,
 excludes build tools, generates its native Prisma engine, and carries Apache-2.0
 and dependency notices. Protected installation secrets, private networks, explicit
@@ -25,3 +25,8 @@ The build context is verified by exporting Docker's actual view and checking an
 allowlist with excluded synthetic sentinels. Directory-level ignore exceptions
 were removed so private deployment files cannot enter even an intermediate build
 context. Release tar headers omit host user/group metadata.
+Final images prune the actual required dependency closure, including optional-peer
+tooling left by npm, and remove the base image's package managers. Local Trivy
+scans of both application and migrator pass the fixed high/critical gate. The
+2,001-write retention test has a targeted integration timeout for hosted runners;
+all retention assertions remain intact.
