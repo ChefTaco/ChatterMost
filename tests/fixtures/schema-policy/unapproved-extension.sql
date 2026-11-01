@@ -1,0 +1,1 @@
+CREATE EXTENSION IF NOT EXISTS unsafe_extension;

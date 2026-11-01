@@ -1,0 +1,33 @@
+[Unit]
+Description=ChatterMost Mattermost-compatible server
+After=network-online.target docker.service redis-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__DEPLOY_USER__
+WorkingDirectory=__DEPLOY_PATH__/current
+ExecStart=/usr/bin/node __DEPLOY_PATH__/current/dist/src/server/index.js
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+UMask=0077
+ReadWritePaths=__DEPLOY_PATH__/shared
+
+[Install]
+WantedBy=multi-user.target

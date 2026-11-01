@@ -1,0 +1,112 @@
+# Hermes Compatibility
+
+ChatterMost supports Hermes Agent through Hermes' Mattermost-compatible platform adapter. The verified path is REST API v4 plus `/api/v4/websocket`, using a dedicated bot token per Hermes host. The original ChatterMost-seeded `@hermes` account remains supported for single-host setups.
+
+## ChatterMost Bot Setup
+
+Set these ChatterMost env values before startup or deployment:
+
+```bash
+HERMES_BOT_USERNAME=hermes
+HERMES_BOT_DISPLAY_NAME="Hermes Agent"
+HERMES_BOT_TOKEN=<secret bot token>
+```
+
+When `HERMES_BOT_TOKEN` is present, ChatterMost creates or updates the bot account and bot token hash during bootstrap. The bot is added to default teams and default public channels.
+
+Admins can rotate the bot token from the Hermes panel. The new token is returned once in the UI/API response; it is stored hashed after that. Update the Hermes host's `MATTERMOST_TOKEN` and restart the Hermes gateway immediately after rotation.
+
+For additional Hermes hosts, provision a dedicated hostname bot with `POST /admin/bots` using an admin bearer token:
+
+```json
+{"username":"gateway-bot","display_name":"Example gateway"}
+```
+
+The endpoint creates or reconciles the bot, adds it to the default team and public channels, and returns a new token once. Store that token as `MATTERMOST_TOKEN` only on the matching Hermes host. Reprovisioning the same hostname rotates its prior token.
+
+Administrator-driven bot provisioning, identity updates, and token rotations return an `operation_id` in both the JSON body and `X-Operation-ID` header. ChatterMost durably accepts the bot mutation and its audit-outbox event in one serialized store write, then publishes the audit record asynchronously. An administrator can reconcile an uncertain response with `GET /admin/bot-operations/{operation_id}`; `accepted` means the mutation and outbox event are durable, while `published` means the audit record is also visible. Operation responses never expose a previously returned token.
+
+`PUT /admin/bots/{user_id}` updates a bot username and display identity without changing its user ID or token. Provisioned `@bot.localhost` email is renamed with the username after a collision check, while an externally managed email is preserved. Connected clients receive `user_updated` after durable acceptance.
+
+The bot can:
+
+- Authenticate with `Authorization: Bearer <HERMES_BOT_TOKEN>`.
+- Call `GET /api/v4/users/me`.
+- Lookup users.
+- Create/open DMs with `POST /api/v4/channels/direct`.
+- Read channels, members, and posts.
+- Create posts and threaded replies.
+- Upload/download files.
+- Connect to `/api/v4/websocket`.
+- Receive slash commands submitted by the ChatterMost web composer or a Mattermost-compatible client.
+
+## Slash Commands
+
+The web composer shows a filtered bot command deck when a draft begins with `/` in a conversation containing a bot. It includes the supported core session, model, execution, and skill-management commands. `/tasks` and `/sources` require a gateway that implements them. `/commands` still asks the connected gateway for its authoritative live list, but ChatterMost forwards only triggers in its declared command definitions; unknown or dynamically installed `/<skill-name>` triggers are rejected until they are explicitly registered with the facade.
+
+Mattermost-compatible clients submit through `POST /api/v4/commands/execute`. ChatterMost resolves the trigger before posting and turns a supported request into exactly one visible post authored by the authenticated user. Unknown triggers are rejected without posting their arguments. Custom URL commands are not accepted because the facade has no outbound integration dispatcher. In a one-to-one bot DM the text is unchanged. In a group DM or channel with one bot, ChatterMost adds `@bot` so Hermes' non-DM mention gate accepts it. With multiple bots, the user must mention exactly one target. Slash commands are text-only in the ChatterMost web UI.
+
+Hermes, not ChatterMost, handles the execution semantics for accepted commands such as `/reset`, `/new`, `/model`, `/status`, and `/commands`. Hermes' `MATTERMOST_ALLOWED_USERS`, per-user command access, and destructive-command confirmations continue to apply because the original user ID is preserved in the WebSocket post.
+
+## Hermes Agent Settings
+
+On the Hermes host, configure:
+
+```bash
+MATTERMOST_URL=https://chat.example.test:9443
+MATTERMOST_TOKEN=<same value as HERMES_BOT_TOKEN>
+MATTERMOST_ALLOWED_USERS=<comma-separated Mattermost-compatible user IDs>
+MATTERMOST_REPLY_MODE=off
+MATTERMOST_REQUIRE_MENTION=true
+```
+
+Hermes adapter notes:
+
+- `MATTERMOST_REPLY_MODE=off` posts flat replies.
+- `MATTERMOST_REPLY_MODE=thread` replies under the source post for channels.
+- DMs always respond without a bot mention.
+- Public/private channels require the configured bot username by default when `MATTERMOST_REQUIRE_MENTION=true`.
+- `MATTERMOST_ALLOWED_USERS` should use Mattermost-compatible user IDs, not display names.
+- `MATTERMOST_ALLOWED_CHANNELS` can restrict channel replies; DMs are exempt from that channel allowlist.
+
+## WebSocket Contract
+
+Hermes authenticates by opening `/api/v4/websocket` and sending:
+
+```json
+{"seq":1,"action":"authentication_challenge","data":{"token":"<bot token>"}}
+```
+
+ChatterMost responds with `OK` and a `hello` event. Post events are Mattermost-compatible:
+
+```json
+{
+  "event": "posted",
+  "data": {
+    "channel_id": "<channel id>",
+    "channel_type": "D",
+    "team_id": "",
+    "sender_name": "example-user",
+    "post": "{\"id\":\"...\",\"user_id\":\"...\",\"channel_id\":\"...\",\"file_ids\":[]}"
+  }
+}
+```
+
+`channel_type` is important. Hermes uses `D` to identify a direct message and skip mention gating. The `post` field must contain Mattermost-compatible snake_case fields such as `user_id`, `channel_id`, `root_id`, and `file_ids`.
+
+## Gateway smoke verification
+
+Configure an instance and gateway with a dedicated bot token. An allowlisted user should open a DM to that bot, send a message, receive the compatible `posted` event over WSS, and receive the gateway's response in the same channel. Use synthetic content and keep proof output private.
+
+Repeatable smoke:
+
+```bash
+CHAT_SERVER_URL=https://chat.example.test:9443 \
+CHAT_SERVER_ADMIN_USERNAME=<admin> \
+CHAT_SERVER_ADMIN_PASSWORD=<secret> \
+CHAT_SERVER_SMOKE_BOT_USERNAME=hermes \
+CHAT_SERVER_SMOKE_MESSAGE=/arxiv \
+node --import tsx scripts/hermes-dm-smoke.ts
+```
+
+The script logs in as `CHAT_SERVER_SMOKE_LOGIN_ID`/`CHAT_SERVER_SMOKE_PASSWORD` when provided, otherwise it reuses the configured admin credentials. That actor must already be included in the gateway's `MATTERMOST_ALLOWED_USERS`; the smoke never weakens the allowlist or leaves disposable accounts behind. Ordinary messages require a reply carrying a random correlation value. Slash-command smoke appends a unique exact-response request and accepts only a later response from the selected bot carrying that value, so use a prompt-bearing command such as `/arxiv`. `CHAT_SERVER_SMOKE_BOT_USERNAME` defaults to `HERMES_BOT_USERNAME`, then `hermes`, for backward compatibility.

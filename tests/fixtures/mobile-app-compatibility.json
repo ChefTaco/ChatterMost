@@ -1,0 +1,49 @@
+[
+  {
+    "name": "mobile login type",
+    "method": "POST",
+    "path": "/api/v4/users/login/type",
+    "body": { "login_id": "admin" },
+    "headers": {
+      "User-Agent": "Mattermost/2.22.0 iOS",
+      "X-Requested-With": "com.mattermost.rn"
+    },
+    "expected_status": 200,
+    "expected_fields": ["login_id", "auth_type", "auth_service", "server_error_id"]
+  },
+  {
+    "name": "mobile login",
+    "method": "POST",
+    "path": "/api/v4/users/login",
+    "body": { "login_id": "admin", "password": "AdminChangeMe123!", "device_id": "ios-fixture-device" },
+    "headers": {
+      "User-Agent": "Mattermost/2.22.0 iOS",
+      "X-Requested-With": "com.mattermost.rn"
+    },
+    "expected_status": 200,
+    "expected_fields": ["id", "username", "roles"],
+    "expected_token_header": true
+  },
+  {
+    "name": "mobile client config",
+    "method": "GET",
+    "path": "/api/v4/config/client",
+    "headers": {
+      "User-Agent": "Mattermost/2.22.0 iOS",
+      "X-Requested-With": "com.mattermost.rn"
+    },
+    "expected_status": 200,
+    "expected_fields": ["Version", "SiteURL", "WebsocketURL", "DiagnosticId", "TelemetryId", "EnableSignInWithEmail", "EnableSignInWithUsername", "CompatibilityProfile"]
+  },
+  {
+    "name": "mobile websocket upgrade guard",
+    "method": "GET",
+    "path": "/api/v4/websocket",
+    "headers": {
+      "User-Agent": "Mattermost/2.22.0 iOS",
+      "X-Requested-With": "com.mattermost.rn"
+    },
+    "expected_status": 426,
+    "expected_fields": ["id", "message", "request_id", "status_code"]
+  }
+]

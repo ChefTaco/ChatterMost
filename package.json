@@ -1,0 +1,63 @@
+{
+  "name": "chattermost",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Mattermost-compatible supervised chat facade for Hermes Agent and web users.",
+  "engines": {
+    "node": ">=22.23.4 <23 || >=24.22.1 <25 || >=26.12.1 <27"
+  },
+  "scripts": {
+    "dev": "tsx src/server/index.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/src/server/index.js",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "eslint . --max-warnings=0",
+    "format": "prettier --write .",
+    "test": "npm run test:unit && npm run test:e2e",
+    "test:unit": "vitest run tests/vitest",
+    "test:e2e": "playwright test",
+    "db:migrate": "prisma migrate deploy",
+    "db:seed": "tsx src/server/seed.ts",
+    "provision:security-fusion": "tsx scripts/provision-security-fusion.ts",
+    "import:mm-export": "node scripts/import-mattermost-export.mjs",
+    "deploy": "bash scripts/deploy.sh",
+    "privacy:check": "node scripts/check-privacy.mjs",
+    "privacy:test": "node --test tests/privacy/*.test.mjs"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.0.11",
+    "@prisma/client": "^6.11.1",
+    "bcryptjs": "^3.0.2",
+    "cookie": "^1.0.2",
+    "dotenv": "^16.6.1",
+    "hono": "^4.13.1",
+    "nanoid": "^5.1.5",
+    "pgsql-parser": "^18.1.1",
+    "redis": "^4.7.0",
+    "undici": "^7.29.0",
+    "ws": "^8.18.3",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.53.2",
+    "@types/cookie": "^0.6.0",
+    "@types/node": "^24.0.8",
+    "@types/ws": "^8.18.1",
+    "eslint": "^10.8.0",
+    "prettier": "^3.6.2",
+    "prisma": "^6.11.1",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.35.1",
+    "vitest": "^5.0.3"
+  },
+  "overrides": {
+    "brace-expansion": "^5.0.9",
+    "deepmerge-ts": "^8.0.2",
+    "postcss": "^8.5.18",
+    "minimatch": "11.0.3"
+  },
+  "license": "Apache-2.0"
+}

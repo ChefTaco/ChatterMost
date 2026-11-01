@@ -1,0 +1,10 @@
+{
+  "policy_version": 2,
+  "migration_policy": "expansion-only",
+  "allowed_extensions": ["pg_trgm"],
+  "schema_generation": 1,
+  "compatible_schema_generation_min": 1,
+  "compatible_schema_generation_max": 1,
+  "legacy_untracked_schema_digest": "6f36f37e6983ff84678c195ce68d57ff353bb4bd970ce748949033d80dfd5fac",
+  "repaired_schema_digest": "4ef207dfe13ddaba41d3bfaa2ed22cbf0fc956f6e66165ff619a3213e0e1bdff"
+}

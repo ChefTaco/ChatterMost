@@ -1,0 +1,10 @@
+[Unit]
+Description=Renew the ChatterMost Tailscale TLS certificate before expiry
+
+[Timer]
+OnCalendar=Mon,Thu *-*-* 04:15:00 UTC
+RandomizedDelaySec=30m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

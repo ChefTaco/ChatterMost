@@ -1,0 +1,407 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String                @id
+  create_at           BigInt
+  update_at           BigInt
+  delete_at           BigInt                @default(0)
+  delete_by           String?
+  username            String                @unique
+  email               String                @unique
+  password_hash       String
+  nickname            String                @default("")
+  first_name          String                @default("")
+  last_name           String                @default("")
+  position            String                @default("")
+  roles               String                @default("system_user")
+  locale              String                @default("en")
+  timezone            Json
+  notify_props        Json
+  last_picture_update BigInt                @default(0)
+  is_bot              Boolean               @default(false)
+  bot_description     String                @default("")
+  disabled_at         BigInt                @default(0)
+  profileImage        UserProfileImage?
+  sessions            Session[]
+  accessTokens        PersonalAccessToken[]
+  teamMemberships     TeamMember[]
+  channelMemberships  ChannelMember[]
+  posts               Post[]
+  reactions           Reaction[]
+  preferences         Preference[]
+  status              UserStatus?
+  botAccount          BotAccount?
+
+  @@index([username])
+  @@index([email])
+}
+
+model UserProfileImage {
+  id          String @id
+  user_id     String @unique
+  create_at   BigInt
+  update_at   BigInt
+  mime_type   String
+  storage_key String
+  size        Int
+  user        User   @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model Session {
+  id         String @id
+  tokenHash  String @unique
+  user_id    String
+  create_at  BigInt
+  expires_at BigInt
+  device_id  String @default("")
+  revoked_at BigInt @default(0)
+  user       User   @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([tokenHash])
+}
+
+model PersonalAccessToken {
+  id          String @id
+  tokenHash   String @unique
+  user_id     String
+  description String @default("")
+  create_at   BigInt
+  update_at   BigInt
+  delete_at   BigInt @default(0)
+  user        User   @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model InviteCode {
+  id              String @id
+  codeHash        String @unique
+  createdByUserId String
+  create_at       BigInt
+  update_at       BigInt
+  maxUses         Int
+  uses            Int    @default(0)
+  expiresAt       BigInt
+  role            String @default("system_user")
+  teamIds         Json
+  channelIds      Json
+  disabledAt      BigInt @default(0)
+
+  @@index([codeHash])
+}
+
+model Team {
+  id                String       @id
+  create_at         BigInt
+  update_at         BigInt
+  delete_at         BigInt       @default(0)
+  delete_by         String?
+  name              String       @unique
+  display_name      String
+  description       String       @default("")
+  type              String       @default("O")
+  company_name      String       @default("")
+  allowed_domains   String       @default("")
+  invite_id         String       @default("")
+  allow_open_invite Boolean      @default(false)
+  scheme_id         String?
+  group_constrained Boolean      @default(false)
+  members           TeamMember[]
+  channels          Channel[]
+}
+
+model TeamMember {
+  id        String @id
+  team_id   String
+  user_id   String
+  roles     String @default("")
+  create_at BigInt
+  update_at BigInt
+  delete_at BigInt @default(0)
+  team      Team   @relation(fields: [team_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user      User   @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, team_id])
+  @@index([user_id, team_id], map: "TeamMember_user_team_idx")
+}
+
+model Channel {
+  id              String          @id
+  create_at       BigInt
+  update_at       BigInt
+  delete_at       BigInt          @default(0)
+  delete_by       String?
+  team_id         String?
+  type            String
+  display_name    String
+  name            String
+  header          String          @default("")
+  purpose         String          @default("")
+  last_post_at    BigInt          @default(0)
+  total_msg_count Int             @default(0)
+  extra_update_at BigInt          @default(0)
+  creator_id      String
+  agent_policy    Json?
+  retention_days  Int?
+  team            Team?           @relation(fields: [team_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  members         ChannelMember[]
+  posts           Post[]
+  files           FileInfo[]
+
+  @@unique([team_id, name])
+  @@index([team_id, name], map: "Channel_team_name_idx")
+}
+
+model ChannelMember {
+  id             String  @id
+  channel_id     String
+  user_id        String
+  roles          String  @default("")
+  last_viewed_at BigInt  @default(0)
+  msg_count      Int     @default(0)
+  mention_count  Int     @default(0)
+  notify_props   Json
+  last_update_at BigInt  @default(0)
+  scheme_user    Boolean @default(true)
+  scheme_admin   Boolean @default(false)
+  channel        Channel @relation(fields: [channel_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user           User    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, channel_id])
+  @@index([user_id, channel_id], map: "ChannelMember_user_channel_idx")
+}
+
+model Post {
+  id              String            @id
+  create_at       BigInt
+  update_at       BigInt
+  edit_at         BigInt            @default(0)
+  delete_at       BigInt            @default(0)
+  delete_by       String?
+  is_pinned       Boolean           @default(false)
+  user_id         String
+  channel_id      String
+  root_id         String            @default("")
+  original_id     String            @default("")
+  message         String
+  type            String            @default("")
+  props           Json
+  hashtags        String            @default("")
+  file_ids        Json
+  pending_post_id String?
+  reply_count     Int               @default(0)
+  last_reply_at   BigInt            @default(0)
+  metadata        Json
+  lifecycle_state String            @default("approved")
+  user            User              @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  channel         Channel           @relation(fields: [channel_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  editHistory     PostEditHistory[]
+  reactions       Reaction[]
+
+  @@index([message(ops: raw("gin_trgm_ops"))], type: Gin, map: "Post_message_trgm_idx")
+  @@index([channel_id, create_at], map: "Post_channel_create_idx")
+  @@index([root_id, create_at], map: "Post_root_create_idx")
+}
+
+model PostEditHistory {
+  id      String @id
+  post_id String
+  user_id String
+  message String
+  edit_at BigInt
+  post    Post   @relation(fields: [post_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model Reaction {
+  id         String @id
+  user_id    String
+  post_id    String
+  emoji_name String
+  create_at  BigInt
+  user       User   @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  post       Post   @relation(fields: [post_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, post_id, emoji_name])
+  @@index([post_id], map: "Reaction_post_idx")
+}
+
+model CustomEmoji {
+  id              String @id
+  name            String @unique
+  emoji           String
+  creator_user_id String
+  create_at       BigInt
+  update_at       BigInt
+  delete_at       BigInt @default(0)
+
+  @@index([name])
+}
+
+model RuntimeState {
+  key       String @id
+  value     Json
+  update_at BigInt
+}
+
+model FileObject {
+  id          String @id
+  create_at   BigInt
+  storage_key String @unique
+  sha256      String
+  size        Int
+}
+
+model FileInfo {
+  id                String  @id
+  user_id           String
+  channel_id        String
+  create_at         BigInt
+  update_at         BigInt
+  delete_at         BigInt  @default(0)
+  name              String
+  extension         String
+  size              Int
+  mime_type         String
+  width             Int     @default(0)
+  height            Int     @default(0)
+  has_preview_image Boolean @default(false)
+  storage_key       String
+  channel           Channel @relation(fields: [channel_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "FileInfo_name_trgm_idx")
+}
+
+model Preference {
+  id        String @id
+  user_id   String
+  category  String
+  name      String
+  value     String
+  create_at BigInt
+  update_at BigInt
+  user      User   @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@unique([user_id, category, name])
+}
+
+model UserStatus {
+  user_id          String  @id
+  status           String
+  manual           Boolean @default(false)
+  last_activity_at BigInt
+  user             User    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model BotAccount {
+  id           String @id
+  user_id      String @unique
+  tokenHash    String @unique
+  display_name String
+  description  String
+  create_at    BigInt
+  update_at    BigInt
+  user         User   @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
+
+model SlashCommand {
+  id          String @id
+  team_id     String
+  trigger     String
+  url         String
+  method      String @default("POST")
+  description String @default("")
+  create_at   BigInt
+  update_at   BigInt
+}
+
+model ServerConfig {
+  key       String @id
+  value     Json
+  update_at BigInt
+}
+
+model PrivacySettings {
+  id                       String  @id
+  showEmailAddress         Boolean @default(false)
+  showFullName             Boolean @default(true)
+  teammateNameDisplay      String  @default("username")
+  enableDiagnostics        Boolean @default(false)
+  enableTelemetry          Boolean @default(false)
+  enableSecurityAlerts     Boolean @default(false)
+  enableAdminNotices       Boolean @default(false)
+  enableUserNotices        Boolean @default(false)
+  enablePublicFileLinks    Boolean @default(false)
+  enableFileAttachments    Boolean @default(true)
+  enableCustomEmoji        Boolean @default(false)
+  enableEmojiPicker        Boolean @default(true)
+  enableBotAccountCreation Boolean @default(true)
+  enableUserAccessTokens   Boolean @default(true)
+  enablePostSearch         Boolean @default(true)
+  enableFileSearch         Boolean @default(true)
+  update_at                BigInt
+}
+
+model AuditLog {
+  id          String  @id
+  create_at   BigInt
+  actorUserId String?
+  action      String
+  targetId    String?
+  ip          String?
+  metadata    Json
+}
+
+model SupervisionPolicy {
+  id                  String @id
+  mode                String @default("audit_only")
+  blockedTerms        Json
+  channelRestrictions Json
+  userRestrictions    Json
+  agentRestrictions   Json
+  fileRestrictions    Json
+  create_at           BigInt
+  update_at           BigInt
+}
+
+model SupervisionEvent {
+  id          String  @id
+  create_at   BigInt
+  actorUserId String?
+  postId      String?
+  channelId   String?
+  agentUserId String?
+  action      String
+  state       String
+  metadata    Json
+}
+
+model AgentIdentity {
+  id             String  @id
+  create_at      BigInt
+  update_at      BigInt
+  name           String
+  username       String  @unique
+  user_id        String?
+  permissions    Json
+  channelRouting Json
+  userAllowlists Json
+  memoryPolicy   Json
+  verified       Boolean @default(false)
+}
+
+model AgentConversationBinding {
+  id           String @id
+  agentUserId  String
+  channelId    String
+  threadRootId String
+  humanUserId  String
+  sessionKey   String
+  policy       Json
+  create_at    BigInt
+  update_at    BigInt
+}

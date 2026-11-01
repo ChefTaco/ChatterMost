@@ -1,0 +1,9 @@
+[Unit]
+Description=Renew the ChatterMost Tailscale TLS certificate
+After=tailscaled.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/chattermost-cert-renew
+UMask=0077
