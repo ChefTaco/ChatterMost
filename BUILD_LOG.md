@@ -31,7 +31,7 @@ scans of both application and migrator pass the fixed high/critical gate. The
 2,001-write retention test has a targeted integration timeout for hosted runners;
 all retention assertions remain intact.
 
-Lifecycle release 0.3.1 builds on the published 0.2.3 container baseline. The
+Lifecycle release 0.3.2 builds on the published 0.2.3 container baseline. The
 standalone manager adds explicit-version upgrades, private consistent backups,
 explicit database/file restoration, schema-checked app rollback, and interrupted
 transaction recovery. Release and cache integrity, generation/lineage contracts,
@@ -52,3 +52,8 @@ keeps concurrent two-browser WebSocket coverage. Multi-hash authentication tests
 retain real hashing and assertions with targeted hosted integration timeouts.
 Backup restoration is proven after deleting a retained post and erasing attachment
 and profile files. GitHub release immutability is enabled for new publications.
+Restore prepares the configured volume owner and performs clearing/extraction in
+one container; new Compose installs disable volume copy-up. This prevents image
+UID 1000 from replacing another operator UID while a volume is temporarily empty.
+Coverage includes restoring the original baseline template and independent member
+and custom-bot credentials that startup cannot recreate from configuration.

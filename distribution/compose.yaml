@@ -61,7 +61,12 @@ services:
     user: '${APP_UID}:${APP_GID}'
     environment: *runtime_environment
     secrets: [runtime, postgres_password]
-    volumes: [files:/var/lib/chattermost]
+    volumes:
+      - type: volume
+        source: files
+        target: /var/lib/chattermost
+        volume:
+          nocopy: true
     ports: ['${BIND_ADDRESS:-127.0.0.1}:${HTTP_PORT:-8065}:8065']
     networks: [backend, frontend]
     depends_on:

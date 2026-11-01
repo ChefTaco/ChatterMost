@@ -75,6 +75,8 @@ try:
         actual_run(['python3', 'tests/container/smoke.py', str(root), 'verify'], check=True)
 
     secret_hashes = module['hashes'](root / 'secrets')
+    namespace['fetch_release'](root, '0.2.3')
+    baseline_backup = module['snapshot'](root)
     # Real application activation, not a mocked migration or datastore.
     module['switch_release'](root, version)
     smoke()
@@ -207,6 +209,13 @@ try:
     module['restore'](root, backup)
     smoke()
     assert secret_hashes == module['hashes'](root / 'secrets')
+    # Old release templates lack volume.nocopy; the new manager must still
+    # restore their backups without changing application volume ownership.
+    module['restore'](root, baseline_backup)
+    assert module['read_state'](root)['current'] == '0.2.3'
+    smoke()
+    module['switch_release'](root, version)
+    smoke()
     if not app_digest:
         # Exercise every distributed CLI entry point with real public artifacts.
         cli = [str(root / 'chattermost'), '--directory', str(root)]

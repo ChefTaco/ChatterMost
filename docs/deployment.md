@@ -254,4 +254,4 @@ to containers requires a separately authorized migration.
 The distribution's lifecycle manager supports explicit-version upgrades, consistent
 backups, explicit database/file restoration and schema-checked application
 rollback. It does not call the SSH deployment scripts, rotate established secrets,
-or migrate an existing installation. See [lifecycle commands](containers.md#lifecycle-commands-031-and-later).
+or migrate an existing installation. See [lifecycle commands](containers.md#lifecycle-commands-032-and-later).

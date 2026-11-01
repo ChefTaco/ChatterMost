@@ -609,9 +609,13 @@ def restore(root, source):
             with open(source / 'database.dump', 'rb') as dump:
                 compose(root, 'exec', '-T', 'postgres', 'pg_restore', '-U', 'chattermost_app', '-d', 'chattermost', '--clean', '--if-exists', '--no-owner', '--no-privileges', '--exit-on-error', stdin_file=dump)
             activate_files(root, root / 'releases' / state['current'])
-            compose(root, 'run', '--rm', '--no-deps', '--entrypoint', 'node', 'app', '-e', "const fs=require('fs');for(const name of fs.readdirSync('/var/lib/chattermost'))fs.rmSync('/var/lib/chattermost/'+name,{recursive:true,force:true});")
+            # Initialize ownership even when restoring an older Compose release.
+            # Keep clearing/extraction in one mount: Docker must never copy image
+            # skeleton ownership into a temporarily empty named volume.
+            compose(root, 'run', '--rm', '--no-deps', 'initialize')
+            clear = "const fs=require('fs');for(const name of fs.readdirSync('/var/lib/chattermost'))fs.rmSync('/var/lib/chattermost/'+name,{recursive:true,force:true});"
             with open(source / 'files.tar.gz', 'rb') as files:
-                compose(root, 'run', '--rm', '--no-deps', '--entrypoint', 'tar', 'app', '-xzf', '-', '--no-same-owner', '-C', '/var/lib/chattermost', stdin_file=files)
+                compose(root, 'run', '--rm', '--no-deps', '--entrypoint', 'sh', 'app', '-ec', 'node -e "$1"; exec tar -xzf - --no-same-owner -C /var/lib/chattermost', 'restore-files', clear, stdin_file=files)
             config = json.loads((root / 'installation.json').read_text())
             for file in (source / 'secrets').iterdir():
                 target_file = root / 'secrets' / file.name

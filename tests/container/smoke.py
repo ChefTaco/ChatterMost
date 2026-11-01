@@ -5,6 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 import socket
+import secrets
 import struct
 import sys
 import urllib.request
@@ -70,7 +71,11 @@ if mode == 'seed':
     post, _ = request('POST', '/api/v4/posts', {'channel_id': channel, 'message': 'Synthetic distribution persistence proof', 'file_ids': [file_id]}, token)
     image = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1cAAAAASUVORK5CYII=')
     multipart(f'/api/v4/users/{me["id"]}/image', {}, 'image', 'avatar.png', image, 'image/png', token)
-    fixture = {'admin_id': me['id'], 'post_id': post['id'], 'file_id': file_id, 'channel_id': channel, 'profile_sha': hashlib.sha256(image).hexdigest()}
+    invite, _ = request('POST', '/admin/invites', {'max_uses': 1, 'expires_in_hours': 24}, token)
+    member_password = 'Synthetic-' + secrets.token_urlsafe(24)
+    member, _ = request('POST', '/api/v4/users', {'invite_code': invite['code'], 'username': 'synthetic-member', 'email': 'synthetic-member@example.test', 'password': member_password})
+    provisioned, _ = request('POST', '/admin/bots', {'username': 'synthetic-agent', 'display_name': 'Synthetic Agent'}, token)
+    fixture = {'admin_id': me['id'], 'post_id': post['id'], 'file_id': file_id, 'channel_id': channel, 'profile_sha': hashlib.sha256(image).hexdigest(), 'member_id': member['id'], 'member_password': member_password, 'bot_id': provisioned['user']['id'], 'bot_token': provisioned['token']}
     fixture_file.write_text(json.dumps(fixture))
     fixture_file.chmod(0o600)
 fixture = json.loads(fixture_file.read_text())
@@ -85,6 +90,10 @@ content, _ = request('GET', f'/api/v4/users/{me["id"]}/image', token=token)
 assert hashlib.sha256(content).hexdigest() == fixture['profile_sha']
 bot, _ = request('GET', '/api/v4/users/me', token=values['HERMES_BOT_TOKEN'])
 assert bot['is_bot']
+member, _ = request('POST', '/api/v4/users/login', {'login_id': 'synthetic-member', 'password': fixture['member_password']})
+assert member['id'] == fixture['member_id']
+custom_bot, _ = request('GET', '/api/v4/users/me', token=fixture['bot_token'])
+assert custom_bot['is_bot'] and custom_bot['id'] == fixture['bot_id']
 # The bot can authenticate, and the administrator receives its own persisted
 # post over a real WebSocket. Tokens remain in memory and private fixtures.
 parsed = urlparse(base)
