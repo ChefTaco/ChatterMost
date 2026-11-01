@@ -1,0 +1,38 @@
+name: verify-public-release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Explicit published version to verify anonymously
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  install:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Anonymous release and registry install, real persistence and WebSocket proof
+        env:
+          VERSION: ${{ inputs.version }}
+        run: python3 tests/container/published.py "$VERSION" --keep /tmp/chattermost-public-proof
+      - name: Upload sanitized synthetic evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-proof-${{ matrix.runner }}
+          path: /tmp/chattermost-public-proof/public-verification.json
+      - name: Stop only the synthetic test installation
+        if: always()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import runpy
+          root = Path('/tmp/chattermost-public-proof/installation')
+          if (root / 'installation.json').exists():
+              runpy.run_path(str(root / 'chattermost'), run_name='test_manager')['compose'](root, 'down', '--volumes', '--remove-orphans')
+          PY
