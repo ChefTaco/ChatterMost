@@ -76,3 +76,9 @@ The aggregate proof includes every path and is withheld on failure or incomplete
 evidence; historical public releases retain their published source policy.
 The login-account rate-limit test retains all real password checks and assertions
 with a targeted timeout for shared CI runner variance.
+
+Release 0.3.3 declares the reviewed upgrade from published 0.3.2. Versioned
+installation and upgrade examples match that path; the historical 0.2.3 → 0.3.2
+step remains separate. Native release and public-artifact verification cover both
+architectures using disposable synthetic installations and complete lifecycle
+proofs, with no operator deployment as part of publication.

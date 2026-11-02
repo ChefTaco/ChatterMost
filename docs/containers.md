@@ -11,13 +11,13 @@ is process-local. Redis is optional and provides distributed abuse counters only
 ## Install a release
 
 The current published lifecycle release is
-[0.3.2](https://github.com/ChefTaco/ChatterMost/releases/tag/v0.3.2). Choose the exact
+[0.3.3](https://github.com/ChefTaco/ChatterMost/releases/tag/v0.3.3). Choose the exact
 version you intend to install. In a fresh directory **outside a Git worktree**,
 download the bundle and checksum manifest from the same release:
 
 ```bash
 set -eu
-VERSION=0.3.2
+VERSION=0.3.3
 mkdir "chattermost-download-$VERSION"
 cd "chattermost-download-$VERSION"
 curl --fail --location --remote-name "https://github.com/ChefTaco/ChatterMost/releases/download/v$VERSION/chattermost-$VERSION.tar.gz"
@@ -94,8 +94,8 @@ Both public packages support `linux/amd64` and `linux/arm64`:
 Public pulls need no registry login. The version tags have no leading `v`:
 
 ```bash
-docker pull ghcr.io/cheftaco/chattermost:0.3.2
-docker pull ghcr.io/cheftaco/chattermost-migrator:0.3.2
+docker pull ghcr.io/cheftaco/chattermost:0.3.3
+docker pull ghcr.io/cheftaco/chattermost-migrator:0.3.3
 ```
 
 Pulling these tags alone is not an installation. The bundle pins their immutable
@@ -170,7 +170,7 @@ state, private history, logs or screenshots enter release bundles or build input
 Follow the complete
 [upgrade and recovery procedure](https://github.com/ChefTaco/ChatterMost/blob/main/docs/upgrading.md)
 for supported source versions, prechecks, failure decisions and point-in-time
-restoration semantics. The only reviewed upgrade into 0.3.2 is from 0.2.3. Native
+restoration semantics. The reviewed upgrade into 0.3.3 is from 0.3.2. Native
 imports follow a separate
 [migration procedure](https://github.com/ChefTaco/ChatterMost/blob/main/docs/container-migration.md).
 
@@ -179,17 +179,19 @@ interface provides `start`, `status`, `upgrade VERSION`, `backup`,
 `restore BACKUP_DIRECTORY --confirm-database-replacement`, `rollback`, and
 `recover`. Setup remains a one-time operation; it refuses existing directories.
 
-For the initial upgrade from the published 0.2.3 baseline, download and verify the
-0.3.2 bundle as above, then run its new manager against the existing installation:
+For an upgrade from the published 0.3.2 baseline, download and verify the
+0.3.3 bundle as above, then run its manager against the existing installation:
 
 ```bash
-./chattermost-0.3.2/chattermost --directory /srv/chattermost upgrade 0.3.2
+./chattermost-0.3.3/chattermost --directory /srv/chattermost upgrade 0.3.3
 ```
 
 After successful activation the new manager is installed in the installation
 root. Run `upgrade` from the directory containing the extracted bundle in that
-example. It stays available when rolling the application back to 0.2.3. Release
-policy explicitly permits 0.2.3 → 0.3.2. Unsupported paths, mutable version names,
+example. Keep the new manager when rolling the application back to 0.3.2. Release
+policy explicitly permits 0.3.2 → 0.3.3. Older 0.2.3 installations must first use
+the historical 0.3.2 release; a direct 0.2.3 → 0.3.3 upgrade is unsupported.
+Unsupported paths, mutable version names,
 changed published versions, unexpected archive members, altered cached files,
 image/manifest schema mismatches and infrastructure image changes fail closed.
 Downloads verify GitHub's SHA-256 asset digest over HTTPS and retain the digest
@@ -263,7 +265,7 @@ use the installed manager for startup/readiness and drain the app before stoppin
 Postgres. A deliberately stopped app needs an explicit `start` to resume.
 
 There is no `stop`, `restart`, `configure` or secret-rotation manager subcommand in
-0.3.2. `start` on an already-running container verifies it; it does not force an app
+0.3.3. `start` on an already-running container verifies it; it does not force an app
 recreation. Apply protected configuration changes through a planned operator
 restart/recreation, retaining project identity and the pinned images. Database
 password, signing-key and token-key rotation require coordinated procedures;

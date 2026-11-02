@@ -2,7 +2,7 @@
 
 ChatterMost is Mattermost-compatible and Apache-2.0 licensed. Moving an existing
 SSH/systemd installation into the container distribution requires an explicitly
-authorized maintenance operation. The 0.3.2 manager does not perform native
+authorized maintenance operation. The lifecycle manager does not perform native
 imports: `setup` generates new credentials and `restore` accepts only backups
 belonging to the same installation. Neither command is a native importer.
 

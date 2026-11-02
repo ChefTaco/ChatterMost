@@ -9,7 +9,7 @@ The compiler gate enables strict nullability, exact optional properties, checked
 ## Install the published distribution
 
 Use the versioned Compose bundle from [GitHub Releases](https://github.com/ChefTaco/ChatterMost/releases).
-The current published lifecycle release is [0.3.2](https://github.com/ChefTaco/ChatterMost/releases/tag/v0.3.2).
+The current published lifecycle release is [0.3.3](https://github.com/ChefTaco/ChatterMost/releases/tag/v0.3.3).
 No source checkout, Node installation, registry login, or local image build is needed
 on the installation host. See [container installation](docs/containers.md) for
 requirements, download/integrity checks, protected setup and HTTPS proxy configuration.
@@ -26,7 +26,7 @@ optional Redis image digests. Keep one application instance. Redis supplies abus
 counters; WebSocket delivery and runtime writes are not distributed.
 
 For existing installations, follow [upgrades and recovery](docs/upgrading.md).
-The reviewed container upgrade is **0.2.3 → 0.3.2**. A native-to-Compose move needs
+The reviewed container upgrade is **0.3.2 → 0.3.3**. A native-to-Compose move needs
 the separate [migration procedure](docs/container-migration.md). Do not use `setup`
 to replace an existing installation or its credentials.
 
