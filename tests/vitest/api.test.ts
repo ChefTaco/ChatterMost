@@ -80,6 +80,7 @@ describe('Mattermost-compatible API', () => {
   });
 
   it('rate limits login accounts separately across changing source addresses', async () => {
+    // Twenty real password checks can exceed ten seconds on shared CI runners.
     const server = await createTestServer({ TRUSTED_PROXIES: '127.0.0.1/32', RATE_LIMIT_LOGIN_SOURCE_MAX: '20', RATE_LIMIT_LOGIN_ACCOUNT_MAX: '20' });
     let response = new Response();
     for (let index = 1; index <= 21; index += 1) {
@@ -97,7 +98,7 @@ describe('Mattermost-compatible API', () => {
       body: JSON.stringify({ login_id: 'nobody-else', password: 'incorrect-password' })
     }, peer('198.51.100.99'));
     expect(unrelated.status).toBe(400);
-  }, 10_000);
+  }, 30_000);
 
   it('reports abuse-control identity and throttle telemetry to administrators', async () => {
     const server = await createTestServer();

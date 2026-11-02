@@ -74,3 +74,5 @@ backups/restoration, compatible rollback and retention of original sessions,
 accounts/tokens/files plus bot messages and attachments written after upgrading.
 The aggregate proof includes every path and is withheld on failure or incomplete
 evidence; historical public releases retain their published source policy.
+The login-account rate-limit test retains all real password checks and assertions
+with a targeted timeout for shared CI runner variance.
