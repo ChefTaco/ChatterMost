@@ -7,6 +7,11 @@ Keep the current administrator password in the protected readiness configuration
 when changing it through the UI. See [container operations](containers.md) and
 [upgrades/recovery](upgrading.md) before installation-level changes.
 
+People can connect official apps to the same backend using the [client guide](clients.md).
+For agents, configure Hermes' bundled `mattermost-platform` platform plugin using
+[Hermes setup](hermes-compatibility.md#quick-setup). User/invite/bot administration
+below describes the included ChatterMost web UI, not the native mobile interface.
+
 ## Navigation
 
 - `+ Channel` opens the New panel for public/private channel creation.
@@ -67,9 +72,19 @@ Use Supervision to switch between audit-only and pre-moderation from the current
 Use Agents to register native AI agents, edit structured permissions/allowlists/memory policy, and run policy simulation.
 
 Use Hermes to review bot-token configuration, bot accounts, WSS connection count, last bot post, recent agent events, and to rotate the bot token intentionally. A rotated token is shown only in the rotation response; update Hermes immediately.
+This panel reports backend bot state; it does not install or start a Hermes
+gateway. Fresh Compose setup already generates a token for the seeded `hermes`
+bot. Obtain it privately from `secrets/runtime.env`; creating another gateway uses
+a dedicated bot through `POST /admin/bots`. Repeating that provisioning call for
+an existing bot rotates its token, so do not use it as a read-only lookup.
 For the environment-seeded bot, also coordinate `HERMES_BOT_TOKEN` in the
 protected server configuration before the next restart: bootstrap otherwise
 reapplies the old environment token. See [seeded bot configuration](hermes-compatibility.md#chattermost-bot-setup). Privileged bot API mutations also return an operation ID; administrators can reconcile it at `GET /admin/bot-operations/{operation_id}` without exposing the one-time token again.
+
+File uploads currently accept PNG, JPEG, GIF, WebP and plain text. General
+audio/video/document uploads and mobile background push transport are not
+implemented. The public-links toggle affects metadata; the unauthenticated public
+file route remains denied. See [client limits](clients.md#current-limits-and-coverage).
 
 ## Import
 

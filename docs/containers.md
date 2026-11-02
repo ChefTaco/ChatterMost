@@ -82,6 +82,24 @@ The database and files are separate stable named volumes under a unique Compose
 project. Do not change the project name, scale app, or run another writer against
 the same database. Do not use `docker compose down --volumes` on an installation.
 
+## Connect clients and Hermes
+
+After the backend is healthy behind HTTPS, add its public origin to the official
+apps using the [client guide](https://github.com/ChefTaco/ChatterMost/blob/main/docs/clients.md).
+Human accounts are created by an administrator or through the browser invite flow.
+Mobile clients use the Mattermost-compatible API; the desktop app loads the
+included ChatterMost web UI. Background mobile push delivery is not implemented.
+
+Fresh setup already generates the seeded `hermes` bot token in protected
+`secrets/runtime.env`. Keep it private and use it as `MATTERMOST_TOKEN` on the
+Hermes host. Run `hermes gateway setup` there and select **Mattermost**, the
+upstream adapter name. This uses Hermes' bundled `mattermost-platform` platform
+plugin. Set `MATTERMOST_URL` to the public origin and `MATTERMOST_ALLOWED_USERS`
+to the human users' IDs. See the
+[Hermes guide](https://github.com/ChefTaco/ChatterMost/blob/main/docs/hermes-compatibility.md)
+for selected-profile setup, additional bots and reply verification. ChatterMost
+installation does not install or start a Hermes gateway.
+
 ## GHCR images and release layout
 
 Both public packages support `linux/amd64` and `linux/arm64`:

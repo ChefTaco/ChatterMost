@@ -2,9 +2,70 @@
 
 Use this file as the operating skill for future coding work in this repo. Keep changes grounded in the actual checkout and verify with the real commands below.
 
+## Installation runbook for agents
+
+Use this runbook when asked to install ChatterMost or connect a Hermes Agent.
+Read [PRIVACY.md](PRIVACY.md) and [container installation](docs/containers.md) first.
+For source development, use [docs/development.md](docs/development.md).
+
+1. Establish the intended host and HTTPS origin, and check whether an installation
+   already exists. Existing Compose installations use their current manager,
+   secrets, volumes and project identity; follow [upgrades](docs/upgrading.md).
+   Do not run `setup` over an installation or regenerate its credentials.
+2. For a **new** Linux AMD64/ARM64 installation, require Docker Engine, Compose
+   v2.24+ (or v5), patched Python 3.11.4+, `curl`, `tar` and `sha256sum`. Use a
+   directory outside every Git worktree. Replace the example HTTPS origin below
+   with the requested origin; the default app listener is loopback port 8065.
+
+   ```bash
+   set -eu
+   umask 077
+   VERSION=0.3.3
+   INSTALL_DIR="$HOME/chattermost-installation"
+   test ! -e "$INSTALL_DIR"
+   DOWNLOAD_DIR="$(mktemp -d)"
+   cd "$DOWNLOAD_DIR"
+   curl --fail --location --remote-name "https://github.com/ChefTaco/ChatterMost/releases/download/v$VERSION/chattermost-$VERSION.tar.gz"
+   curl --fail --location --remote-name "https://github.com/ChefTaco/ChatterMost/releases/download/v$VERSION/SHA256SUMS"
+   awk -v archive="chattermost-$VERSION.tar.gz" '$2 == archive { print; found=1 } END { if (!found) exit 1 }' SHA256SUMS > archive.sha256
+   sha256sum --check archive.sha256
+   tar xzf "chattermost-$VERSION.tar.gz"
+   ./chattermost-"$VERSION"/chattermost --directory "$INSTALL_DIR" setup --server-url https://chat.example.test
+   "$INSTALL_DIR/chattermost" --directory "$INSTALL_DIR" start
+   "$INSTALL_DIR/chattermost" --directory "$INSTALL_DIR" status
+   ```
+
+   Supply verified trusted-proxy CIDRs through `--trusted-proxies` at setup when
+   known. Follow the container guide for publisher attestation verification and
+   HTTPS/WebSocket proxy configuration. Setup does not install a proxy,
+   certificates, a host service or a backup schedule. Use one application writer.
+3. Read the generated admin credentials and seeded `HERMES_BOT_TOKEN` privately
+   from `$INSTALL_DIR/secrets/runtime.env`; preserve mode 600 and ownership. Do
+   not print or transmit the whole file, put tokens in command arguments, or
+   commit the installation directory. Confirm the public ping/client config,
+   browser login and an authenticated WebSocket `posted` event before reporting
+   a working installation. Record exact version/digests and recovery evidence
+   only in protected operator storage.
+4. Hermes uses its bundled `mattermost-platform` **platform plugin**. On the
+   intended Hermes host/profile, run `hermes gateway setup`, select **Mattermost**
+   (the upstream adapter name), and set `MATTERMOST_URL` to the ChatterMost HTTPS
+   origin, `MATTERMOST_TOKEN` to the existing bot token, and
+   `MATTERMOST_ALLOWED_USERS` to the intended humans' 26-character user IDs.
+   Keep the gateway allowlist explicit. ChatterMost's legacy
+   `HERMES_ALLOWED_USER_IDS` field does not enforce Hermes access control.
+5. Start a new gateway with `hermes gateway run`, or restart an existing one through
+   its current supervisor. Keep one gateway per bot token. Verify a human-to-bot
+   DM and its reply; channel conversations require `@bot` by default. Keep proof
+   private. See [Hermes setup](docs/hermes-compatibility.md) for additional bot
+   provisioning, profile configuration, token coordination and troubleshooting.
+
+Documentation work does not authorize installation, gateway reconfiguration,
+credential rotation or deployment. Published releases are immutable; documentation
+updates on `main` do not change the installed 0.3.3 image or bundle.
+
 ## Project Shape
 
-ChatterMost is a strictly typed TypeScript/Hono Mattermost-compatible facade for supervised chat and Hermes Agent communication. It exposes Mattermost-compatible REST under `/api/v4`, WebSocket at `/api/v4/websocket`, and a lightweight web UI from `src/web/assets.ts`.
+ChatterMost is a strictly typed TypeScript/Hono Mattermost-compatible backend for official clients, supervised chat and Hermes Agent communication. It exposes Mattermost-compatible REST under `/api/v4`, WebSocket at `/api/v4/websocket`, and a lightweight web UI from `src/web/assets.ts`.
 
 Important paths:
 

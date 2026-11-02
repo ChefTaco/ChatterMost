@@ -8,6 +8,13 @@ protocol identifiers remain intact and compatibility does not imply endorsement
 or full feature parity. See [contributing](../CONTRIBUTING.md) and
 [publication privacy](../PRIVACY.md).
 
+Documentation on `main` can improve independently of a runtime release. Each
+published bundle contains a frozen installation README; editing source docs does
+not update an existing release asset or installed image. Keep 0.3.3 immutable and
+publish a new version only for an intentional distribution change. Client and
+Hermes instructions live in the [client guide](clients.md),
+[Hermes guide](hermes-compatibility.md) and [agent runbook](../AGENTS.md#installation-runbook-for-agents).
+
 ## Public distribution contract
 
 | Artifact | Meaning |

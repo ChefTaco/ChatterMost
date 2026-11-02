@@ -2,7 +2,12 @@
 
 Current profile: `mattermost-v11.8`
 
-ChatterMost is an independently developed Mattermost-compatible facade. It implements Mattermost-compatible JSON, 26-character lowercase public IDs, millisecond timestamps, snake_case external fields, REST under `/api/v4`, and WebSocket at `/api/v4/websocket`.
+ChatterMost is an independently developed Mattermost-compatible backend for the
+official mobile and desktop apps and Hermes Agent's gateway. It implements
+Mattermost-compatible JSON, 26-character lowercase public IDs, millisecond
+timestamps, snake_case external fields, REST under `/api/v4`, and WebSocket at
+`/api/v4/websocket`. Start with [client setup](clients.md) for app connection steps
+and the distinction between native mobile clients and the desktop web shell.
 
 ## Supported Surfaces
 
@@ -16,7 +21,11 @@ Supported endpoint groups include:
 - Admin users/invites, supervision policy/events, native agent registry, agent bindings, incoming webhooks, and policy simulation.
 - Mattermost-compatible WebSocket events for hello, posted, typing, reactions, status, channel, user, and thread changes.
 
-Unsupported enterprise-only behavior returns compatible empty or free-tier responses where possible.
+Some discovery endpoints return compatible empty or free-tier responses. An
+acknowledgement does not mean the corresponding upstream feature is implemented.
+Calls, the upstream plugin/marketplace runtime, SSO and mobile background push
+delivery are unsupported. The current [client limits and test coverage](clients.md#current-limits-and-coverage)
+also describe upload types, public-link denial and native-device verification.
 
 ## Version Advertising
 
@@ -29,7 +38,9 @@ The compatibility profile is distinct from the ChatterMost release (for example,
 0.3.3). Container `BuildHash` is the full source revision and `ReleaseId` is the
 selected distribution version. Use the release manifest for upgrade identity.
 
-Keep mobile smoke tests passing before advertising a Mattermost-compatible version.
+Keep mobile smoke tests passing before advertising a Mattermost-compatible
+version. The profile is a protocol target, not certification of every native app
+version; record actual client versions separately from request-fixture coverage.
 
 ## Slash Commands
 

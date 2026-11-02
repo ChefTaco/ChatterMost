@@ -3,7 +3,9 @@
 Read [PRIVACY.md](PRIVACY.md), [AGENTS.md](AGENTS.md), and the [compatibility guide](docs/compatibility.md). Use synthetic local data for bug reports and tests. Keep deployment configuration and operational evidence private.
 
 Use a supported Node release from `package.json`, run `npm ci`, copy `.env.example` to a new `.env` without replacing existing operator configuration,
-set unique local secrets, and run `chmod 600 .env`. The README describes development and optional database setup.
+set unique local secrets, and run `chmod 600 .env`. See
+[source development](docs/development.md) for local JSON/Postgres setup and verification. For installing the server rather than changing it, use the
+[agent installation runbook](AGENTS.md#installation-runbook-for-agents).
 
 Before submitting changes, stage only intended files and run:
 

@@ -82,3 +82,13 @@ installation and upgrade examples match that path; the historical 0.2.3 → 0.3.
 step remains separate. Native release and public-artifact verification cover both
 architectures using disposable synthetic installations and complete lifecycle
 proofs, with no operator deployment as part of publication.
+
+The README now leads with the Mattermost-compatible backend and official-client
+connection path. Client guidance distinguishes the desktop web shell, native
+mobile API coverage and unsupported push/calls/SSO/plugin features. Hermes setup
+uses the bundled `mattermost-platform` gateway plugin with explicit human-user
+allowlists; an agent installation runbook verifies the public bundle before
+one-time setup. Developer setup has its own guide. The documentation accuracy
+pass clarifies upload types, public-link denial, audit retention, the unused
+legacy server allowlist field and the boundary between source docs and immutable
+release artifacts. These documentation changes do not deploy a running service.

@@ -181,6 +181,10 @@ The ChatterMost ping includes:
 }
 ```
 
+The native `build_number` above is a legacy display label, not the ChatterMost
+package version. Use `build_hash` / `release_id` and the native manifest for
+identity; the container distribution supplies its own version/revision metadata.
+
 The deploy script writes `BUILD_HASH`, `BUILD_DATE`, and `RELEASE_ID` to the release env so `/api/v4/system/ping` and `/api/v4/config/client` can be matched to the deployed git revision. `shared/release-transactions.jsonl` is a mode-600 ledger containing artifact/configuration digests, schema generation, migration-set and lineage digests, migration state, secret fingerprints, health evidence, and rollback targets. A failed Prisma migration records the failed migration identity and a redacted snapshot of `_prisma_migrations` before deployment stops.
 
 Routine deployment parses every PostgreSQL migration into an AST and enforces the structural allowlist in `deploy/schema-policy.json` before the artifact is built and again on the host. Existing-data rewrites, stored code, `DO`/dynamic SQL, procedure calls, destructive or narrowing alterations, unique indexes, validated constraints, implicit serial columns, and populated-table `NOT NULL` additions without a constant non-null default are rejected regardless of comments, CTE nesting, or keyword placement. New tables/types/sequences, approved idempotent extensions, non-unique indexes, nullable or constant-default columns, and new `CHECK`/foreign-key constraints declared `NOT VALID` remain permitted.
@@ -224,7 +228,9 @@ The reverse proxy must forward client `Origin` and `Referer` headers unchanged. 
 
 Set `TRUSTED_PROXIES` to the exact CIDRs allowed to append forwarding data. The deployment defaults to loopback only (`127.0.0.1/32,::1/128`) because nginx and ChatterMost share the host. Direct clients and untrusted peers cannot influence source identity with `X-Forwarded-For` or `X-Real-IP`; trusted requests are resolved by walking the complete chain from the socket peer to the first untrusted hop. Rate limiting keeps independent bounded source-address and login-account counters and evicts old keys instead of merging unrelated traffic into an overflow identity.
 
-Production sets `ENABLE_DISTRIBUTED_RATE_LIMIT=true`, so the counters are atomic Redis keys shared by every instance. The admin `/api/v4/metrics` response includes `abuse_control` telemetry for source/account checks and throttles, trusted-proxy decisions, local fallback evictions, Redis errors, and whether enforcement is cross-instance consistent.
+Native deployment sets `ENABLE_DISTRIBUTED_RATE_LIMIT=true` for atomic Redis
+counters. The supported application topology still has one writer; this flag does
+not enable multiple serving processes. The admin `/api/v4/metrics` response includes `abuse_control` telemetry for source/account checks and throttles, trusted-proxy decisions, local fallback evictions, Redis errors, and whether enforcement is cross-instance consistent.
 
 `GET /api/v4/ha/status` deliberately reports `websocket_fanout_mode: local-process`, `redis_fanout_enabled: false`, `sticky_session_free_websockets: false`, and `multi_process_websocket_safe: false`. Redis-backed rate limits do not make WebSocket delivery horizontally available.
 
