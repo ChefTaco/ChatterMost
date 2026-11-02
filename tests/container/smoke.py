@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Synthetic installation proof: real HTTP, files, bot auth, WebSocket delivery."""
+import argparse
 import base64
 import hashlib
 import json
@@ -7,12 +8,15 @@ from pathlib import Path
 import socket
 import secrets
 import struct
-import sys
 import urllib.request
 from urllib.parse import urlparse
 
-root = Path(sys.argv[1])
-mode = sys.argv[2]
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('root', type=Path)
+parser.add_argument('mode', choices=['seed', 'verify', 'checkpoint'])
+parser.add_argument('--checkpoint', action='store_true')
+args = parser.parse_args()
+root, mode = args.root, args.mode
 config = json.loads((root / 'installation.json').read_text())
 values = dict((k, json.loads(v)) for k, v in (line.split('=', 1) for line in (root / 'secrets/runtime.env').read_text().splitlines()))
 base = f'http://127.0.0.1:{config["port"]}'
@@ -75,11 +79,13 @@ if mode == 'seed':
     member_password = 'Synthetic-' + secrets.token_urlsafe(24)
     member, _ = request('POST', '/api/v4/users', {'invite_code': invite['code'], 'username': 'synthetic-member', 'email': 'synthetic-member@example.test', 'password': member_password})
     provisioned, _ = request('POST', '/admin/bots', {'username': 'synthetic-agent', 'display_name': 'Synthetic Agent'}, token)
-    fixture = {'admin_id': me['id'], 'post_id': post['id'], 'file_id': file_id, 'channel_id': channel, 'profile_sha': hashlib.sha256(image).hexdigest(), 'member_id': member['id'], 'member_password': member_password, 'bot_id': provisioned['user']['id'], 'bot_token': provisioned['token']}
+    fixture = {'admin_id': me['id'], 'admin_token': token, 'post_id': post['id'], 'file_id': file_id, 'channel_id': channel, 'profile_sha': hashlib.sha256(image).hexdigest(), 'member_id': member['id'], 'member_password': member_password, 'bot_id': provisioned['user']['id'], 'bot_token': provisioned['token']}
     fixture_file.write_text(json.dumps(fixture))
     fixture_file.chmod(0o600)
 fixture = json.loads(fixture_file.read_text())
 assert fixture['admin_id'] == me['id']
+retained_session, _ = request('GET', '/api/v4/users/me', token=fixture['admin_token'])
+assert retained_session['id'] == fixture['admin_id']
 post, _ = request('GET', '/api/v4/posts/' + fixture['post_id'], token=token)
 assert post['message'] == 'Synthetic distribution persistence proof'
 assert post['delete_at'] == 0
@@ -94,6 +100,22 @@ member, _ = request('POST', '/api/v4/users/login', {'login_id': 'synthetic-membe
 assert member['id'] == fixture['member_id']
 custom_bot, _ = request('GET', '/api/v4/users/me', token=fixture['bot_token'])
 assert custom_bot['is_bot'] and custom_bot['id'] == fixture['bot_id']
+checkpoint_file = root / 'post-upgrade-fixture.json'
+if mode == 'checkpoint':
+    assert not checkpoint_file.exists(), 'Post-upgrade fixture must only be created once'
+    upload = multipart('/api/v4/files', {'channel_id': fixture['channel_id']}, 'files', 'after-upgrade.txt', b'synthetic post-upgrade attachment\n', 'text/plain', fixture['bot_token'])
+    file_id = upload['file_infos'][0]['id']
+    post, _ = request('POST', '/api/v4/posts', {'channel_id': fixture['channel_id'], 'message': 'Synthetic post-upgrade bot write', 'file_ids': [file_id]}, fixture['bot_token'])
+    checkpoint_file.write_text(json.dumps({'post_id': post['id'], 'file_id': file_id, 'bot_id': fixture['bot_id']}))
+    checkpoint_file.chmod(0o600)
+if args.checkpoint or mode == 'checkpoint':
+    checkpoint = json.loads(checkpoint_file.read_text())
+    post, _ = request('GET', '/api/v4/posts/' + checkpoint['post_id'], token=token)
+    assert post['delete_at'] == 0 and post['user_id'] == checkpoint['bot_id']
+    assert post['message'] == 'Synthetic post-upgrade bot write'
+    assert checkpoint['file_id'] in post['file_ids']
+    content, _ = request('GET', '/api/v4/files/' + checkpoint['file_id'], token=token)
+    assert content == b'synthetic post-upgrade attachment\n'
 # The bot can authenticate, and the administrator receives its own persisted
 # post over a real WebSocket. Tokens remain in memory and private fixtures.
 parsed = urlparse(base)

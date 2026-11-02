@@ -54,12 +54,16 @@ ones retroactively. See [GitHub's immutability documentation](https://docs.githu
    permit 0.3.2. Preserve migration SQL already applied in released installations;
    add new expansion-only migrations and review generation/compatibility ranges.
    Do not broaden compatibility or allowlists to bypass a failing check.
-4. Update lifecycle fixtures/workflows to exercise **each** promised source→target
-   path. The current `tests/container/lifecycle.py` baseline is pinned to 0.2.3;
-   adding a new source version to policy alone does not add test coverage. Verify
+4. Validate the candidate policy with `python3 tests/container/lifecycle.py VERSION --plan`.
+   The runner exercises **each** `upgrade_from` entry, in separate disposable stacks.
+   Releases after 0.3.2 must include published 0.3.2; the pre-build policy check
+   refuses a future release that omits it. Public 0.3.2 verification retains its
+   historical 0.2.3 source from the verified archive. Verify
    fresh install, restart/data/token/file persistence, backups/restoration,
    compatible rollback, migration/health failures, incompatible rollback refusal,
    browser login and actual WebSocket event delivery on both architectures.
+   Source backups use the new manager's CLI; posts and attachments written after
+   upgrading must survive compatible rollback and target-backup restoration too.
 5. Inspect infrastructure digests as well as application changes. The current
    manager refuses Postgres/Redis digest changes during an application upgrade;
    do not advertise such a release as an ordinary supported app upgrade without
@@ -76,9 +80,10 @@ ones retroactively. See [GitHub's immutability documentation](https://docs.githu
 ## What automation proves
 
 The release workflow first runs the reusable repository CI gates. Native AMD64
-and ARM64 jobs build/load and exercise the app/migrator, scan fixable HIGH/CRITICAL
+and ARM64 jobs validate the upgrade policy before building or pushing, build/load
+and exercise the app/migrator, scan fixable HIGH/CRITICAL
 findings, then push native images with SBOM and maximum provenance. For lifecycle
-releases it tests the published baseline against the pushed candidate digests,
+releases it tests every declared published source against the pushed candidate digests,
 including a native browser. Only after both native jobs pass does the publishing
 job create the combined versioned image indexes, package the explicit bundle,
 bind public files with checksums, attest the archive/checksum manifest, and publish
@@ -110,7 +115,10 @@ gh workflow run verify-public-release.yml --ref main -f version=0.3.2
 Substitute the newly published version. Check both native jobs and their sanitized
 proof artifacts; the workflow installs anonymously from release assets/registry
 without a local application build and repeats the public manager's lifecycle and
-browser checks. Review logs and all uploaded reports for privacy before sharing.
+browser checks for every declared upgrade source. Each aggregate lifecycle report
+lists `upgrade_from` and a `paths` array with one complete native proof per source;
+any failed or missing path prevents a success report. Review logs and all uploaded
+reports for privacy before sharing.
 The workflow is manually dispatched, not automatically started by publication.
 
 Review the public manifest/digests and per-architecture SBOM/provenance, verify

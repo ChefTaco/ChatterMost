@@ -157,6 +157,9 @@ is a separate operation and is not performed by this tooling.
 Release automation builds and executes AMD64 and ARM64 on native GitHub runners.
 It tests fresh install, synthetic accounts, bot authentication, retained messages,
 attachments, profile images, restart persistence and WebSocket event delivery.
+Lifecycle tests cover every declared upgrade source; later releases must include
+published 0.3.2. They verify source/target backups, restoration and compatible
+rollback, including messages and attachments written after upgrading.
 Release images include OCI version/revision/license labels, dependency notices,
 SBOM and provenance attestations. Vulnerability scanning gates fixed high/critical
 findings; scan output is published separately. No operator configuration, runtime

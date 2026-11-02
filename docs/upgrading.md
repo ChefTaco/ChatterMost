@@ -21,6 +21,9 @@ The current published release is **0.3.2**. Its reviewed `upgrade_from` list con
 of an architecture-specific image. Failed candidate versions are not installations.
 Future releases must add and test their paths before publication; see
 [maintainer releases](releases.md). There is no mutable `latest` update channel.
+The release test runner requires 0.3.2 as a source for later releases and exercises
+every declared source on each native architecture. This coverage requirement does
+not publish a future version or change the immutable 0.3.2 manifest.
 
 ## Container upgrade procedure
 

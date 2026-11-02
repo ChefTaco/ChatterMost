@@ -198,7 +198,10 @@ Never auto-restore a database after a failed upgrade or bypass schema validation
 
 Documentation entry points are `README.md`, `docs/containers.md`,
 `docs/upgrading.md` and `docs/releases.md`. Keep supported upgrade sources explicit
-and tested; do not infer support from version ordering. The lifecycle fixture
-currently starts from published 0.2.3, so a future policy supporting 0.3.2 must add
-matching baseline coverage before publication. Keep cross-guide links usable when
+and tested; do not infer support from version ordering. `tests/container/lifecycle.py`
+tests every `upgrade_from` entry; releases after 0.3.2 must include published 0.3.2.
+Run `python3 tests/container/lifecycle.py VERSION --plan` to validate a candidate
+policy before builds or publication. Each path proves source backup/restoration,
+rollback, retained credentials/data and writes made after upgrading. Historical
+0.3.2 verification still uses its published 0.2.3 policy. Keep cross-guide links usable when
 `docs/containers.md` is packaged as the distribution's root `README.md`.

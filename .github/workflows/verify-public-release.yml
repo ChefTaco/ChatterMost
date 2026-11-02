@@ -27,7 +27,7 @@ jobs:
       - name: Install native browser for public lifecycle proof
         if: ${{ !startsWith(inputs.version, '0.2.') }}
         run: npx playwright install --with-deps chromium
-      - name: Real published lifecycle and CLI proof
+      - name: Real published lifecycle and CLI proof for every declared upgrade source
         if: ${{ !startsWith(inputs.version, '0.2.') }}
         env:
           VERSION: ${{ inputs.version }}

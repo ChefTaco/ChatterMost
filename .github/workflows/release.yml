@@ -36,6 +36,8 @@ jobs:
         run: |
           echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
           echo "CREATED=$(git log -1 --format=%cI)" >> "$GITHUB_ENV"
+      - name: Validate every declared upgrade source before building or publishing
+        run: python3 tests/container/lifecycle.py "$VERSION" --plan
       - name: Refuse reuse of a native image version
         env:
           ARCH: ${{ matrix.arch }}
@@ -128,7 +130,7 @@ jobs:
       - name: Install native browser for lifecycle proof
         if: ${{ !startsWith(env.VERSION, '0.2.') }}
         run: npx playwright install --with-deps chromium
-      - name: Exercise lifecycle against published baseline and native candidate
+      - name: Exercise every declared published baseline against the native candidate
         if: ${{ !startsWith(env.VERSION, '0.2.') }}
         env:
           CHATTERMOST_LIFECYCLE_BROWSER: 'true'

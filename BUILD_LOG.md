@@ -67,3 +67,10 @@ release artifacts, integrity/attestations, immutable versions and post-publicati
 verification. Source setup, runtime configuration and seeded bot-token restart
 behavior are documented against their actual implementation. Private operational
 receipts and verification data remain outside the public documentation.
+
+Release lifecycle coverage follows every declared upgrade source and requires
+published 0.3.2 for later releases. Separate disposable stacks verify source CLI
+backups/restoration, compatible rollback and retention of original sessions,
+accounts/tokens/files plus bot messages and attachments written after upgrading.
+The aggregate proof includes every path and is withheld on failure or incomplete
+evidence; historical public releases retain their published source policy.
