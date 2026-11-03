@@ -818,6 +818,8 @@ export class SessionService {
 }
 
 export class AuthService {
+  private static readonly dummyPasswordHash = hashPassword(createSecretToken());
+
   public constructor(
     private readonly users: UserService,
     private readonly sessions: SessionService,
@@ -835,7 +837,11 @@ export class AuthService {
 
   public async login(loginId: string, password: string, deviceId = ''): Promise<LoginResult> {
     const user = this.users.resolveLogin(loginId);
+    // Unknown and disabled accounts still do password work so login timing
+    // does not trivially reveal whether a username exists.
+    const dummyHash = await AuthService.dummyPasswordHash;
     if (user === null || user.disabledAt > 0) {
+      await verifyPassword(password, dummyHash);
       await this.auditLog.record({
         action: 'login.failure',
         metadata: { reason: 'not_found_or_disabled', login_id: loginId }
@@ -1714,11 +1720,15 @@ export class PostService {
   public thread(rootId: string, actor: UserRecord): PostRecord[] {
     const root = this.getPost(rootId);
     this.channels.assertMember(root.channelId, actor.id);
-    return this.store.read((state) => state.posts.filter((post) => (post.id === rootId || post.rootId === rootId) && isLifecycleVisibleTo(post, actor)));
+    return this.store.read((state) => state.posts.filter((post) => post.channelId === root.channelId && (post.id === rootId || post.rootId === rootId) && isLifecycleVisibleTo(post, actor)));
   }
 
   public async createPost(input: { actor: UserRecord; channelId: string; message: string; rootId?: string; fileIds?: string[]; pendingPostId?: string; props?: JsonRecord }): Promise<PostRecord> {
     this.channels.assertMember(input.channelId, input.actor.id);
+    if (input.rootId) {
+      const validRoot = this.store.read((state) => state.posts.some((post) => post.id === input.rootId && post.channelId === input.channelId && post.rootId === '' && post.deleteAt === 0));
+      if (!validRoot) throw badRequest('Invalid thread root for channel');
+    }
     const attachedFiles = this.store.read((state) =>
       uniqueFilesByContent(
         (input.fileIds ?? []).map((fileId) => {
@@ -1823,6 +1833,7 @@ export class PostService {
 
   public async patchPost(postId: string, patch: Partial<Pick<PostRecord, 'message' | 'isPinned' | 'fileIds'>>, actor: UserRecord): Promise<PostRecord> {
     const existing = this.getPost(postId);
+    this.channels.assertMember(existing.channelId, actor.id);
     if (existing.userId !== actor.id && !isAdmin(actor)) {
       throw forbidden();
     }
@@ -1912,6 +1923,7 @@ export class PostService {
 
   public async deletePost(postId: string, actor: UserRecord): Promise<PostRecord> {
     const existing = this.getPost(postId);
+    this.channels.assertMember(existing.channelId, actor.id);
     if (existing.userId !== actor.id && !isAdmin(actor)) {
       throw forbidden();
     }
@@ -2253,6 +2265,7 @@ export class ProfileImageService {
     if (input.actor.id !== input.userId && !isAdmin(input.actor)) {
       throw forbidden();
     }
+    this.users.getById(input.userId);
     const mimeType = input.mimeType === 'image/jpg' ? 'image/jpeg' : input.mimeType;
     if (!['image/png', 'image/jpeg', 'image/gif', 'image/webp'].includes(mimeType) || !isAllowedUpload(mimeType, input.bytes)) {
       throw badRequest('Unsupported profile image type');
@@ -2297,6 +2310,7 @@ export class ProfileImageService {
     if (actor.id !== userId && !isAdmin(actor)) {
       throw forbidden();
     }
+    this.users.getById(userId);
     const removed = await this.store.write((state) => {
       const existing = state.profileImages.find((candidate) => candidate.userId === userId);
       state.profileImages = state.profileImages.filter((candidate) => candidate.userId !== userId);

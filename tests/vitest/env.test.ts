@@ -1,4 +1,4 @@
-import { chmod, mkdtemp, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -26,6 +26,15 @@ describe('env loader', () => {
     await writeFile(envFile, 'DATABASE_URL=x\n', { mode: 0o644 });
     await chmod(envFile, 0o644);
     expect(() => assertPrivateEnvFile(envFile)).toThrow(/chmod 600/u);
+  });
+
+  it('rejects a symlinked env file before loading credentials', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'chattermost-env-link-'));
+    const target = path.join(root, 'runtime.env');
+    const envFile = path.join(root, '.env');
+    await writeFile(target, 'COOKIE_SECRET=synthetic-secret\n', { mode: 0o600 });
+    await symlink(target, envFile);
+    expect(() => loadEnv({ envFile, overrides: productionEnv })).toThrow(/regular file/u);
   });
 
   it('rejects ambiguous booleans and out-of-range ports', () => {

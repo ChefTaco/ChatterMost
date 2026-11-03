@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { createHash } from 'node:crypto';
-import { chmod, readFile, rename, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { chmod, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const [command, ...args] = process.argv.slice(2);
@@ -106,10 +106,14 @@ switch (command) {
     };
     const manifest = { ...payload, integrity: digest(JSON.stringify(payload)) };
     validate(manifest);
-    const temporary = `${file}.${process.pid}.tmp`;
-    await writeFile(temporary, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o400 });
-    await chmod(temporary, 0o400);
-    await rename(temporary, file);
+    const temporary = `${file}.${randomUUID()}.tmp`;
+    try {
+      await writeFile(temporary, `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx', mode: 0o400 });
+      await chmod(temporary, 0o400);
+      await rename(temporary, file);
+    } finally {
+      await rm(temporary, { force: true });
+    }
     break;
   }
   case 'verify': {

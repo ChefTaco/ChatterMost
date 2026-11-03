@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
+import { chmod, mkdtemp, readFile, stat, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -61,6 +61,35 @@ describe('Security Fusion provisioning', () => {
 
     expect(requestedPaths).not.toContain('/admin/bots/bot-user-id/regenerate-token');
     expect(await readFile(outputPath, 'utf8')).toContain('SECURITY_FUSION_CHATTERMOST_BOT_TOKEN=preserved-token');
+    expect((await stat(outputPath)).mode & 0o777).toBe(0o600);
+  });
+
+  it('refuses to reuse an exposed existing bot credential', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'security-fusion-exposed-'));
+    const outputPath = path.join(root, 'magnus.env');
+    await writeFile(outputPath, 'SECURITY_FUSION_CHATTERMOST_BOT_TOKEN=synthetic-token\n');
+    await chmod(outputPath, 0o644);
+    const responses = [
+      jsonResponse({ status: 'OK', build_number: 'chattermost-0.1.0', compatibility_profile: 'mattermost-v11.8' }),
+      jsonResponse({}, { headers: { token: 'admin-token' } }),
+      jsonResponse([{ id: 'team-id' }]),
+      jsonResponse([{ id: 'channel-id', name: 'security-fusion' }]),
+      jsonResponse([{ user_id: 'bot-user-id', username: 'magnus-security' }]),
+    ];
+    const fetchImpl = vi.fn(async () => {
+      const response = responses.shift();
+      if (!response) throw new Error('unexpected request');
+      return response;
+    }) as unknown as typeof fetch;
+
+    await expect(provisionSecurityFusion({
+      baseUrl: 'https://chat.example.test',
+      username: 'admin',
+      password: 'synthetic-password',
+      outputPath,
+      fetchImpl,
+    })).rejects.toThrow('regular mode-600 file');
+    expect(fetchImpl).toHaveBeenCalledTimes(5);
   });
 
   it('refuses implicit rotation when the existing credential is unavailable', async () => {

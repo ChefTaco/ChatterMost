@@ -148,7 +148,7 @@ Preserve these compatibility constraints:
 - Version advertisement is controlled by `ALLOW_VERSION_ADVERTISEMENT`.
 - Current compatibility version/profile: `11.8.0` / `mattermost-v11.8`.
 
-Auth/CSRF: the Web UI uses the `SameSite=Lax` session cookie (`SESSION_COOKIE_NAME`, default `MMSID`). Cookie-authenticated writes require a same-origin `Origin`/`Referer` matching `SERVER_URL`; bearer-token clients are exempt. Test API calls that authenticate by an accumulated cookie must send an `Origin` header, mirroring a browser (see `tests/playwright/helpers.ts`). Cookie-authenticated WebSocket upgrades are also same-origin only (CSWSH guard in `src/server/index.ts` via `isSameWebSocketOrigin`); bearer WS clients are exempt.
+Auth/CSRF: the Web UI uses the `SameSite=Lax` session cookie (`SESSION_COOKIE_NAME`, default `MMSID`). Cookie-authenticated writes require a same-origin `Origin`/`Referer` matching `SERVER_URL`; bearer-token clients are exempt. Test API calls that authenticate by an accumulated cookie must send an `Origin` header, mirroring a browser (see `tests/playwright/helpers.ts`). Cookie-authenticated WebSocket upgrades require a matching `Origin` (CSWSH guard in `src/server/index.ts` via `isSameWebSocketOrigin`); clients without an `Origin` must use a bearer token.
 
 Install the compatibility CLI separately and set `MMCTL` to its absolute path:
 

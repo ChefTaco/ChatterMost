@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-import { createHash } from 'node:crypto';
-import { appendFile, chmod, readFile, rename, writeFile } from 'node:fs/promises';
+import { createHash, randomUUID } from 'node:crypto';
+import { appendFile, chmod, readFile, rename, rm, writeFile } from 'node:fs/promises';
 
 import { parse } from 'dotenv';
 
@@ -41,10 +41,14 @@ async function readValues(file) {
 }
 
 async function writePrivate(file, contents) {
-  const temporary = `${file}.${process.pid}.tmp`;
-  await writeFile(temporary, contents, { mode: 0o600 });
-  await chmod(temporary, 0o600);
-  await rename(temporary, file);
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, contents, { flag: 'wx', mode: 0o600 });
+    await chmod(temporary, 0o600);
+    await rename(temporary, file);
+  } finally {
+    await rm(temporary, { force: true });
+  }
 }
 
 function runtimeValues() {

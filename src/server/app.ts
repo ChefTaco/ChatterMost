@@ -291,7 +291,8 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
       return c.json(mattermostError(error, requestId), error.statusCode as ContentfulStatusCode);
     }
     if (error instanceof z.ZodError) {
-      const appError = badRequest('Invalid request body', error.message);
+      // Zod error strings can contain submitted values, including credentials.
+      const appError = badRequest('Invalid request body');
       return c.json(mattermostError(appError, requestId), appError.statusCode as ContentfulStatusCode);
     }
     // Unexpected errors are not surfaced to clients, but must be observable in
@@ -622,8 +623,12 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
     return c.json(ok());
   });
 
-  app.get('/api/v4/users/:user_id/image/default', (c) => svgResponse(services.profileImages.defaultAvatarSvg(c.req.param('user_id'))));
+  app.get('/api/v4/users/:user_id/image/default', async (c) => {
+    await requireAuth(c, services);
+    return svgResponse(services.profileImages.defaultAvatarSvg(c.req.param('user_id')));
+  });
   app.get('/api/v4/users/:user_id/image', async (c) => {
+    await requireAuth(c, services);
     const image = services.profileImages.getImage(c.req.param('user_id'));
     if (image === null) {
       return svgResponse(services.profileImages.defaultAvatarSvg(c.req.param('user_id')));
@@ -1360,7 +1365,10 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
         post_id: body.post_id ?? '',
         message: body.message
       },
-      body.channel_id === undefined ? {} : { channel_id: body.channel_id }
+      {
+        ...(body.user_id === undefined ? {} : { user_id: body.user_id }),
+        ...(body.channel_id === undefined ? {} : { channel_id: body.channel_id })
+      }
     );
     await services.auditLog.record({
       actorUserId: auth.user.id,
@@ -2138,7 +2146,7 @@ function canSearchEmail(viewer: Parameters<typeof isAdmin>[0], services: Service
 }
 
 function svgResponse(svg: string): Response {
-  return new Response(svg, { headers: { 'Content-Type': 'image/svg+xml; charset=utf-8' } });
+  return new Response(svg, { headers: { 'Content-Type': 'image/svg+xml; charset=utf-8', 'Cache-Control': 'private, max-age=60' } });
 }
 
 function pickFirstString(value: FormDataEntryValue | FormDataEntryValue[] | undefined): string | undefined {

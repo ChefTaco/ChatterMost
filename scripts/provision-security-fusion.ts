@@ -1,4 +1,5 @@
-import { chmod, readFile, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { chmod, lstat, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { isIP } from 'node:net';
 import { pathToFileURL } from 'node:url';
 
@@ -112,11 +113,26 @@ async function request(
 
 async function readExistingCredential(outputPath: string): Promise<string | null> {
   try {
+    const stats = await lstat(outputPath);
+    if (!stats.isFile() || (stats.mode & 0o077) !== 0) {
+      throw new Error('Existing Security Fusion credential must be a regular mode-600 file');
+    }
     const values = parse(await readFile(outputPath, 'utf8'));
     return values.SECURITY_FUSION_CHATTERMOST_BOT_TOKEN || null;
   } catch (error) {
     if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return null;
     throw error;
+  }
+}
+
+async function writePrivateCredential(outputPath: string, contents: string): Promise<void> {
+  const temporary = `${outputPath}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, contents, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+    await chmod(temporary, 0o600);
+    await rename(temporary, outputPath);
+  } finally {
+    await rm(temporary, { force: true });
   }
 }
 
@@ -212,12 +228,10 @@ export async function provisionSecurityFusion(options: ProvisionSecurityFusionOp
     body: JSON.stringify({ user_id: botUserId }),
   }, adminToken);
 
-  await writeFile(
+  await writePrivateCredential(
     options.outputPath,
     `SECURITY_FUSION_CHATTERMOST_CHANNEL_ID=${channel.id}\nSECURITY_FUSION_CHATTERMOST_BOT_TOKEN=${botToken}\n`,
-    { encoding: 'utf8', mode: 0o600 },
   );
-  await chmod(options.outputPath, 0o600);
 }
 
 async function main(): Promise<void> {
@@ -230,7 +244,7 @@ async function main(): Promise<void> {
   }
   await provisionSecurityFusion({ baseUrl, username, password, outputPath });
   console.log(
-    `Provisioned private security-fusion channel and @magnus-security; credentials preserved with mode 0600 at ${outputPath}`
+    'Provisioned private security-fusion channel and @magnus-security; credentials preserved with mode 0600'
   );
 }
 

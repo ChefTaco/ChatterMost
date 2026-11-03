@@ -1,4 +1,4 @@
-import { statSync, existsSync, readFileSync } from 'node:fs';
+import { lstatSync, existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 
 import { z } from 'zod';
@@ -94,6 +94,9 @@ export type LoadEnvOptions = {
 
 export function loadEnv(options: LoadEnvOptions = {}): AppEnv {
   const envFile = options.envFile ?? '.env';
+  if (options.enforceFileMode !== false && existsSync(envFile)) {
+    assertPrivateEnvFile(envFile);
+  }
   const fileValues = parseEnvFile(envFile);
   const merged = {
     ...process.env,
@@ -111,15 +114,14 @@ export function loadEnv(options: LoadEnvOptions = {}): AppEnv {
     TOKEN_HASH_SECRET: withDefaults.TOKEN_HASH_SECRET ?? withDefaults.COOKIE_SECRET
   };
 
-  if (options.enforceFileMode !== false && existsSync(envFile)) {
-    assertPrivateEnvFile(envFile);
-  }
-
   return EnvSchema.parse(withDerivedSecrets);
 }
 
 export function assertPrivateEnvFile(envFile: string): void {
-  const stats = statSync(envFile);
+  const stats = lstatSync(envFile);
+  if (!stats.isFile()) {
+    throw new Error(`${envFile} must be a regular file, not a symlink or other file type`);
+  }
   if ((stats.mode & 0o077) !== 0) {
     throw new Error(`${envFile} must be chmod 600; current mode exposes group/world bits`);
   }

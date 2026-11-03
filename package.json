@@ -15,7 +15,7 @@
     "lint": "eslint . --max-warnings=0",
     "format": "prettier --write .",
     "test": "npm run test:unit && npm run test:e2e",
-    "test:unit": "vitest run tests/vitest",
+    "test:unit": "vitest run --dir tests/vitest",
     "test:e2e": "playwright test",
     "db:migrate": "prisma migrate deploy",
     "db:seed": "tsx src/server/seed.ts",

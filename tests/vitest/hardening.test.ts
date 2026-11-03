@@ -32,6 +32,130 @@ async function createMember(server: TestServer, adminToken: string, username: st
 }
 
 describe('Security and correctness hardening', () => {
+  it('returns the same public error for unknown and incorrect account credentials', async () => {
+    const server = await createTestServer();
+    const failures = await Promise.all(['missing-user', 'admin'].map(async (loginId) => {
+      const response = await server.app.request('/api/v4/users/login', {
+        method: 'POST', headers: server.baseHeaders,
+        body: JSON.stringify({ login_id: loginId, password: 'synthetic-incorrect-password' })
+      });
+      return { status: response.status, body: (await response.json()) as { id: string; message: string; status_code: number } };
+    }));
+    expect(failures.map(({ status, body }) => ({ status, id: body.id, message: body.message, status_code: body.status_code })))
+      .toEqual([0, 1].map(() => ({ status: 400, id: 'api.context.invalid_param.app_error', message: 'Invalid login credentials', status_code: 400 })));
+  });
+
+  it('does not echo submitted credentials in schema validation errors', async () => {
+    const server = await createTestServer();
+    const marker = 'synthetic-password-privacy-probe';
+    const response = await server.app.request('/api/v4/users/login', {
+      method: 'POST',
+      headers: server.baseHeaders,
+      body: JSON.stringify({ login_id: 'admin', password: marker + 'x'.repeat(1024) })
+    });
+    expect(response.status).toBe(400);
+    const body = (await response.json()) as { detailed_error: string };
+    expect(body.detailed_error).toBe('');
+    expect(JSON.stringify(body)).not.toContain(marker);
+  });
+
+  it('delivers a targeted push event only to its intended user', async () => {
+    const server = await createTestServer();
+    const adminToken = await login(server);
+    const member = await createMember(server, adminToken, 'pushtarget');
+    const admin = server.services.users.findByUsername('admin');
+    if (admin === null) throw new Error('missing admin');
+    const adminFrames: string[] = [];
+    const memberFrames: string[] = [];
+    server.services.hub.attach({ send: (frame) => adminFrames.push(frame) }, admin.id);
+    server.services.hub.attach({ send: (frame) => memberFrames.push(frame) }, member.userId);
+
+    const response = await server.app.request('/api/v4/push/notify', {
+      method: 'POST',
+      headers: bearer(adminToken),
+      body: JSON.stringify({ user_id: member.userId, message: 'synthetic private notification' })
+    });
+    expect(response.status).toBe(200);
+    expect(memberFrames.some((frame) => frame.includes('synthetic private notification'))).toBe(true);
+    expect(adminFrames.some((frame) => frame.includes('synthetic private notification'))).toBe(false);
+  });
+
+  it('blocks post edits and deletes after channel membership is removed', async () => {
+    const server = await createTestServer();
+    const adminToken = await login(server);
+    const member = await createMember(server, adminToken, 'formerwriter');
+    const channelId = await firstChannelId(server.app, member.token);
+    const created = await server.app.request('/api/v4/posts', {
+      method: 'POST',
+      headers: bearer(member.token),
+      body: JSON.stringify({ channel_id: channelId, message: 'original private content' })
+    });
+    expect(created.status).toBe(201);
+    const post = (await created.json()) as { id: string };
+    const removed = await server.app.request(`/api/v4/channels/${channelId}/members/${member.userId}`, {
+      method: 'DELETE',
+      headers: bearer(adminToken)
+    });
+    expect(removed.status).toBe(200);
+
+    const edit = await server.app.request(`/api/v4/posts/${post.id}/patch`, {
+      method: 'PUT',
+      headers: bearer(member.token),
+      body: JSON.stringify({ message: 'unauthorized edit' })
+    });
+    const deletion = await server.app.request(`/api/v4/posts/${post.id}`, {
+      method: 'DELETE',
+      headers: bearer(member.token)
+    });
+    expect(edit.status).toBe(404);
+    expect(deletion.status).toBe(404);
+    const unchanged = await server.app.request(`/api/v4/posts/${post.id}`, { headers: bearer(adminToken) });
+    expect(unchanged.status).toBe(200);
+    expect((await unchanged.json()) as { message: string }).toMatchObject({ message: 'original private content' });
+
+    const admin = server.services.users.findByUsername('admin');
+    if (admin === null) throw new Error('missing admin');
+    await server.services.channels.removeUserFromChannel(channelId, admin.id, admin);
+    expect((await server.app.request(`/api/v4/posts/${post.id}/patch`, {
+      method: 'PUT', headers: bearer(adminToken), body: JSON.stringify({ message: 'admin outside channel' })
+    })).status).toBe(404);
+    expect((await server.app.request(`/api/v4/posts/${post.id}`, {
+      method: 'DELETE', headers: bearer(adminToken)
+    })).status).toBe(404);
+    expect(server.services.posts.getPost(post.id)).toMatchObject({ message: 'original private content', deleteAt: 0 });
+  });
+
+  it('keeps thread replies within their root channel, including malformed stored records', async () => {
+    const server = await createTestServer();
+    const adminToken = await login(server);
+    const member = await createMember(server, adminToken, 'threadviewer');
+    const admin = server.services.users.findByUsername('admin');
+    const viewer = server.services.users.findById(member.userId);
+    if (admin === null || viewer === null) throw new Error('missing test users');
+    const publicChannelId = await firstChannelId(server.app, member.token);
+    const team = server.services.teams.listUserTeams(admin.id)[0];
+    if (team === undefined) throw new Error('missing team');
+    const privateChannel = await server.services.channels.createChannel({
+      creatorId: admin.id, teamId: team.id, type: 'P', name: 'thread-boundary',
+      displayName: 'Thread Boundary', header: '', purpose: ''
+    });
+    const root = await server.services.posts.createPost({ actor: admin, channelId: publicChannelId, message: 'public root' });
+    const privatePost = await server.services.posts.createPost({ actor: admin, channelId: privateChannel.id, message: 'private message' });
+
+    const forgedReply = await server.app.request('/api/v4/posts', {
+      method: 'POST', headers: bearer(adminToken),
+      body: JSON.stringify({ channel_id: privateChannel.id, root_id: root.id, message: 'cross-channel reply' })
+    });
+    expect(forgedReply.status).toBe(400);
+    expect(server.services.posts.getPost(root.id).replyCount).toBe(0);
+
+    await server.store.write((state) => {
+      const malformed = state.posts.find((post) => post.id === privatePost.id);
+      if (malformed !== undefined) malformed.rootId = root.id;
+    });
+    expect(server.services.posts.thread(root.id, viewer).map((post) => post.id)).toEqual([root.id]);
+  });
+
   it('does not disclose account or hidden email existence through discovery endpoints', async () => {
     const server = await createTestServer();
     const adminToken = await login(server);
@@ -139,12 +263,14 @@ describe('Security and correctness hardening', () => {
   it('rejects MIME-spoofed profile images and oversized JSON or posts', async () => {
     const server = await createTestServer();
     const token = await login(server);
+    const adminId = server.services.users.findByUsername('admin')?.id;
+    if (adminId === undefined) throw new Error('missing admin user');
     const fakeImage = new File(['<script>not an image</script>'], 'fake.png', {
       type: 'image/png'
     });
     const imageForm = new FormData();
     imageForm.set('image', fakeImage);
-    const imageResponse = await server.app.request('/api/v4/users/admin/image', {
+    const imageResponse = await server.app.request(`/api/v4/users/${adminId}/image`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
       body: imageForm

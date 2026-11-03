@@ -46,9 +46,9 @@ describe('isSameWebSocketOrigin (CSWSH guard)', () => {
     expect(isSameWebSocketOrigin('http://chat.example.com:9443', serverUrl)).toBe(false);
   });
 
-  it('allows a missing origin for non-browser clients', () => {
-    expect(isSameWebSocketOrigin(undefined, serverUrl)).toBe(true);
-    expect(isSameWebSocketOrigin('', serverUrl)).toBe(true);
+  it('rejects a missing origin for cookie-authenticated clients', () => {
+    expect(isSameWebSocketOrigin(undefined, serverUrl)).toBe(false);
+    expect(isSameWebSocketOrigin('', serverUrl)).toBe(false);
   });
 
   it('rejects a malformed origin', () => {

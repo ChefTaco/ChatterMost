@@ -1,6 +1,39 @@
 import { expect, test } from '@playwright/test';
+import NodeWebSocket from 'ws';
 
 import { adminToken, createUserViaInvite, loginAsAdmin } from './helpers.js';
+
+test('cookie WebSockets require an Origin; bearer clients can omit it', async ({ request }) => {
+  const login = await request.post('/api/v4/users/login', {
+    data: { login_id: 'admin', password: 'AdminChangeMe123!' }
+  });
+  expect(login.ok()).toBeTruthy();
+  const cookie = login.headers()['set-cookie']?.split(';', 1)[0];
+  const token = login.headers().token;
+  expect(cookie).toBeTruthy();
+  expect(token).toBeTruthy();
+  const url = 'ws://127.0.0.1:8097/api/v4/websocket';
+
+  async function firstFrame(headers: Record<string, string>, sendPing: boolean): Promise<Record<string, unknown>> {
+    return new Promise((resolve, reject) => {
+      const socket = new NodeWebSocket(url, { headers });
+      const timeout = setTimeout(() => { socket.terminate(); reject(new Error('WebSocket frame timeout')); }, 5000);
+      socket.once('open', () => {
+        if (sendPing) socket.send(JSON.stringify({ action: 'ping', seq: 1, data: {} }));
+      });
+      socket.once('message', (data) => {
+        clearTimeout(timeout);
+        socket.close();
+        const frame = Array.isArray(data) ? Buffer.concat(data).toString('utf8') : Buffer.from(data as ArrayBuffer).toString('utf8');
+        resolve(JSON.parse(frame) as Record<string, unknown>);
+      });
+      socket.once('error', (error) => { clearTimeout(timeout); reject(error); });
+    });
+  }
+
+  expect(await firstFrame({ Cookie: cookie ?? '' }, true)).toMatchObject({ status: 'FAIL', seq_reply: 1 });
+  expect(await firstFrame({ Authorization: `Bearer ${token ?? ''}` }, false)).toMatchObject({ event: 'hello' });
+});
 
 test('two browser contexts receive posts, reactions, and typing over WebSocket', async ({ browser, request }) => {
   const token = await adminToken(request);

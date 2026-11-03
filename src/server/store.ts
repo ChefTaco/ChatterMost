@@ -1,4 +1,5 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 
 import { PrismaClient } from '@prisma/client';
@@ -190,10 +191,14 @@ export class JsonStore {
       return;
     }
 
-    await mkdir(path.dirname(this.filePath), { recursive: true });
-    const tempPath = `${this.filePath}.${process.pid}.tmp`;
-    await writeFile(tempPath, JSON.stringify(state, null, 2), { mode: 0o600 });
-    await rename(tempPath, this.filePath);
+    await mkdir(path.dirname(this.filePath), { recursive: true, mode: 0o700 });
+    const tempPath = `${this.filePath}.${randomUUID()}.tmp`;
+    try {
+      await writeFile(tempPath, JSON.stringify(state, null, 2), { flag: 'wx', mode: 0o600 });
+      await rename(tempPath, this.filePath);
+    } finally {
+      await rm(tempPath, { force: true });
+    }
   }
 }
 

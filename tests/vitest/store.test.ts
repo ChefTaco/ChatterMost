@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -8,6 +8,19 @@ import { AuditLogService } from '../../src/server/services.js';
 import { JsonStore } from '../../src/server/store.js';
 
 describe('JsonStore resilience', () => {
+  it('does not follow a planted predictable temporary-file symlink', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'chattermost-store-symlink-'));
+    const storePath = path.join(root, 'state.json');
+    const sentinel = path.join(root, 'sentinel');
+    await writeFile(sentinel, 'synthetic sentinel');
+    await symlink(sentinel, `${storePath}.${process.pid}.tmp`);
+    const store = new JsonStore(storePath);
+    await store.initialize();
+    expect(await readFile(sentinel, 'utf8')).toBe('synthetic sentinel');
+    await store.close();
+    await rm(root, { recursive: true });
+  });
+
   it('does not expose partial mutations when a writer throws', async () => {
     const store = new JsonStore(null);
     await store.initialize();

@@ -17,6 +17,7 @@ const websocketServer = new WebSocketServer({
   perMessageDeflate: false
 });
 let shuttingDown = false;
+const knownWebSocketActions = new Set(['authentication_challenge', 'ping', 'user_typing', 'get_statuses', 'get_statuses_by_ids']);
 
 const server: ServerType = serve(
   {
@@ -38,17 +39,29 @@ const server: ServerType = serve(
 );
 
 server.on('upgrade', (request: IncomingMessage, socket: Duplex, head: Buffer) => {
-  if (env.PREFLIGHT_MODE || shuttingDown || request.url === undefined || new URL(request.url, env.SERVER_URL).pathname !== '/api/v4/websocket') {
+  if (request.url === undefined) {
+    socket.destroy();
+    return;
+  }
+  let requestUrl: URL;
+  try {
+    requestUrl = new URL(request.url, env.SERVER_URL);
+  } catch {
+    socket.destroy();
+    return;
+  }
+  if (env.PREFLIGHT_MODE || shuttingDown || requestUrl.pathname !== '/api/v4/websocket') {
     socket.destroy();
     return;
   }
 
   websocketServer.handleUpgrade(request, socket, head, (websocket) => {
     const auth = authenticateUpgrade(request);
+    const traceActions = (request.headers['user-agent'] ?? '').includes('Mattermost/');
     let connectionId = '';
     const tracedSocket = {
       send(payload: string) {
-        if ((request.headers['user-agent'] ?? '').includes('Mattermost/')) {
+        if (traceActions) {
           process.stdout.write(
             JSON.stringify({
               level: 'info',
@@ -61,7 +74,6 @@ server.on('upgrade', (request: IncomingMessage, socket: Duplex, head: Buffer) =>
         websocket.send(payload);
       }
     };
-    const requestUrl = new URL(request.url ?? '/api/v4/websocket', env.SERVER_URL);
     const requestedSequence = Number(requestUrl.searchParams.get('sequence_number'));
     const requestedConnectionId = requestUrl.searchParams.get('connection_id');
     const attachOptions = {
@@ -74,10 +86,11 @@ server.on('upgrade', (request: IncomingMessage, socket: Duplex, head: Buffer) =>
       connection_id: connection.id,
       authenticated_on_upgrade: auth !== null,
       remote_address: request.socket.remoteAddress ?? '',
-      user_agent: request.headers['user-agent'] ?? '',
-      request_path: request.url
+      client_kind: traceActions ? 'mattermost-compatible' : 'other',
+      // A query string can contain credentials supplied by a client. Log only
+      // the route path, never the full WebSocket URL.
+      request_path: requestUrl.pathname
     };
-    const traceActions = socketContext.user_agent.includes('Mattermost/');
     process.stdout.write(JSON.stringify({ level: 'info', message: 'websocket_opened', ...socketContext }) + '\n');
     websocket.on('message', (data) => {
       if (traceActions) {
@@ -105,14 +118,13 @@ server.on('upgrade', (request: IncomingMessage, socket: Duplex, head: Buffer) =>
           websocket.close(1011, 'WebSocket action failed');
         });
     });
-    websocket.on('close', (code, reason) => {
+    websocket.on('close', (code) => {
       process.stdout.write(
         JSON.stringify({
           level: 'info',
           message: 'websocket_closed',
           ...socketContext,
-          close_code: code,
-          close_reason: reason.toString('utf8')
+          close_code: code
         }) + '\n'
       );
       services.hub.detach(connection.id);
@@ -206,7 +218,7 @@ function parseWebSocketMessageMetadata(raw: string): { action: string; seq: numb
     }
     const frame = value as Record<string, unknown>;
     return {
-      action: typeof frame.action === 'string' ? frame.action : 'unknown',
+      action: typeof frame.action === 'string' && knownWebSocketActions.has(frame.action) ? frame.action : 'other',
       seq: typeof frame.seq === 'number' ? frame.seq : null
     };
   } catch {
@@ -220,7 +232,6 @@ function parseWebSocketFrameMetadata(raw: string): {
   seq: number | null;
   seq_reply: number | null;
   status: string | null;
-  data_text: string | null;
 } {
   try {
     const value = JSON.parse(raw) as unknown;
@@ -228,14 +239,12 @@ function parseWebSocketFrameMetadata(raw: string): {
       throw new Error('invalid frame');
     }
     const frame = value as Record<string, unknown>;
-    const data = typeof frame.data === 'object' && frame.data !== null && !Array.isArray(frame.data) ? (frame.data as Record<string, unknown>) : {};
     return {
       frame_type: typeof frame.event === 'string' ? 'event' : 'response',
       event: typeof frame.event === 'string' ? frame.event : null,
       seq: typeof frame.seq === 'number' ? frame.seq : null,
       seq_reply: typeof frame.seq_reply === 'number' ? frame.seq_reply : null,
-      status: typeof frame.status === 'string' ? frame.status : null,
-      data_text: typeof data.text === 'string' ? data.text : null
+      status: typeof frame.status === 'string' ? frame.status : null
     };
   } catch {
     return {
@@ -243,8 +252,7 @@ function parseWebSocketFrameMetadata(raw: string): {
       event: null,
       seq: null,
       seq_reply: null,
-      status: null,
-      data_text: null
+      status: null
     };
   }
 }

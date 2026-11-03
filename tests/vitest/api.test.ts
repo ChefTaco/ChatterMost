@@ -644,6 +644,8 @@ describe('Mattermost-compatible API', () => {
   it('handles profile images and file permissions', async () => {
     const server = await createTestServer();
     const token = await login(server);
+    const adminId = server.services.users.findByUsername('admin')?.id;
+    if (adminId === undefined) throw new Error('missing admin user');
     const channelId = await firstChannelId(server.app, token);
     const pngBytes = new Uint8Array(24);
     pngBytes.set([137, 80, 78, 71, 13, 10, 26, 10]);
@@ -653,12 +655,20 @@ describe('Mattermost-compatible API', () => {
     });
     const profileForm = new FormData();
     profileForm.set('image', png);
-    const profile = await server.app.request('/api/v4/users/admin/image', {
+    const profile = await server.app.request(`/api/v4/users/${adminId}/image`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}` },
       body: profileForm
     });
     expect(profile.status).toBe(200);
+    const nonexistentProfile = await server.app.request('/api/v4/users/does-not-exist/image', {
+      method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: profileForm
+    });
+    expect(nonexistentProfile.status).toBe(404);
+    for (const endpoint of [`/api/v4/users/${adminId}/image`, `/api/v4/users/${adminId}/image/default`]) {
+      expect((await server.app.request(endpoint)).status).toBe(401);
+      expect((await server.app.request(endpoint, { headers: bearer(token) })).status).toBe(200);
+    }
 
     const uploadForm = new FormData();
     uploadForm.set('channel_id', channelId);

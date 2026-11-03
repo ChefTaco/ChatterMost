@@ -44,11 +44,11 @@ export function sanitizeFilename(name: string): string {
 // CSWSH (Cross-Site WebSocket Hijacking) guard for cookie-authenticated
 // upgrades. Browsers always attach an Origin header on WebSocket handshakes and
 // automatically send cookies, so a cross-origin Origin that does not match the
-// server URL must be rejected. A missing Origin indicates a non-browser client
-// (native mobile/bot), which authenticates by bearer token rather than cookie.
+// server URL must be rejected. Non-browser clients without an Origin must use
+// bearer authentication instead of an ambient session cookie.
 export function isSameWebSocketOrigin(origin: string | undefined, serverUrl: string): boolean {
   if (origin === undefined || origin.length === 0) {
-    return true;
+    return false;
   }
   try {
     return new URL(origin).origin === new URL(serverUrl).origin;
