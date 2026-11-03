@@ -1,5 +1,7 @@
 # ChatterMost
 
+[Project site: UI previews and installation walkthroughs](https://hivemagnus.com/).
+
 **A self-hosted, Mattermost-compatible chat backend for the official mobile and
 desktop apps, with Hermes Agent integration.**
 
