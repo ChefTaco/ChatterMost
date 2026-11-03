@@ -30,8 +30,16 @@ def sync_directory(directory):
         os.close(descriptor)
 
 
+def check_private_directory(directory):
+    if directory.is_symlink() or not directory.is_dir() or directory.stat().st_mode & 0o077:
+        raise RuntimeError(f'Protected directory must be a real mode-700 directory: {directory.name}')
+
+
 def private_write(file, data):
     file = Path(file)
+    # Compose consumes secret files directly. Require a private directory and
+    # create the temporary inode mode 600 before any credential bytes are written.
+    check_private_directory(file.parent)
     temporary = file.with_name(file.name + '.' + secrets.token_hex(8) + '.tmp')
     with open(temporary, 'x', opener=lambda p, f: os.open(p, f, 0o600)) as stream:
         stream.write(data if isinstance(data, str) else json.dumps(data, indent=2) + '\n')
@@ -184,6 +192,7 @@ def setup(args):
             os.chown(file, uid, gid)
     destination = root / 'releases' / data['version']
     shutil.copytree(source, destination)
+    destination.chmod(0o700)
     private_write(root / 'state.json', {'current': data['version'], 'previous': None, 'schema': schema_record(data)})
     shutil.copyfile(source / 'chattermost', root / 'chattermost')
     os.chmod(root / 'chattermost', 0o700)
@@ -263,12 +272,15 @@ def fetch_release(root, version):
                 raise RuntimeError('Unsafe release archive member')
             tar.extractall(stage, filter='data')
         extracted = stage / prefix
+        extracted.chmod(0o700)
         manifest = metadata(extracted)
         if manifest['version'] != version:
             raise RuntimeError('Release version does not match requested version')
         receipt = {'asset_digest': asset['digest'], 'files': hashes(extracted)}
         destination = root / 'releases' / version
         if destination.exists():
+            if destination.is_symlink():
+                raise RuntimeError('Installed release directory must not be a symlink')
             if (destination / '.verified.json').exists():
                 previous = json.loads((destination / '.verified.json').read_text())
                 if previous['asset_digest'] != receipt['asset_digest']:
@@ -277,6 +289,7 @@ def fetch_release(root, version):
                 file = destination / name
                 if file.is_symlink() or file.read_bytes() != (extracted / name).read_bytes():
                     raise RuntimeError('Installed release differs from its public archive')
+            destination.chmod(0o700)
         else:
             extracted.rename(destination)
         private_write(destination / '.verified.json', receipt)

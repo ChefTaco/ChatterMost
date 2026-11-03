@@ -44,6 +44,35 @@ class ManagerTests(unittest.TestCase):
             self.module['setup'](argparse.Namespace(directory=one))
         self.assertEqual(password, (one / 'secrets/postgres_password').read_bytes())
         self.assertEqual((one / 'secrets/runtime.env').stat().st_mode & 0o777, 0o600)
+        self.assertEqual((one / 'releases' / self.version).stat().st_mode & 0o777, 0o700)
+
+    def test_private_write_protects_directory_and_temporary_file(self):
+        root = self.install('private-write')
+        target = root / 'secrets' / 'test-secret'
+        original_replace = os.replace
+        observed_modes = []
+
+        def inspect_replace(source, destination):
+            observed_modes.append(Path(source).stat().st_mode & 0o777)
+            original_replace(source, destination)
+
+        old = os.umask(0)
+        try:
+            with patch('os.replace', side_effect=inspect_replace):
+                self.module['private_write'](target, 'synthetic secret')
+        finally:
+            os.umask(old)
+        self.assertEqual(observed_modes, [0o600])
+        self.assertEqual(target.stat().st_mode & 0o777, 0o600)
+
+        (root / 'secrets').chmod(0o755)
+        with self.assertRaisesRegex(RuntimeError, 'Protected directory'):
+            self.module['private_write'](target, 'replacement')
+        self.assertEqual(target.read_text(), 'synthetic secret')
+        (root / 'secrets').chmod(0o700)
+        (root / 'linked-secrets').symlink_to(root / 'secrets', target_is_directory=True)
+        with self.assertRaisesRegex(RuntimeError, 'Protected directory'):
+            self.module['private_write'](root / 'linked-secrets' / 'test-secret', 'replacement')
 
     def test_exposed_or_linked_secret_file_is_refused(self):
         root = self.install('permissions')
@@ -71,6 +100,12 @@ class ManagerTests(unittest.TestCase):
         release = json.dumps({'tag_name': f'v{self.version}', 'assets': [asset]}).encode()
         with patch('urllib.request.urlopen', side_effect=[io.BytesIO(release), io.BytesIO(archive)]):
             self.module['fetch_release'](root, self.version)
+        installed = root / 'releases' / self.version
+        self.assertEqual(installed.stat().st_mode & 0o777, 0o700)
+        installed.chmod(0o755)
+        with patch('urllib.request.urlopen', side_effect=[io.BytesIO(release), io.BytesIO(archive)]):
+            self.module['fetch_release'](root, self.version)
+        self.assertEqual(installed.stat().st_mode & 0o777, 0o700)
         (root / 'releases' / self.version / 'compose.yaml').write_text('tampered')
         with self.assertRaisesRegex(RuntimeError, 'integrity mismatch'):
             self.module['cached_release'](root, self.version)
