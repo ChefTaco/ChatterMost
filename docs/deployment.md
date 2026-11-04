@@ -289,3 +289,9 @@ When Compose is selected, use that installation's published manager; the preserv
 native deployer remains native-only and does not interpret the routing metadata.
 Native migration recovery requires the protected forward-preserving rollback
 procedure, rather than a container-version rollback command.
+# Optional suite sign-in
+
+See [Oathweave sign-in](oathweave.md) for the verified HTTPS endpoints, explicit
+account links and cookie/session behavior needed by HiveXUI. Existing native
+clients retain their current authentication. Bound identity sessions require the
+documented revocation step before a downgrade to an older runtime.

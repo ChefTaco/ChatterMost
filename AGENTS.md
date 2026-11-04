@@ -1,5 +1,10 @@
 # ChatterMost Agent Guide
 
+Optional Oathweave suite sign-in is documented in `docs/oathweave.md`. Preserve
+explicit account links, native client compatibility, encrypted session contexts
+and online revocation checks. Never downgrade bound sessions into ordinary native
+sessions or expose their identity credentials through APIs, logs or WebSocket URLs.
+
 Use this file as the operating skill for future coding work in this repo. Keep changes grounded in the actual checkout and verify with the real commands below.
 
 ## Installation runbook for agents

@@ -1,13 +1,13 @@
+import { configuredBrowserOrigins } from './oathweave.js';
+import { guardedSocketSender, authenticateSocketUpgrade } from './bound-socket.js';
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
-import { parse as parseCookie } from 'cookie';
 import { serve } from '@hono/node-server';
 import type { ServerType } from '@hono/node-server';
 import { WebSocketServer, type RawData } from 'ws';
 
 import { createServerApp } from './app.js';
 import { loadEnv } from './env.js';
-import { isSameWebSocketOrigin } from './security.js';
 
 const env = loadEnv({ envFile: process.env.CHATTERMOST_ENV_FILE ?? '.env' });
 const { app, services, store, abuseControl } = await createServerApp(env);
@@ -39,6 +39,9 @@ const server: ServerType = serve(
 );
 
 server.on('upgrade', (request: IncomingMessage, socket: Duplex, head: Buffer) => {
+  void handleUpgradeRequest(request,socket,head).catch(()=>socket.destroy());
+});
+async function handleUpgradeRequest(request: IncomingMessage, socket: Duplex, head: Buffer):Promise<void> {
   if (request.url === undefined) {
     socket.destroy();
     return;
@@ -55,12 +58,18 @@ server.on('upgrade', (request: IncomingMessage, socket: Duplex, head: Buffer) =>
     return;
   }
 
+  let auth: Awaited<ReturnType<typeof authenticateUpgrade>>;
+  try {auth=await authenticateUpgrade(request);} catch {socket.destroy();return;}
+  if(shuttingDown){socket.destroy();return;}
   websocketServer.handleUpgrade(request, socket, head, (websocket) => {
-    const auth = authenticateUpgrade(request);
+    const bound=Boolean(auth?.sessionId && services.sessions.requiresOnlineValidation(auth.sessionId));
+    const validate=async()=>{
+      const current=await authenticateUpgrade(request);
+      return Boolean(current && current.sessionId===auth?.sessionId && current.user.id===auth?.user.id);
+    };
     const traceActions = (request.headers['user-agent'] ?? '').includes('Mattermost/');
     let connectionId = '';
-    const tracedSocket = {
-      send(payload: string) {
+    const emit=(payload:string)=>{
         if (traceActions) {
           process.stdout.write(
             JSON.stringify({
@@ -72,8 +81,9 @@ server.on('upgrade', (request: IncomingMessage, socket: Duplex, head: Buffer) =>
           );
         }
         websocket.send(payload);
-      }
     };
+    const send=bound?guardedSocketSender({send:emit,close:(code,reason)=>websocket.close(code,reason)},validate):emit;
+    const tracedSocket={send};
     const requestedSequence = Number(requestUrl.searchParams.get('sequence_number'));
     const requestedConnectionId = requestUrl.searchParams.get('connection_id');
     const attachOptions = {
@@ -104,8 +114,10 @@ server.on('upgrade', (request: IncomingMessage, socket: Duplex, head: Buffer) =>
           }) + '\n'
         );
       }
-      void services.hub
-        .handleClientMessage(connection.id, rawDataToString(data), (token) => services.sessions.authenticateToken(token), services.statuses)
+      void Promise.resolve().then(async()=>{
+        if(bound && !(await validate())){websocket.close(1008,'Session expired');return;}
+        await services.hub.handleClientMessage(connection.id, rawDataToString(data), (token) => services.sessions.authenticateToken(token), services.statuses);
+      })
         .catch((error: unknown) => {
           process.stdout.write(
             JSON.stringify({
@@ -140,7 +152,7 @@ server.on('upgrade', (request: IncomingMessage, socket: Duplex, head: Buffer) =>
       );
     });
   });
-});
+}
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.once(signal, () => {
@@ -176,25 +188,8 @@ async function shutdown(signal: 'SIGTERM' | 'SIGINT'): Promise<void> {
   process.stdout.write(JSON.stringify({ level: 'info', message: 'chattermost_server_stopped', signal }) + '\n');
 }
 
-function authenticateUpgrade(request: IncomingMessage) {
-  const authorization = request.headers.authorization;
-  const bearer = authorization?.match(/^Bearer\s+(.+)$/iu)?.[1];
-  if (bearer !== undefined) {
-    return services.sessions.authenticateToken(bearer);
-  }
-  const cookieHeader = request.headers.cookie;
-  if (cookieHeader === undefined) {
-    return null;
-  }
-  // Cookie-authenticated upgrades are only honored from a same-origin browser
-  // context. This prevents Cross-Site WebSocket Hijacking, where a malicious
-  // page opens a socket that rides the victim's session cookie.
-  if (!isSameWebSocketOrigin(request.headers.origin, env.SERVER_URL)) {
-    return null;
-  }
-  const cookies = parseCookie(cookieHeader);
-  const token = cookies[env.SESSION_COOKIE_NAME] ?? cookies.MMSID;
-  return token === undefined ? null : services.sessions.authenticateToken(token);
+async function authenticateUpgrade(request: IncomingMessage) {
+  return authenticateSocketUpgrade(request.headers,env.SERVER_URL,env.SESSION_COOKIE_NAME,token=>services.sessions.authenticateWebSession(token),configuredBrowserOrigins(env));
 }
 
 function rawDataToString(data: RawData): string {

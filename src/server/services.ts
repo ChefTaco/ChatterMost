@@ -1,5 +1,6 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { createChatIdentity } from './oathweave.js';
 import path from 'node:path';
 
 import { badRequest, conflict, createId, forbidden, notFound, nowMs, unauthorized, type JsonRecord, type MattermostAutocompleteSuggestion, type MattermostChannelType, type MattermostCommandResponse, type MattermostUserStatus, type WebSocketBroadcast, type WebSocketEventEnvelope, type WebSocketResponseFrame } from '../shared/mattermost.js';
@@ -679,13 +680,14 @@ export class UserService {
 }
 
 export class SessionService {
+  private readonly identity: ReturnType<typeof createChatIdentity>;
   public constructor(
     private readonly store: StateStore,
     private readonly env: AppEnv,
     private readonly auditLog: AuditLogService
-  ) {}
+  ) { this.identity=createChatIdentity(env); }
 
-  public async createSession(user: UserRecord, deviceId = ''): Promise<LoginResult> {
+  public async createSession(user: UserRecord, deviceId = '', boundIdentity?:{context:string;expiresAt:number}): Promise<LoginResult> {
     const token = createSecretToken();
     const now = nowMs();
     const session: SessionRecord = {
@@ -693,11 +695,13 @@ export class SessionService {
       tokenHash: hashSessionToken(token, this.env),
       userId: user.id,
       createAt: now,
-      expiresAt: now + this.env.SESSION_DAYS * 24 * 60 * 60 * 1000,
+      expiresAt: boundIdentity ? Math.min(boundIdentity.expiresAt,now+15*60*1000) : now + this.env.SESSION_DAYS * 24 * 60 * 60 * 1000,
       deviceId,
-      revokedAt: 0
+      revokedAt: 0,
+      ...(boundIdentity?{oathweaveContext:boundIdentity.context}:{})
     };
     await this.store.write((state) => {
+      if(boundIdentity && !state.users.some(candidate=>candidate.id===user.id && candidate.disabledAt===0 && candidate.deleteAt===0 && !candidate.isBot)) throw unauthorized();
       state.sessions.push(session);
     });
     await this.auditLog.record({
@@ -709,6 +713,39 @@ export class SessionService {
   }
 
   public authenticateToken(token: string): AuthContext | null {
+    const auth=this.resolveToken(token);
+    if(auth?.sessionId && this.requiresOnlineValidation(auth.sessionId)) return null;
+    return auth;
+  }
+
+  public requiresOnlineValidation(sessionId:string):boolean {
+    return this.store.read(state=>Boolean(state.sessions.find(session=>session.id===sessionId)?.oathweaveContext));
+  }
+
+  public async exchangeIdentity(token:string):Promise<LoginResult> {
+    if(!this.identity)throw unauthorized();
+    let identity;
+    try {identity=await this.identity.authenticate(token);} catch {throw unauthorized();}
+    const user=this.store.read(state=>state.users.find(candidate=>candidate.id===identity.localUserId && candidate.disabledAt===0 && candidate.deleteAt===0 && !candidate.isBot));
+    if(!user)throw unauthorized();
+    return this.createSession(user,'HiveXUI',{context:this.identity.seal(token),expiresAt:identity.expiresAt});
+  }
+
+  public async authenticateWebSession(token:string):Promise<AuthContext|null> {
+    const auth=this.resolveToken(token);
+    if(!auth?.sessionId)return auth;
+    const context=this.store.read(state=>state.sessions.find(session=>session.id===auth.sessionId)?.oathweaveContext);
+    if(!context)return auth;
+    if(!this.identity)return null;
+    try {
+      const identity=await this.identity.authenticate(this.identity.open(context));
+      if(identity.localUserId!==auth.user.id)return null;
+      // Recheck local disable/revocation after the external request.
+      return this.resolveToken(token);
+    } catch {return null;}
+  }
+
+  private resolveToken(token: string): AuthContext | null {
     const sessionHash = hashSessionToken(token, this.env);
     const tokenHash = hashToken(token, this.env);
     return this.store.read((state) => {

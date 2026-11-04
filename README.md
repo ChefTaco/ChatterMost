@@ -130,3 +130,9 @@ Inc. ChatterMost is independently developed and is not affiliated with, endorsed
 by, or sponsored by Mattermost, Inc. Compatibility describes the implemented
 interfaces, not complete feature parity or certification. Protocol names and
 identifiers are retained where required for interoperability.
+
+An optional Oathweave bridge lets HiveXUI exchange an explicitly linked,
+resource-scoped identity for a short native browser session. Existing user IDs,
+roles, memberships, Mattermost sessions and agent credentials remain product-owned.
+See [the Oathweave integration guide](docs/oathweave.md). This opt-in suite bridge
+is separate from generic upstream OAuth/discovery support advertised to native clients.

@@ -1,3 +1,4 @@
+import { configuredBrowserOrigins } from './oathweave.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 
@@ -465,6 +466,15 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
   app.post('/api/v4/users/login/type', async (c) => {
     const body = await readJson(c, LoginTypeSchema);
     return c.json(services.auth.loginType(body.login_id));
+  });
+  app.post('/api/v4/auth/oathweave/session', async (c) => {
+    if(!configuredBrowserOrigins(env).includes(c.req.header('origin')??'')) throw forbidden('Browser origin is not allowed');
+    const token=/^Bearer\s+(.+)$/iu.exec(c.req.header('authorization')??'')?.[1];
+    if(!token)throw unauthorized();
+    const result=await services.sessions.exchangeIdentity(token);
+    c.header('Set-Cookie',serializeCookie(env.SESSION_COOKIE_NAME,result.token,{httpOnly:true,sameSite:'strict',secure:new URL(env.SERVER_URL).protocol==='https:',path:'/',maxAge:Math.max(1,Math.floor((result.expiresAt-Date.now())/1000))}));
+    c.header('Cache-Control','no-store');
+    return c.json({user:toMattermostUser(result.user,{includeEmail:true}),expires_at:result.expiresAt});
   });
   app.post('/api/v4/users/login', async (c) => {
     const body = await readJson(c, LoginSchema);
@@ -1986,7 +1996,7 @@ function requestContext(store: StateStore, env: AppEnv): MiddlewareHandler<AppHo
 // same-origin Origin or Referer header.
 function csrfProtection(env: AppEnv): MiddlewareHandler<AppHonoEnv> {
   const safeMethods = new Set(['GET', 'HEAD', 'OPTIONS']);
-  const expectedOrigin = new URL(env.SERVER_URL).origin;
+  const allowedOrigins = configuredBrowserOrigins(env);
   return async (c, next) => {
     if (safeMethods.has(c.req.method)) {
       await next();
@@ -2010,7 +2020,7 @@ function csrfProtection(env: AppEnv): MiddlewareHandler<AppHonoEnv> {
     }
     const origin = c.req.header('origin');
     if (origin !== undefined) {
-      if (origin !== expectedOrigin) {
+      if (!allowedOrigins.includes(origin)) {
         throw forbidden('Cross-origin request rejected by CSRF protection');
       }
       await next();
@@ -2018,7 +2028,7 @@ function csrfProtection(env: AppEnv): MiddlewareHandler<AppHonoEnv> {
     }
     const referer = c.req.header('referer');
     if (referer !== undefined) {
-      if (originOf(referer) !== expectedOrigin) {
+      if (!allowedOrigins.includes(originOf(referer)??'')) {
         throw forbidden('Cross-origin request rejected by CSRF protection');
       }
       await next();
@@ -2106,19 +2116,19 @@ function requiredParam(c: Context<AppHonoEnv>, name: string): string {
 }
 
 async function requireAuth(c: Context<AppHonoEnv>, services: ServiceBundle): Promise<AuthContext> {
-  const auth = authenticateRequest(c, services);
+  const auth = await authenticateRequest(c, services);
   if (auth === null) {
     throw unauthorized();
   }
   return auth;
 }
 
-function authenticateRequest(c: Context<AppHonoEnv>, services: ServiceBundle): AuthContext | null {
+async function authenticateRequest(c: Context<AppHonoEnv>, services: ServiceBundle): Promise<AuthContext | null> {
   const authorization = c.req.header('authorization');
   if (authorization !== undefined) {
     const bearer = /^Bearer\s+(.+)$/iu.exec(authorization)?.[1];
     if (bearer === undefined) return null;
-    const auth = services.sessions.authenticateToken(bearer);
+    const auth = await services.sessions.authenticateWebSession(bearer);
     if (auth !== null) {
       return { ...auth, authMethod: auth.authMethod === 'bot' ? 'bot' : 'bearer' };
     }
@@ -2131,7 +2141,7 @@ function authenticateRequest(c: Context<AppHonoEnv>, services: ServiceBundle): A
     const cookies = parseCookie(cookieHeader);
     const token = cookies[c.get('env').SESSION_COOKIE_NAME] ?? cookies.MMSID;
     if (token !== undefined) {
-      return services.sessions.authenticateToken(token);
+      return services.sessions.authenticateWebSession(token);
     }
   }
   return null;

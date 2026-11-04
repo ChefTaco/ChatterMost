@@ -13,6 +13,11 @@ const EXAMPLE_TOKEN_HASH_SECRET = 'replace-with-a-separate-token-hash-secret';
 const EXAMPLE_ADMIN_PASSWORD = 'replace-with-a-long-admin-password';
 
 const EnvSchema = z.object({
+  OATHWEAVE_ISSUER: z.preprocess(value=>value===''?undefined:value,z.url().optional()),
+  OATHWEAVE_JWKS_URL: z.preprocess(value=>value===''?undefined:value,z.url().optional()),
+  OATHWEAVE_USERINFO_URL: z.preprocess(value=>value===''?undefined:value,z.url().optional()),
+  OATHWEAVE_BROWSER_ORIGINS_JSON: z.string().default('[]'),
+  OATHWEAVE_CHAT_IDENTITIES_JSON: z.string().default('[]'),
   DATABASE_URL: z.string().min(1),
   SERVER_URL: z.url(),
   PORT: z.coerce.number().int().min(1).max(65_535).default(8065),

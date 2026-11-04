@@ -38,6 +38,8 @@ export type UserProfileImageRecord = {
 };
 
 export type SessionRecord = {
+  /** Encrypted server-owned resource credential; never serialized to API clients. */
+  oathweaveContext?: string;
   id: string;
   tokenHash: string;
   userId: string;
