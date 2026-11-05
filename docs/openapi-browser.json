@@ -1,0 +1,5149 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "ChatterMost browser native API",
+    "version": "1"
+  },
+  "components": {
+    "securitySchemes": {
+      "nativeSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "MMSID"
+      }
+    }
+  },
+  "paths": {
+    "/api/v4/users/me": {
+      "get": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "create_at": {
+                      "type": "number"
+                    },
+                    "update_at": {
+                      "type": "number"
+                    },
+                    "delete_at": {
+                      "type": "number"
+                    },
+                    "username": {
+                      "type": "string"
+                    },
+                    "auth_data": {
+                      "type": "string",
+                      "const": ""
+                    },
+                    "auth_service": {
+                      "type": "string"
+                    },
+                    "email": {
+                      "type": "string"
+                    },
+                    "nickname": {
+                      "type": "string"
+                    },
+                    "first_name": {
+                      "type": "string"
+                    },
+                    "last_name": {
+                      "type": "string"
+                    },
+                    "position": {
+                      "type": "string"
+                    },
+                    "roles": {
+                      "type": "string"
+                    },
+                    "locale": {
+                      "type": "string"
+                    },
+                    "timezone": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/$defs/__schema0"
+                      }
+                    },
+                    "notify_props": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/$defs/__schema0"
+                      }
+                    },
+                    "last_picture_update": {
+                      "type": "number"
+                    },
+                    "is_bot": {
+                      "type": "boolean"
+                    },
+                    "bot_description": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "create_at",
+                    "update_at",
+                    "delete_at",
+                    "username",
+                    "auth_data",
+                    "auth_service",
+                    "email",
+                    "nickname",
+                    "first_name",
+                    "last_name",
+                    "position",
+                    "roles",
+                    "locale",
+                    "timezone",
+                    "notify_props",
+                    "last_picture_update",
+                    "is_bot",
+                    "bot_description"
+                  ],
+                  "additionalProperties": false,
+                  "$defs": {
+                    "__schema0": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/users/me/teams": {
+      "get": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "create_at": {
+                        "type": "number"
+                      },
+                      "update_at": {
+                        "type": "number"
+                      },
+                      "delete_at": {
+                        "type": "number"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "display_name": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "const": "O"
+                          },
+                          {
+                            "type": "string",
+                            "const": "I"
+                          }
+                        ]
+                      },
+                      "company_name": {
+                        "type": "string"
+                      },
+                      "allowed_domains": {
+                        "type": "string"
+                      },
+                      "invite_id": {
+                        "type": "string"
+                      },
+                      "allow_open_invite": {
+                        "type": "boolean"
+                      },
+                      "scheme_id": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "group_constrained": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "create_at",
+                      "update_at",
+                      "delete_at",
+                      "name",
+                      "display_name",
+                      "description",
+                      "type",
+                      "company_name",
+                      "allowed_domains",
+                      "invite_id",
+                      "allow_open_invite",
+                      "scheme_id",
+                      "group_constrained"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/users/me/channels": {
+      "get": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "create_at": {
+                        "type": "number"
+                      },
+                      "update_at": {
+                        "type": "number"
+                      },
+                      "delete_at": {
+                        "type": "number"
+                      },
+                      "team_id": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "const": "O"
+                          },
+                          {
+                            "type": "string",
+                            "const": "P"
+                          },
+                          {
+                            "type": "string",
+                            "const": "D"
+                          },
+                          {
+                            "type": "string",
+                            "const": "G"
+                          }
+                        ]
+                      },
+                      "display_name": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "header": {
+                        "type": "string"
+                      },
+                      "purpose": {
+                        "type": "string"
+                      },
+                      "last_post_at": {
+                        "type": "number"
+                      },
+                      "total_msg_count": {
+                        "type": "number"
+                      },
+                      "extra_update_at": {
+                        "type": "number"
+                      },
+                      "creator_id": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "create_at",
+                      "update_at",
+                      "delete_at",
+                      "team_id",
+                      "type",
+                      "display_name",
+                      "name",
+                      "header",
+                      "purpose",
+                      "last_post_at",
+                      "total_msg_count",
+                      "extra_update_at",
+                      "creator_id"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/users/me/teams/{team_id}/channels": {
+      "get": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "create_at": {
+                        "type": "number"
+                      },
+                      "update_at": {
+                        "type": "number"
+                      },
+                      "delete_at": {
+                        "type": "number"
+                      },
+                      "team_id": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "const": "O"
+                          },
+                          {
+                            "type": "string",
+                            "const": "P"
+                          },
+                          {
+                            "type": "string",
+                            "const": "D"
+                          },
+                          {
+                            "type": "string",
+                            "const": "G"
+                          }
+                        ]
+                      },
+                      "display_name": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "header": {
+                        "type": "string"
+                      },
+                      "purpose": {
+                        "type": "string"
+                      },
+                      "last_post_at": {
+                        "type": "number"
+                      },
+                      "total_msg_count": {
+                        "type": "number"
+                      },
+                      "extra_update_at": {
+                        "type": "number"
+                      },
+                      "creator_id": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "create_at",
+                      "update_at",
+                      "delete_at",
+                      "team_id",
+                      "type",
+                      "display_name",
+                      "name",
+                      "header",
+                      "purpose",
+                      "last_post_at",
+                      "total_msg_count",
+                      "extra_update_at",
+                      "creator_id"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/users/search": {
+      "post": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "term": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "term"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "create_at": {
+                        "type": "number"
+                      },
+                      "update_at": {
+                        "type": "number"
+                      },
+                      "delete_at": {
+                        "type": "number"
+                      },
+                      "username": {
+                        "type": "string"
+                      },
+                      "auth_data": {
+                        "type": "string",
+                        "const": ""
+                      },
+                      "auth_service": {
+                        "type": "string"
+                      },
+                      "email": {
+                        "type": "string"
+                      },
+                      "nickname": {
+                        "type": "string"
+                      },
+                      "first_name": {
+                        "type": "string"
+                      },
+                      "last_name": {
+                        "type": "string"
+                      },
+                      "position": {
+                        "type": "string"
+                      },
+                      "roles": {
+                        "type": "string"
+                      },
+                      "locale": {
+                        "type": "string"
+                      },
+                      "timezone": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "$ref": "#/$defs/__schema0"
+                        }
+                      },
+                      "notify_props": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "$ref": "#/$defs/__schema0"
+                        }
+                      },
+                      "last_picture_update": {
+                        "type": "number"
+                      },
+                      "is_bot": {
+                        "type": "boolean"
+                      },
+                      "bot_description": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "create_at",
+                      "update_at",
+                      "delete_at",
+                      "username",
+                      "auth_data",
+                      "auth_service",
+                      "email",
+                      "nickname",
+                      "first_name",
+                      "last_name",
+                      "position",
+                      "roles",
+                      "locale",
+                      "timezone",
+                      "notify_props",
+                      "last_picture_update",
+                      "is_bot",
+                      "bot_description"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "$defs": {
+                    "__schema0": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/users/{user_id}/patch": {
+      "put": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "nickname": {
+                    "type": "string"
+                  },
+                  "first_name": {
+                    "type": "string"
+                  },
+                  "last_name": {
+                    "type": "string"
+                  },
+                  "position": {
+                    "type": "string"
+                  },
+                  "locale": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "create_at": {
+                      "type": "number"
+                    },
+                    "update_at": {
+                      "type": "number"
+                    },
+                    "delete_at": {
+                      "type": "number"
+                    },
+                    "username": {
+                      "type": "string"
+                    },
+                    "auth_data": {
+                      "type": "string",
+                      "const": ""
+                    },
+                    "auth_service": {
+                      "type": "string"
+                    },
+                    "email": {
+                      "type": "string"
+                    },
+                    "nickname": {
+                      "type": "string"
+                    },
+                    "first_name": {
+                      "type": "string"
+                    },
+                    "last_name": {
+                      "type": "string"
+                    },
+                    "position": {
+                      "type": "string"
+                    },
+                    "roles": {
+                      "type": "string"
+                    },
+                    "locale": {
+                      "type": "string"
+                    },
+                    "timezone": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/$defs/__schema0"
+                      }
+                    },
+                    "notify_props": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/$defs/__schema0"
+                      }
+                    },
+                    "last_picture_update": {
+                      "type": "number"
+                    },
+                    "is_bot": {
+                      "type": "boolean"
+                    },
+                    "bot_description": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "create_at",
+                    "update_at",
+                    "delete_at",
+                    "username",
+                    "auth_data",
+                    "auth_service",
+                    "email",
+                    "nickname",
+                    "first_name",
+                    "last_name",
+                    "position",
+                    "roles",
+                    "locale",
+                    "timezone",
+                    "notify_props",
+                    "last_picture_update",
+                    "is_bot",
+                    "bot_description"
+                  ],
+                  "additionalProperties": false,
+                  "$defs": {
+                    "__schema0": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/users/{user_id}/image": {
+      "post": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "update_at": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "update_at"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "OK"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/teams/{team_id}/channels": {
+      "get": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "create_at": {
+                        "type": "number"
+                      },
+                      "update_at": {
+                        "type": "number"
+                      },
+                      "delete_at": {
+                        "type": "number"
+                      },
+                      "team_id": {
+                        "type": "string"
+                      },
+                      "type": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "const": "O"
+                          },
+                          {
+                            "type": "string",
+                            "const": "P"
+                          },
+                          {
+                            "type": "string",
+                            "const": "D"
+                          },
+                          {
+                            "type": "string",
+                            "const": "G"
+                          }
+                        ]
+                      },
+                      "display_name": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "header": {
+                        "type": "string"
+                      },
+                      "purpose": {
+                        "type": "string"
+                      },
+                      "last_post_at": {
+                        "type": "number"
+                      },
+                      "total_msg_count": {
+                        "type": "number"
+                      },
+                      "extra_update_at": {
+                        "type": "number"
+                      },
+                      "creator_id": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "create_at",
+                      "update_at",
+                      "delete_at",
+                      "team_id",
+                      "type",
+                      "display_name",
+                      "name",
+                      "header",
+                      "purpose",
+                      "last_post_at",
+                      "total_msg_count",
+                      "extra_update_at",
+                      "creator_id"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/channels": {
+      "post": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "team_id": {
+                    "default": "",
+                    "type": "string"
+                  },
+                  "name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "display_name": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "type": {
+                    "default": "O",
+                    "type": "string",
+                    "enum": [
+                      "O",
+                      "P",
+                      "D",
+                      "G"
+                    ]
+                  },
+                  "header": {
+                    "default": "",
+                    "type": "string"
+                  },
+                  "purpose": {
+                    "default": "",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name",
+                  "display_name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "create_at": {
+                      "type": "number"
+                    },
+                    "update_at": {
+                      "type": "number"
+                    },
+                    "delete_at": {
+                      "type": "number"
+                    },
+                    "team_id": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "O"
+                        },
+                        {
+                          "type": "string",
+                          "const": "P"
+                        },
+                        {
+                          "type": "string",
+                          "const": "D"
+                        },
+                        {
+                          "type": "string",
+                          "const": "G"
+                        }
+                      ]
+                    },
+                    "display_name": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "header": {
+                      "type": "string"
+                    },
+                    "purpose": {
+                      "type": "string"
+                    },
+                    "last_post_at": {
+                      "type": "number"
+                    },
+                    "total_msg_count": {
+                      "type": "number"
+                    },
+                    "extra_update_at": {
+                      "type": "number"
+                    },
+                    "creator_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "create_at",
+                    "update_at",
+                    "delete_at",
+                    "team_id",
+                    "type",
+                    "display_name",
+                    "name",
+                    "header",
+                    "purpose",
+                    "last_post_at",
+                    "total_msg_count",
+                    "extra_update_at",
+                    "creator_id"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/channels/direct": {
+      "post": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "create_at": {
+                      "type": "number"
+                    },
+                    "update_at": {
+                      "type": "number"
+                    },
+                    "delete_at": {
+                      "type": "number"
+                    },
+                    "team_id": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "O"
+                        },
+                        {
+                          "type": "string",
+                          "const": "P"
+                        },
+                        {
+                          "type": "string",
+                          "const": "D"
+                        },
+                        {
+                          "type": "string",
+                          "const": "G"
+                        }
+                      ]
+                    },
+                    "display_name": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "header": {
+                      "type": "string"
+                    },
+                    "purpose": {
+                      "type": "string"
+                    },
+                    "last_post_at": {
+                      "type": "number"
+                    },
+                    "total_msg_count": {
+                      "type": "number"
+                    },
+                    "extra_update_at": {
+                      "type": "number"
+                    },
+                    "creator_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "create_at",
+                    "update_at",
+                    "delete_at",
+                    "team_id",
+                    "type",
+                    "display_name",
+                    "name",
+                    "header",
+                    "purpose",
+                    "last_post_at",
+                    "total_msg_count",
+                    "extra_update_at",
+                    "creator_id"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/channels/group": {
+      "post": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "minItems": 1,
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "create_at": {
+                      "type": "number"
+                    },
+                    "update_at": {
+                      "type": "number"
+                    },
+                    "delete_at": {
+                      "type": "number"
+                    },
+                    "team_id": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "O"
+                        },
+                        {
+                          "type": "string",
+                          "const": "P"
+                        },
+                        {
+                          "type": "string",
+                          "const": "D"
+                        },
+                        {
+                          "type": "string",
+                          "const": "G"
+                        }
+                      ]
+                    },
+                    "display_name": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "header": {
+                      "type": "string"
+                    },
+                    "purpose": {
+                      "type": "string"
+                    },
+                    "last_post_at": {
+                      "type": "number"
+                    },
+                    "total_msg_count": {
+                      "type": "number"
+                    },
+                    "extra_update_at": {
+                      "type": "number"
+                    },
+                    "creator_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "create_at",
+                    "update_at",
+                    "delete_at",
+                    "team_id",
+                    "type",
+                    "display_name",
+                    "name",
+                    "header",
+                    "purpose",
+                    "last_post_at",
+                    "total_msg_count",
+                    "extra_update_at",
+                    "creator_id"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/channels/{channel_id}/patch": {
+      "put": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "display_name": {
+                    "type": "string"
+                  },
+                  "header": {
+                    "type": "string"
+                  },
+                  "purpose": {
+                    "type": "string"
+                  },
+                  "retention_days": {
+                    "anyOf": [
+                      {
+                        "type": "integer",
+                        "exclusiveMinimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "create_at": {
+                      "type": "number"
+                    },
+                    "update_at": {
+                      "type": "number"
+                    },
+                    "delete_at": {
+                      "type": "number"
+                    },
+                    "team_id": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "O"
+                        },
+                        {
+                          "type": "string",
+                          "const": "P"
+                        },
+                        {
+                          "type": "string",
+                          "const": "D"
+                        },
+                        {
+                          "type": "string",
+                          "const": "G"
+                        }
+                      ]
+                    },
+                    "display_name": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "header": {
+                      "type": "string"
+                    },
+                    "purpose": {
+                      "type": "string"
+                    },
+                    "last_post_at": {
+                      "type": "number"
+                    },
+                    "total_msg_count": {
+                      "type": "number"
+                    },
+                    "extra_update_at": {
+                      "type": "number"
+                    },
+                    "creator_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "create_at",
+                    "update_at",
+                    "delete_at",
+                    "team_id",
+                    "type",
+                    "display_name",
+                    "name",
+                    "header",
+                    "purpose",
+                    "last_post_at",
+                    "total_msg_count",
+                    "extra_update_at",
+                    "creator_id"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/channels/{channel_id}": {
+      "delete": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "create_at": {
+                      "type": "number"
+                    },
+                    "update_at": {
+                      "type": "number"
+                    },
+                    "delete_at": {
+                      "type": "number"
+                    },
+                    "team_id": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "const": "O"
+                        },
+                        {
+                          "type": "string",
+                          "const": "P"
+                        },
+                        {
+                          "type": "string",
+                          "const": "D"
+                        },
+                        {
+                          "type": "string",
+                          "const": "G"
+                        }
+                      ]
+                    },
+                    "display_name": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "header": {
+                      "type": "string"
+                    },
+                    "purpose": {
+                      "type": "string"
+                    },
+                    "last_post_at": {
+                      "type": "number"
+                    },
+                    "total_msg_count": {
+                      "type": "number"
+                    },
+                    "extra_update_at": {
+                      "type": "number"
+                    },
+                    "creator_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "create_at",
+                    "update_at",
+                    "delete_at",
+                    "team_id",
+                    "type",
+                    "display_name",
+                    "name",
+                    "header",
+                    "purpose",
+                    "last_post_at",
+                    "total_msg_count",
+                    "extra_update_at",
+                    "creator_id"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/channels/{channel_id}/posts": {
+      "get": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "order": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "posts": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "create_at": {
+                            "type": "number"
+                          },
+                          "update_at": {
+                            "type": "number"
+                          },
+                          "edit_at": {
+                            "type": "number"
+                          },
+                          "delete_at": {
+                            "type": "number"
+                          },
+                          "is_pinned": {
+                            "type": "boolean"
+                          },
+                          "user_id": {
+                            "type": "string"
+                          },
+                          "channel_id": {
+                            "type": "string"
+                          },
+                          "root_id": {
+                            "type": "string"
+                          },
+                          "original_id": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          },
+                          "props": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "$ref": "#/$defs/__schema0"
+                            }
+                          },
+                          "hashtags": {
+                            "type": "string"
+                          },
+                          "file_ids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "pending_post_id": {
+                            "type": "string"
+                          },
+                          "reply_count": {
+                            "type": "number"
+                          },
+                          "last_reply_at": {
+                            "type": "number"
+                          },
+                          "participants": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "create_at": {
+                                  "type": "number"
+                                },
+                                "update_at": {
+                                  "type": "number"
+                                },
+                                "delete_at": {
+                                  "type": "number"
+                                },
+                                "username": {
+                                  "type": "string"
+                                },
+                                "auth_data": {
+                                  "type": "string",
+                                  "const": ""
+                                },
+                                "auth_service": {
+                                  "type": "string"
+                                },
+                                "email": {
+                                  "type": "string"
+                                },
+                                "nickname": {
+                                  "type": "string"
+                                },
+                                "first_name": {
+                                  "type": "string"
+                                },
+                                "last_name": {
+                                  "type": "string"
+                                },
+                                "position": {
+                                  "type": "string"
+                                },
+                                "roles": {
+                                  "type": "string"
+                                },
+                                "locale": {
+                                  "type": "string"
+                                },
+                                "timezone": {
+                                  "type": "object",
+                                  "propertyNames": {
+                                    "type": "string"
+                                  },
+                                  "additionalProperties": {
+                                    "$ref": "#/$defs/__schema0"
+                                  }
+                                },
+                                "notify_props": {
+                                  "type": "object",
+                                  "propertyNames": {
+                                    "type": "string"
+                                  },
+                                  "additionalProperties": {
+                                    "$ref": "#/$defs/__schema0"
+                                  }
+                                },
+                                "last_picture_update": {
+                                  "type": "number"
+                                },
+                                "is_bot": {
+                                  "type": "boolean"
+                                },
+                                "bot_description": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "create_at",
+                                "update_at",
+                                "delete_at",
+                                "username",
+                                "auth_data",
+                                "auth_service",
+                                "email",
+                                "nickname",
+                                "first_name",
+                                "last_name",
+                                "position",
+                                "roles",
+                                "locale",
+                                "timezone",
+                                "notify_props",
+                                "last_picture_update",
+                                "is_bot",
+                                "bot_description"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "metadata": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "$ref": "#/$defs/__schema0"
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "create_at",
+                          "update_at",
+                          "edit_at",
+                          "delete_at",
+                          "is_pinned",
+                          "user_id",
+                          "channel_id",
+                          "root_id",
+                          "original_id",
+                          "message",
+                          "type",
+                          "props",
+                          "hashtags",
+                          "file_ids",
+                          "pending_post_id",
+                          "reply_count",
+                          "last_reply_at",
+                          "participants",
+                          "metadata"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "next_post_id": {
+                      "type": "string"
+                    },
+                    "prev_post_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "order",
+                    "posts",
+                    "next_post_id",
+                    "prev_post_id"
+                  ],
+                  "additionalProperties": false,
+                  "$defs": {
+                    "__schema0": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/channels/{channel_id}/pinned": {
+      "get": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "order": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "posts": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "create_at": {
+                            "type": "number"
+                          },
+                          "update_at": {
+                            "type": "number"
+                          },
+                          "edit_at": {
+                            "type": "number"
+                          },
+                          "delete_at": {
+                            "type": "number"
+                          },
+                          "is_pinned": {
+                            "type": "boolean"
+                          },
+                          "user_id": {
+                            "type": "string"
+                          },
+                          "channel_id": {
+                            "type": "string"
+                          },
+                          "root_id": {
+                            "type": "string"
+                          },
+                          "original_id": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          },
+                          "props": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "$ref": "#/$defs/__schema0"
+                            }
+                          },
+                          "hashtags": {
+                            "type": "string"
+                          },
+                          "file_ids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "pending_post_id": {
+                            "type": "string"
+                          },
+                          "reply_count": {
+                            "type": "number"
+                          },
+                          "last_reply_at": {
+                            "type": "number"
+                          },
+                          "participants": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "create_at": {
+                                  "type": "number"
+                                },
+                                "update_at": {
+                                  "type": "number"
+                                },
+                                "delete_at": {
+                                  "type": "number"
+                                },
+                                "username": {
+                                  "type": "string"
+                                },
+                                "auth_data": {
+                                  "type": "string",
+                                  "const": ""
+                                },
+                                "auth_service": {
+                                  "type": "string"
+                                },
+                                "email": {
+                                  "type": "string"
+                                },
+                                "nickname": {
+                                  "type": "string"
+                                },
+                                "first_name": {
+                                  "type": "string"
+                                },
+                                "last_name": {
+                                  "type": "string"
+                                },
+                                "position": {
+                                  "type": "string"
+                                },
+                                "roles": {
+                                  "type": "string"
+                                },
+                                "locale": {
+                                  "type": "string"
+                                },
+                                "timezone": {
+                                  "type": "object",
+                                  "propertyNames": {
+                                    "type": "string"
+                                  },
+                                  "additionalProperties": {
+                                    "$ref": "#/$defs/__schema0"
+                                  }
+                                },
+                                "notify_props": {
+                                  "type": "object",
+                                  "propertyNames": {
+                                    "type": "string"
+                                  },
+                                  "additionalProperties": {
+                                    "$ref": "#/$defs/__schema0"
+                                  }
+                                },
+                                "last_picture_update": {
+                                  "type": "number"
+                                },
+                                "is_bot": {
+                                  "type": "boolean"
+                                },
+                                "bot_description": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "create_at",
+                                "update_at",
+                                "delete_at",
+                                "username",
+                                "auth_data",
+                                "auth_service",
+                                "email",
+                                "nickname",
+                                "first_name",
+                                "last_name",
+                                "position",
+                                "roles",
+                                "locale",
+                                "timezone",
+                                "notify_props",
+                                "last_picture_update",
+                                "is_bot",
+                                "bot_description"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "metadata": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "$ref": "#/$defs/__schema0"
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "create_at",
+                          "update_at",
+                          "edit_at",
+                          "delete_at",
+                          "is_pinned",
+                          "user_id",
+                          "channel_id",
+                          "root_id",
+                          "original_id",
+                          "message",
+                          "type",
+                          "props",
+                          "hashtags",
+                          "file_ids",
+                          "pending_post_id",
+                          "reply_count",
+                          "last_reply_at",
+                          "participants",
+                          "metadata"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "next_post_id": {
+                      "type": "string"
+                    },
+                    "prev_post_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "order",
+                    "posts",
+                    "next_post_id",
+                    "prev_post_id"
+                  ],
+                  "additionalProperties": false,
+                  "$defs": {
+                    "__schema0": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/channels/{channel_id}/members": {
+      "get": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "channel_id": {
+                        "type": "string"
+                      },
+                      "user_id": {
+                        "type": "string"
+                      },
+                      "roles": {
+                        "type": "string"
+                      },
+                      "last_viewed_at": {
+                        "type": "number"
+                      },
+                      "msg_count": {
+                        "type": "number"
+                      },
+                      "mention_count": {
+                        "type": "number"
+                      },
+                      "notify_props": {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "$ref": "#/$defs/__schema0"
+                        }
+                      },
+                      "last_update_at": {
+                        "type": "number"
+                      },
+                      "scheme_user": {
+                        "type": "boolean"
+                      },
+                      "scheme_admin": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "channel_id",
+                      "user_id",
+                      "roles",
+                      "last_viewed_at",
+                      "msg_count",
+                      "mention_count",
+                      "notify_props",
+                      "last_update_at",
+                      "scheme_user",
+                      "scheme_admin"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "$defs": {
+                    "__schema0": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "user_id": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "user_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "channel_id": {
+                      "type": "string"
+                    },
+                    "user_id": {
+                      "type": "string"
+                    },
+                    "roles": {
+                      "type": "string"
+                    },
+                    "last_viewed_at": {
+                      "type": "number"
+                    },
+                    "msg_count": {
+                      "type": "number"
+                    },
+                    "mention_count": {
+                      "type": "number"
+                    },
+                    "notify_props": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/$defs/__schema0"
+                      }
+                    },
+                    "last_update_at": {
+                      "type": "number"
+                    },
+                    "scheme_user": {
+                      "type": "boolean"
+                    },
+                    "scheme_admin": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "channel_id",
+                    "user_id",
+                    "roles",
+                    "last_viewed_at",
+                    "msg_count",
+                    "mention_count",
+                    "notify_props",
+                    "last_update_at",
+                    "scheme_user",
+                    "scheme_admin"
+                  ],
+                  "additionalProperties": false,
+                  "$defs": {
+                    "__schema0": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/channels/{channel_id}/members/{user_id}": {
+      "delete": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "OK"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/channels/{channel_id}/agent-policy": {
+      "get": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "$ref": "#/$defs/__schema0"
+                  },
+                  "$defs": {
+                    "__schema0": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/__schema0"
+                },
+                "$defs": {
+                  "__schema0": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      },
+                      {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/__schema0"
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {
+                          "$ref": "#/$defs/__schema0"
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "$ref": "#/$defs/__schema0"
+                  },
+                  "$defs": {
+                    "__schema0": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/channels/members/{user_id}/view": {
+      "post": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "channel_id": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "channel_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "OK"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/posts/{post_id}/thread": {
+      "get": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "order": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "posts": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "create_at": {
+                            "type": "number"
+                          },
+                          "update_at": {
+                            "type": "number"
+                          },
+                          "edit_at": {
+                            "type": "number"
+                          },
+                          "delete_at": {
+                            "type": "number"
+                          },
+                          "is_pinned": {
+                            "type": "boolean"
+                          },
+                          "user_id": {
+                            "type": "string"
+                          },
+                          "channel_id": {
+                            "type": "string"
+                          },
+                          "root_id": {
+                            "type": "string"
+                          },
+                          "original_id": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          },
+                          "props": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "$ref": "#/$defs/__schema0"
+                            }
+                          },
+                          "hashtags": {
+                            "type": "string"
+                          },
+                          "file_ids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "pending_post_id": {
+                            "type": "string"
+                          },
+                          "reply_count": {
+                            "type": "number"
+                          },
+                          "last_reply_at": {
+                            "type": "number"
+                          },
+                          "participants": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "create_at": {
+                                  "type": "number"
+                                },
+                                "update_at": {
+                                  "type": "number"
+                                },
+                                "delete_at": {
+                                  "type": "number"
+                                },
+                                "username": {
+                                  "type": "string"
+                                },
+                                "auth_data": {
+                                  "type": "string",
+                                  "const": ""
+                                },
+                                "auth_service": {
+                                  "type": "string"
+                                },
+                                "email": {
+                                  "type": "string"
+                                },
+                                "nickname": {
+                                  "type": "string"
+                                },
+                                "first_name": {
+                                  "type": "string"
+                                },
+                                "last_name": {
+                                  "type": "string"
+                                },
+                                "position": {
+                                  "type": "string"
+                                },
+                                "roles": {
+                                  "type": "string"
+                                },
+                                "locale": {
+                                  "type": "string"
+                                },
+                                "timezone": {
+                                  "type": "object",
+                                  "propertyNames": {
+                                    "type": "string"
+                                  },
+                                  "additionalProperties": {
+                                    "$ref": "#/$defs/__schema0"
+                                  }
+                                },
+                                "notify_props": {
+                                  "type": "object",
+                                  "propertyNames": {
+                                    "type": "string"
+                                  },
+                                  "additionalProperties": {
+                                    "$ref": "#/$defs/__schema0"
+                                  }
+                                },
+                                "last_picture_update": {
+                                  "type": "number"
+                                },
+                                "is_bot": {
+                                  "type": "boolean"
+                                },
+                                "bot_description": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "create_at",
+                                "update_at",
+                                "delete_at",
+                                "username",
+                                "auth_data",
+                                "auth_service",
+                                "email",
+                                "nickname",
+                                "first_name",
+                                "last_name",
+                                "position",
+                                "roles",
+                                "locale",
+                                "timezone",
+                                "notify_props",
+                                "last_picture_update",
+                                "is_bot",
+                                "bot_description"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "metadata": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "$ref": "#/$defs/__schema0"
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "create_at",
+                          "update_at",
+                          "edit_at",
+                          "delete_at",
+                          "is_pinned",
+                          "user_id",
+                          "channel_id",
+                          "root_id",
+                          "original_id",
+                          "message",
+                          "type",
+                          "props",
+                          "hashtags",
+                          "file_ids",
+                          "pending_post_id",
+                          "reply_count",
+                          "last_reply_at",
+                          "participants",
+                          "metadata"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "next_post_id": {
+                      "type": "string"
+                    },
+                    "prev_post_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "order",
+                    "posts",
+                    "next_post_id",
+                    "prev_post_id"
+                  ],
+                  "additionalProperties": false,
+                  "$defs": {
+                    "__schema0": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/posts/search": {
+      "post": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "terms": {
+                    "default": "",
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "order": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "posts": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "create_at": {
+                            "type": "number"
+                          },
+                          "update_at": {
+                            "type": "number"
+                          },
+                          "edit_at": {
+                            "type": "number"
+                          },
+                          "delete_at": {
+                            "type": "number"
+                          },
+                          "is_pinned": {
+                            "type": "boolean"
+                          },
+                          "user_id": {
+                            "type": "string"
+                          },
+                          "channel_id": {
+                            "type": "string"
+                          },
+                          "root_id": {
+                            "type": "string"
+                          },
+                          "original_id": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "type": {
+                            "type": "string"
+                          },
+                          "props": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "$ref": "#/$defs/__schema0"
+                            }
+                          },
+                          "hashtags": {
+                            "type": "string"
+                          },
+                          "file_ids": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "pending_post_id": {
+                            "type": "string"
+                          },
+                          "reply_count": {
+                            "type": "number"
+                          },
+                          "last_reply_at": {
+                            "type": "number"
+                          },
+                          "participants": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "id": {
+                                  "type": "string"
+                                },
+                                "create_at": {
+                                  "type": "number"
+                                },
+                                "update_at": {
+                                  "type": "number"
+                                },
+                                "delete_at": {
+                                  "type": "number"
+                                },
+                                "username": {
+                                  "type": "string"
+                                },
+                                "auth_data": {
+                                  "type": "string",
+                                  "const": ""
+                                },
+                                "auth_service": {
+                                  "type": "string"
+                                },
+                                "email": {
+                                  "type": "string"
+                                },
+                                "nickname": {
+                                  "type": "string"
+                                },
+                                "first_name": {
+                                  "type": "string"
+                                },
+                                "last_name": {
+                                  "type": "string"
+                                },
+                                "position": {
+                                  "type": "string"
+                                },
+                                "roles": {
+                                  "type": "string"
+                                },
+                                "locale": {
+                                  "type": "string"
+                                },
+                                "timezone": {
+                                  "type": "object",
+                                  "propertyNames": {
+                                    "type": "string"
+                                  },
+                                  "additionalProperties": {
+                                    "$ref": "#/$defs/__schema0"
+                                  }
+                                },
+                                "notify_props": {
+                                  "type": "object",
+                                  "propertyNames": {
+                                    "type": "string"
+                                  },
+                                  "additionalProperties": {
+                                    "$ref": "#/$defs/__schema0"
+                                  }
+                                },
+                                "last_picture_update": {
+                                  "type": "number"
+                                },
+                                "is_bot": {
+                                  "type": "boolean"
+                                },
+                                "bot_description": {
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "id",
+                                "create_at",
+                                "update_at",
+                                "delete_at",
+                                "username",
+                                "auth_data",
+                                "auth_service",
+                                "email",
+                                "nickname",
+                                "first_name",
+                                "last_name",
+                                "position",
+                                "roles",
+                                "locale",
+                                "timezone",
+                                "notify_props",
+                                "last_picture_update",
+                                "is_bot",
+                                "bot_description"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "metadata": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "$ref": "#/$defs/__schema0"
+                            }
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "create_at",
+                          "update_at",
+                          "edit_at",
+                          "delete_at",
+                          "is_pinned",
+                          "user_id",
+                          "channel_id",
+                          "root_id",
+                          "original_id",
+                          "message",
+                          "type",
+                          "props",
+                          "hashtags",
+                          "file_ids",
+                          "pending_post_id",
+                          "reply_count",
+                          "last_reply_at",
+                          "participants",
+                          "metadata"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "next_post_id": {
+                      "type": "string"
+                    },
+                    "prev_post_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "order",
+                    "posts",
+                    "next_post_id",
+                    "prev_post_id"
+                  ],
+                  "additionalProperties": false,
+                  "$defs": {
+                    "__schema0": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/posts": {
+      "post": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "channel_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "message": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 16383
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "root_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "file_ids": {
+                    "anyOf": [
+                      {
+                        "maxItems": 10,
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "pending_post_id": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "props": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "propertyNames": {
+                          "type": "string"
+                        },
+                        "additionalProperties": {}
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "channel_id"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "create_at": {
+                      "type": "number"
+                    },
+                    "update_at": {
+                      "type": "number"
+                    },
+                    "edit_at": {
+                      "type": "number"
+                    },
+                    "delete_at": {
+                      "type": "number"
+                    },
+                    "is_pinned": {
+                      "type": "boolean"
+                    },
+                    "user_id": {
+                      "type": "string"
+                    },
+                    "channel_id": {
+                      "type": "string"
+                    },
+                    "root_id": {
+                      "type": "string"
+                    },
+                    "original_id": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "props": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/$defs/__schema0"
+                      }
+                    },
+                    "hashtags": {
+                      "type": "string"
+                    },
+                    "file_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "pending_post_id": {
+                      "type": "string"
+                    },
+                    "reply_count": {
+                      "type": "number"
+                    },
+                    "last_reply_at": {
+                      "type": "number"
+                    },
+                    "participants": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "create_at": {
+                            "type": "number"
+                          },
+                          "update_at": {
+                            "type": "number"
+                          },
+                          "delete_at": {
+                            "type": "number"
+                          },
+                          "username": {
+                            "type": "string"
+                          },
+                          "auth_data": {
+                            "type": "string",
+                            "const": ""
+                          },
+                          "auth_service": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          },
+                          "nickname": {
+                            "type": "string"
+                          },
+                          "first_name": {
+                            "type": "string"
+                          },
+                          "last_name": {
+                            "type": "string"
+                          },
+                          "position": {
+                            "type": "string"
+                          },
+                          "roles": {
+                            "type": "string"
+                          },
+                          "locale": {
+                            "type": "string"
+                          },
+                          "timezone": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "$ref": "#/$defs/__schema0"
+                            }
+                          },
+                          "notify_props": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "$ref": "#/$defs/__schema0"
+                            }
+                          },
+                          "last_picture_update": {
+                            "type": "number"
+                          },
+                          "is_bot": {
+                            "type": "boolean"
+                          },
+                          "bot_description": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "create_at",
+                          "update_at",
+                          "delete_at",
+                          "username",
+                          "auth_data",
+                          "auth_service",
+                          "email",
+                          "nickname",
+                          "first_name",
+                          "last_name",
+                          "position",
+                          "roles",
+                          "locale",
+                          "timezone",
+                          "notify_props",
+                          "last_picture_update",
+                          "is_bot",
+                          "bot_description"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "metadata": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/$defs/__schema0"
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "create_at",
+                    "update_at",
+                    "edit_at",
+                    "delete_at",
+                    "is_pinned",
+                    "user_id",
+                    "channel_id",
+                    "root_id",
+                    "original_id",
+                    "message",
+                    "type",
+                    "props",
+                    "hashtags",
+                    "file_ids",
+                    "pending_post_id",
+                    "reply_count",
+                    "last_reply_at",
+                    "participants",
+                    "metadata"
+                  ],
+                  "additionalProperties": false,
+                  "$defs": {
+                    "__schema0": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/posts/{post_id}/patch": {
+      "put": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "message": {
+                    "type": "string",
+                    "maxLength": 16383
+                  },
+                  "is_pinned": {
+                    "type": "boolean"
+                  },
+                  "file_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "create_at": {
+                      "type": "number"
+                    },
+                    "update_at": {
+                      "type": "number"
+                    },
+                    "edit_at": {
+                      "type": "number"
+                    },
+                    "delete_at": {
+                      "type": "number"
+                    },
+                    "is_pinned": {
+                      "type": "boolean"
+                    },
+                    "user_id": {
+                      "type": "string"
+                    },
+                    "channel_id": {
+                      "type": "string"
+                    },
+                    "root_id": {
+                      "type": "string"
+                    },
+                    "original_id": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "props": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/$defs/__schema0"
+                      }
+                    },
+                    "hashtags": {
+                      "type": "string"
+                    },
+                    "file_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "pending_post_id": {
+                      "type": "string"
+                    },
+                    "reply_count": {
+                      "type": "number"
+                    },
+                    "last_reply_at": {
+                      "type": "number"
+                    },
+                    "participants": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "create_at": {
+                            "type": "number"
+                          },
+                          "update_at": {
+                            "type": "number"
+                          },
+                          "delete_at": {
+                            "type": "number"
+                          },
+                          "username": {
+                            "type": "string"
+                          },
+                          "auth_data": {
+                            "type": "string",
+                            "const": ""
+                          },
+                          "auth_service": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          },
+                          "nickname": {
+                            "type": "string"
+                          },
+                          "first_name": {
+                            "type": "string"
+                          },
+                          "last_name": {
+                            "type": "string"
+                          },
+                          "position": {
+                            "type": "string"
+                          },
+                          "roles": {
+                            "type": "string"
+                          },
+                          "locale": {
+                            "type": "string"
+                          },
+                          "timezone": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "$ref": "#/$defs/__schema0"
+                            }
+                          },
+                          "notify_props": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "$ref": "#/$defs/__schema0"
+                            }
+                          },
+                          "last_picture_update": {
+                            "type": "number"
+                          },
+                          "is_bot": {
+                            "type": "boolean"
+                          },
+                          "bot_description": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "create_at",
+                          "update_at",
+                          "delete_at",
+                          "username",
+                          "auth_data",
+                          "auth_service",
+                          "email",
+                          "nickname",
+                          "first_name",
+                          "last_name",
+                          "position",
+                          "roles",
+                          "locale",
+                          "timezone",
+                          "notify_props",
+                          "last_picture_update",
+                          "is_bot",
+                          "bot_description"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "metadata": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/$defs/__schema0"
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "create_at",
+                    "update_at",
+                    "edit_at",
+                    "delete_at",
+                    "is_pinned",
+                    "user_id",
+                    "channel_id",
+                    "root_id",
+                    "original_id",
+                    "message",
+                    "type",
+                    "props",
+                    "hashtags",
+                    "file_ids",
+                    "pending_post_id",
+                    "reply_count",
+                    "last_reply_at",
+                    "participants",
+                    "metadata"
+                  ],
+                  "additionalProperties": false,
+                  "$defs": {
+                    "__schema0": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/posts/{post_id}": {
+      "delete": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "create_at": {
+                      "type": "number"
+                    },
+                    "update_at": {
+                      "type": "number"
+                    },
+                    "edit_at": {
+                      "type": "number"
+                    },
+                    "delete_at": {
+                      "type": "number"
+                    },
+                    "is_pinned": {
+                      "type": "boolean"
+                    },
+                    "user_id": {
+                      "type": "string"
+                    },
+                    "channel_id": {
+                      "type": "string"
+                    },
+                    "root_id": {
+                      "type": "string"
+                    },
+                    "original_id": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "props": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/$defs/__schema0"
+                      }
+                    },
+                    "hashtags": {
+                      "type": "string"
+                    },
+                    "file_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "pending_post_id": {
+                      "type": "string"
+                    },
+                    "reply_count": {
+                      "type": "number"
+                    },
+                    "last_reply_at": {
+                      "type": "number"
+                    },
+                    "participants": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "create_at": {
+                            "type": "number"
+                          },
+                          "update_at": {
+                            "type": "number"
+                          },
+                          "delete_at": {
+                            "type": "number"
+                          },
+                          "username": {
+                            "type": "string"
+                          },
+                          "auth_data": {
+                            "type": "string",
+                            "const": ""
+                          },
+                          "auth_service": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          },
+                          "nickname": {
+                            "type": "string"
+                          },
+                          "first_name": {
+                            "type": "string"
+                          },
+                          "last_name": {
+                            "type": "string"
+                          },
+                          "position": {
+                            "type": "string"
+                          },
+                          "roles": {
+                            "type": "string"
+                          },
+                          "locale": {
+                            "type": "string"
+                          },
+                          "timezone": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "$ref": "#/$defs/__schema0"
+                            }
+                          },
+                          "notify_props": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "$ref": "#/$defs/__schema0"
+                            }
+                          },
+                          "last_picture_update": {
+                            "type": "number"
+                          },
+                          "is_bot": {
+                            "type": "boolean"
+                          },
+                          "bot_description": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "create_at",
+                          "update_at",
+                          "delete_at",
+                          "username",
+                          "auth_data",
+                          "auth_service",
+                          "email",
+                          "nickname",
+                          "first_name",
+                          "last_name",
+                          "position",
+                          "roles",
+                          "locale",
+                          "timezone",
+                          "notify_props",
+                          "last_picture_update",
+                          "is_bot",
+                          "bot_description"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "metadata": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/$defs/__schema0"
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "create_at",
+                    "update_at",
+                    "edit_at",
+                    "delete_at",
+                    "is_pinned",
+                    "user_id",
+                    "channel_id",
+                    "root_id",
+                    "original_id",
+                    "message",
+                    "type",
+                    "props",
+                    "hashtags",
+                    "file_ids",
+                    "pending_post_id",
+                    "reply_count",
+                    "last_reply_at",
+                    "participants",
+                    "metadata"
+                  ],
+                  "additionalProperties": false,
+                  "$defs": {
+                    "__schema0": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/posts/{post_id}/pin": {
+      "post": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "create_at": {
+                      "type": "number"
+                    },
+                    "update_at": {
+                      "type": "number"
+                    },
+                    "edit_at": {
+                      "type": "number"
+                    },
+                    "delete_at": {
+                      "type": "number"
+                    },
+                    "is_pinned": {
+                      "type": "boolean"
+                    },
+                    "user_id": {
+                      "type": "string"
+                    },
+                    "channel_id": {
+                      "type": "string"
+                    },
+                    "root_id": {
+                      "type": "string"
+                    },
+                    "original_id": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "props": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/$defs/__schema0"
+                      }
+                    },
+                    "hashtags": {
+                      "type": "string"
+                    },
+                    "file_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "pending_post_id": {
+                      "type": "string"
+                    },
+                    "reply_count": {
+                      "type": "number"
+                    },
+                    "last_reply_at": {
+                      "type": "number"
+                    },
+                    "participants": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "create_at": {
+                            "type": "number"
+                          },
+                          "update_at": {
+                            "type": "number"
+                          },
+                          "delete_at": {
+                            "type": "number"
+                          },
+                          "username": {
+                            "type": "string"
+                          },
+                          "auth_data": {
+                            "type": "string",
+                            "const": ""
+                          },
+                          "auth_service": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          },
+                          "nickname": {
+                            "type": "string"
+                          },
+                          "first_name": {
+                            "type": "string"
+                          },
+                          "last_name": {
+                            "type": "string"
+                          },
+                          "position": {
+                            "type": "string"
+                          },
+                          "roles": {
+                            "type": "string"
+                          },
+                          "locale": {
+                            "type": "string"
+                          },
+                          "timezone": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "$ref": "#/$defs/__schema0"
+                            }
+                          },
+                          "notify_props": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "$ref": "#/$defs/__schema0"
+                            }
+                          },
+                          "last_picture_update": {
+                            "type": "number"
+                          },
+                          "is_bot": {
+                            "type": "boolean"
+                          },
+                          "bot_description": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "create_at",
+                          "update_at",
+                          "delete_at",
+                          "username",
+                          "auth_data",
+                          "auth_service",
+                          "email",
+                          "nickname",
+                          "first_name",
+                          "last_name",
+                          "position",
+                          "roles",
+                          "locale",
+                          "timezone",
+                          "notify_props",
+                          "last_picture_update",
+                          "is_bot",
+                          "bot_description"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "metadata": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/$defs/__schema0"
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "create_at",
+                    "update_at",
+                    "edit_at",
+                    "delete_at",
+                    "is_pinned",
+                    "user_id",
+                    "channel_id",
+                    "root_id",
+                    "original_id",
+                    "message",
+                    "type",
+                    "props",
+                    "hashtags",
+                    "file_ids",
+                    "pending_post_id",
+                    "reply_count",
+                    "last_reply_at",
+                    "participants",
+                    "metadata"
+                  ],
+                  "additionalProperties": false,
+                  "$defs": {
+                    "__schema0": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/posts/{post_id}/unpin": {
+      "post": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "create_at": {
+                      "type": "number"
+                    },
+                    "update_at": {
+                      "type": "number"
+                    },
+                    "edit_at": {
+                      "type": "number"
+                    },
+                    "delete_at": {
+                      "type": "number"
+                    },
+                    "is_pinned": {
+                      "type": "boolean"
+                    },
+                    "user_id": {
+                      "type": "string"
+                    },
+                    "channel_id": {
+                      "type": "string"
+                    },
+                    "root_id": {
+                      "type": "string"
+                    },
+                    "original_id": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "props": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/$defs/__schema0"
+                      }
+                    },
+                    "hashtags": {
+                      "type": "string"
+                    },
+                    "file_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "pending_post_id": {
+                      "type": "string"
+                    },
+                    "reply_count": {
+                      "type": "number"
+                    },
+                    "last_reply_at": {
+                      "type": "number"
+                    },
+                    "participants": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "create_at": {
+                            "type": "number"
+                          },
+                          "update_at": {
+                            "type": "number"
+                          },
+                          "delete_at": {
+                            "type": "number"
+                          },
+                          "username": {
+                            "type": "string"
+                          },
+                          "auth_data": {
+                            "type": "string",
+                            "const": ""
+                          },
+                          "auth_service": {
+                            "type": "string"
+                          },
+                          "email": {
+                            "type": "string"
+                          },
+                          "nickname": {
+                            "type": "string"
+                          },
+                          "first_name": {
+                            "type": "string"
+                          },
+                          "last_name": {
+                            "type": "string"
+                          },
+                          "position": {
+                            "type": "string"
+                          },
+                          "roles": {
+                            "type": "string"
+                          },
+                          "locale": {
+                            "type": "string"
+                          },
+                          "timezone": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "$ref": "#/$defs/__schema0"
+                            }
+                          },
+                          "notify_props": {
+                            "type": "object",
+                            "propertyNames": {
+                              "type": "string"
+                            },
+                            "additionalProperties": {
+                              "$ref": "#/$defs/__schema0"
+                            }
+                          },
+                          "last_picture_update": {
+                            "type": "number"
+                          },
+                          "is_bot": {
+                            "type": "boolean"
+                          },
+                          "bot_description": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "create_at",
+                          "update_at",
+                          "delete_at",
+                          "username",
+                          "auth_data",
+                          "auth_service",
+                          "email",
+                          "nickname",
+                          "first_name",
+                          "last_name",
+                          "position",
+                          "roles",
+                          "locale",
+                          "timezone",
+                          "notify_props",
+                          "last_picture_update",
+                          "is_bot",
+                          "bot_description"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "metadata": {
+                      "type": "object",
+                      "propertyNames": {
+                        "type": "string"
+                      },
+                      "additionalProperties": {
+                        "$ref": "#/$defs/__schema0"
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "create_at",
+                    "update_at",
+                    "edit_at",
+                    "delete_at",
+                    "is_pinned",
+                    "user_id",
+                    "channel_id",
+                    "root_id",
+                    "original_id",
+                    "message",
+                    "type",
+                    "props",
+                    "hashtags",
+                    "file_ids",
+                    "pending_post_id",
+                    "reply_count",
+                    "last_reply_at",
+                    "participants",
+                    "metadata"
+                  ],
+                  "additionalProperties": false,
+                  "$defs": {
+                    "__schema0": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "type": "boolean"
+                        },
+                        {
+                          "type": "null"
+                        },
+                        {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        },
+                        {
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "$ref": "#/$defs/__schema0"
+                          }
+                        }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/reactions": {
+      "post": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "post_id": {
+                    "type": "string",
+                    "minLength": 1
+                  },
+                  "emoji_name": {
+                    "type": "string",
+                    "minLength": 1
+                  }
+                },
+                "required": [
+                  "post_id",
+                  "emoji_name"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "user_id": {
+                      "type": "string"
+                    },
+                    "post_id": {
+                      "type": "string"
+                    },
+                    "emoji_name": {
+                      "type": "string"
+                    },
+                    "create_at": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "user_id",
+                    "post_id",
+                    "emoji_name",
+                    "create_at"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/posts/ids/reactions": {
+      "post": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "user_id": {
+                          "type": "string"
+                        },
+                        "post_id": {
+                          "type": "string"
+                        },
+                        "emoji_name": {
+                          "type": "string"
+                        },
+                        "create_at": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "user_id",
+                        "post_id",
+                        "emoji_name",
+                        "create_at"
+                      ],
+                      "additionalProperties": false
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/users/{user_id}/posts/{post_id}/reactions/{emoji_name}": {
+      "delete": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "const": "OK"
+                    }
+                  },
+                  "required": [
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/commands": {
+      "get": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "token": {
+                        "type": "string",
+                        "const": ""
+                      },
+                      "create_at": {
+                        "type": "number"
+                      },
+                      "update_at": {
+                        "type": "number"
+                      },
+                      "delete_at": {
+                        "type": "number"
+                      },
+                      "creator_id": {
+                        "type": "string"
+                      },
+                      "team_id": {
+                        "type": "string"
+                      },
+                      "trigger": {
+                        "type": "string"
+                      },
+                      "method": {
+                        "type": "string"
+                      },
+                      "username": {
+                        "type": "string"
+                      },
+                      "icon_url": {
+                        "type": "string"
+                      },
+                      "auto_complete": {
+                        "type": "boolean"
+                      },
+                      "auto_complete_desc": {
+                        "type": "string"
+                      },
+                      "auto_complete_hint": {
+                        "type": "string"
+                      },
+                      "display_name": {
+                        "type": "string"
+                      },
+                      "description": {
+                        "type": "string"
+                      },
+                      "url": {
+                        "type": "string"
+                      },
+                      "plugin_id": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "token",
+                      "create_at",
+                      "update_at",
+                      "delete_at",
+                      "creator_id",
+                      "team_id",
+                      "trigger",
+                      "method",
+                      "username",
+                      "icon_url",
+                      "auto_complete",
+                      "auto_complete_desc",
+                      "auto_complete_hint",
+                      "display_name",
+                      "description",
+                      "url",
+                      "plugin_id"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/commands/execute": {
+      "post": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "type": "object",
+                "properties": {
+                  "channel_id": {
+                    "type": "string"
+                  },
+                  "command": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "channel_id",
+                  "command"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "response_type": {
+                      "type": "string",
+                      "const": "in_channel"
+                    },
+                    "text": {
+                      "type": "string"
+                    },
+                    "post_id": {
+                      "type": "string"
+                    },
+                    "create_at": {
+                      "type": "number"
+                    }
+                  },
+                  "required": [
+                    "response_type",
+                    "text",
+                    "post_id",
+                    "create_at"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/emoji": {
+      "get": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "emoji": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "name",
+                      "emoji"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/files": {
+      "post": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "file_infos": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "user_id": {
+                            "type": "string"
+                          },
+                          "post_id": {
+                            "type": "string"
+                          },
+                          "channel_id": {
+                            "type": "string"
+                          },
+                          "create_at": {
+                            "type": "number"
+                          },
+                          "update_at": {
+                            "type": "number"
+                          },
+                          "delete_at": {
+                            "type": "number"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "extension": {
+                            "type": "string"
+                          },
+                          "size": {
+                            "type": "number"
+                          },
+                          "mime_type": {
+                            "type": "string"
+                          },
+                          "width": {
+                            "type": "number"
+                          },
+                          "height": {
+                            "type": "number"
+                          },
+                          "has_preview_image": {
+                            "type": "boolean"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "user_id",
+                          "post_id",
+                          "channel_id",
+                          "create_at",
+                          "update_at",
+                          "delete_at",
+                          "name",
+                          "extension",
+                          "size",
+                          "mime_type",
+                          "width",
+                          "height",
+                          "has_preview_image"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "client_ids": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "file_infos"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v4/files/{file_id}/info": {
+      "get": {
+        "security": [
+          {
+            "nativeSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Browser-consumed Mattermost-compatible response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$schema": "https://json-schema.org/draft/2020-12/schema",
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "user_id": {
+                      "type": "string"
+                    },
+                    "post_id": {
+                      "type": "string"
+                    },
+                    "channel_id": {
+                      "type": "string"
+                    },
+                    "create_at": {
+                      "type": "number"
+                    },
+                    "update_at": {
+                      "type": "number"
+                    },
+                    "delete_at": {
+                      "type": "number"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "extension": {
+                      "type": "string"
+                    },
+                    "size": {
+                      "type": "number"
+                    },
+                    "mime_type": {
+                      "type": "string"
+                    },
+                    "width": {
+                      "type": "number"
+                    },
+                    "height": {
+                      "type": "number"
+                    },
+                    "has_preview_image": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "user_id",
+                    "post_id",
+                    "channel_id",
+                    "create_at",
+                    "update_at",
+                    "delete_at",
+                    "name",
+                    "extension",
+                    "size",
+                    "mime_type",
+                    "width",
+                    "height",
+                    "has_preview_image"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,5 +1,8 @@
 # ChatterMost Build Log
 
+- Product-owned immutable browser conversation schemas and OpenAPI snapshots
+  now cover the native routes consumed by shared browser applications.
+
 ## Public source baseline
 
 The public source snapshot includes the TypeScript/Hono application, service and storage layers, database migrations, deployment tools, documentation, and automated checks. Operator-specific deployment records and historical work logs belong in private storage.

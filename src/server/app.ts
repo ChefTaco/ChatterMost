@@ -1,3 +1,4 @@
+import { browserPatchUserSchema as PatchUserSchema, browserChannelCreateSchema as ChannelCreateSchema, browserChannelPatchSchema as ChannelPatchSchema, browserDirectSchema as DirectSchema, browserPostCreateSchema as PostCreateSchema, browserPostPatchSchema as PostPatchSchema, browserPostSearchSchema as PostSearchSchema, browserReactionSchema as ReactionSchema } from "../shared/browser-chat.js";
 import { AuthenticatedRehearsalStore, rehearsalRequestAllowed } from './rehearsal.js';
 import { configuredBrowserOrigins } from './oathweave.js';
 import { createHash, randomUUID } from 'node:crypto';
@@ -117,69 +118,20 @@ const NativeDarkTheme = JSON.stringify({
   mentionHighlightLink: '#a4f4f4',
   codeTheme: 'monokai'
 });
-const PatchUserSchema = z.object({
-  nickname: z.string().optional(),
-  first_name: z.string().optional(),
-  last_name: z.string().optional(),
-  position: z.string().optional(),
-  locale: z.string().optional()
-});
+
 const PasswordSchema = z.object({ new_password: z.string().min(10), current_password: z.string().optional() });
 const InviteSchema = z.object({
   max_uses: z.number().int().positive().optional().default(1),
   expires_in_hours: z.number().int().positive().optional().default(72),
   role: z.string().optional()
 });
-const ChannelCreateSchema = z.object({
-  team_id: z.string().default(''),
-  name: z.string().min(1),
-  display_name: z.string().min(1),
-  type: z.enum(['O', 'P', 'D', 'G']).default('O'),
-  header: z.string().optional().default(''),
-  purpose: z.string().optional().default('')
-});
-const ChannelPatchSchema = z.object({
-  display_name: z.string().optional(),
-  header: z.string().optional(),
-  purpose: z.string().optional(),
-  retention_days: z.number().int().positive().nullable().optional()
-});
-const DirectSchema = z.array(z.string().min(1)).min(1);
-const PostCreateSchema = z.object({
-  channel_id: z.string().min(1),
-  message: z
-    .string()
-    .max(16_383)
-    .nullish()
-    .transform((value) => value ?? ''),
-  root_id: z
-    .string()
-    .nullish()
-    .transform((value) => value ?? ''),
-  file_ids: z
-    .array(z.string())
-    .max(10)
-    .nullish()
-    .transform((value) => value ?? []),
-  pending_post_id: z
-    .string()
-    .nullish()
-    .transform((value) => value ?? ''),
-  props: z
-    .record(z.string(), z.unknown())
-    .nullish()
-    .transform((value) => value ?? {})
-});
-const PostPatchSchema = z.object({
-  message: z.string().max(16_383).optional(),
-  is_pinned: z.boolean().optional(),
-  file_ids: z.array(z.string()).optional()
-});
-const PostSearchSchema = z.object({ terms: z.string().optional().default('') });
-const ReactionSchema = z.object({
-  post_id: z.string().min(1),
-  emoji_name: z.string().min(1)
-});
+
+
+
+
+
+
+
 const CustomEmojiSchema = z.object({
   name: z.string().min(2).max(32),
   emoji: z.string().min(1).max(16)
