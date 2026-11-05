@@ -15,6 +15,16 @@ publish a new version only for an intentional distribution change. Client and
 Hermes instructions live in the [client guide](clients.md),
 [Hermes guide](hermes-compatibility.md) and [agent runbook](../AGENTS.md#installation-runbook-for-agents).
 
+## Unreleased source changes
+
+The API exports browser-safe administration contracts independently of its server
+implementation. Caller-selected bot operation IDs bind credential mutations to
+an administrator and exact inputs. Durable, non-secret receipts survive audit
+outbox compaction and restoration; duplicate requests refuse a second mutation.
+Native clients that omit operation IDs keep their existing protocol. Browser bot
+creation uses an explicit create-only precondition, and token rotation remains a
+separate confirmed action. These source changes do not alter an installed release.
+
 ## Public distribution contract
 
 | Artifact | Meaning |

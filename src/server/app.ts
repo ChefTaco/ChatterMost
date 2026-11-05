@@ -79,7 +79,9 @@ const AdminBotCreateSchema = z.object({
     .string()
     .regex(/^[a-z0-9][a-z0-9._-]*$/u)
     .min(2),
-  display_name: z.string().min(1).max(128)
+  display_name: z.string().min(1).max(128),
+  operation_id: z.string().regex(/^[a-z0-9]{26}$/u).optional(),
+  create_only: z.boolean().optional()
 });
 const AdminBotUpdateSchema = AdminBotCreateSchema;
 const UserSearchSchema = z.object({ term: z.string().max(512).optional().default('') });
@@ -1492,6 +1494,11 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
     return c.json(services.slashCommands.autocompleteSuggestions(c.req.param('team_id'), c.req.query('user_input') ?? ''));
   });
 
+  app.get('/admin/browser-capabilities', async (c) => {
+    c.header('Cache-Control', 'no-store');
+    requireAdmin((await requireAuth(c, services)).user);
+    return c.json({ schema: 1, bot_operation_ids: 'caller-bound-v1' });
+  });
   app.get('/admin/users', async (c) => {
     const auth = await requireAuth(c, services);
     requireAdmin(auth.user);
@@ -1587,9 +1594,10 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
     );
   });
   app.post('/admin/bots', async (c) => {
+    c.header('Cache-Control', 'no-store');
     const auth = await requireAuth(c, services);
     const body = await readJson(c, AdminBotCreateSchema);
-    const result = await services.bots.provision(auth.user, body.username, body.display_name);
+    const result = await services.bots.provision(auth.user, body.username, body.display_name, body.operation_id, body.create_only);
     c.header('X-Operation-ID', result.operationId);
     return c.json(
       {
@@ -1613,7 +1621,8 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
       auth.user,
       c.req.param('user_id'),
       body.username,
-      body.display_name
+      body.display_name,
+      body.operation_id
     );
     c.header('X-Operation-ID', result.operationId);
     return c.json({
@@ -1628,8 +1637,11 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
     });
   });
   app.post('/admin/bots/:user_id/regenerate-token', async (c) => {
+    c.header('Cache-Control', 'no-store');
     const auth = await requireAuth(c, services);
-    const result = await services.bots.regenerateToken(auth.user, c.req.param('user_id'));
+    const operationId = c.req.header('X-Bot-Operation-ID');
+    if (operationId && !/^[a-z0-9]{26}$/u.test(operationId)) throw badRequest('A 26-character operation ID is required');
+    const result = await services.bots.regenerateToken(auth.user, c.req.param('user_id'), operationId);
     c.header('X-Operation-ID', result.operationId);
     return c.json({
       operation_id: result.operationId,

@@ -68,6 +68,7 @@ export function createEmptyState(): StoreState {
     auditSequence: 0,
     auditLogs: [],
     auditOutbox: [],
+    botOperationReceipts: [],
     supervisionPolicy: {
       id: createId(),
       mode: 'audit_only',
@@ -177,6 +178,7 @@ export class JsonStore {
       auditSequence: Math.max(input.auditSequence ?? 0, 0, ...auditLogs.map((record) => record.exportSequence)),
       auditLogs,
       auditOutbox: input.auditOutbox ?? empty.auditOutbox,
+      botOperationReceipts: input.botOperationReceipts ?? empty.botOperationReceipts,
       supervisionPolicy: input.supervisionPolicy ?? empty.supervisionPolicy,
       supervisionEvents: input.supervisionEvents ?? empty.supervisionEvents,
       agentIdentities: input.agentIdentities ?? empty.agentIdentities,
@@ -294,6 +296,7 @@ export class PostgresStore {
       auditSequence: Math.max(input.auditSequence ?? 0, 0, ...auditLogs.map((record) => record.exportSequence)),
       auditLogs,
       auditOutbox: input.auditOutbox ?? empty.auditOutbox,
+      botOperationReceipts: input.botOperationReceipts ?? empty.botOperationReceipts,
       supervisionPolicy: input.supervisionPolicy ?? empty.supervisionPolicy,
       supervisionEvents: input.supervisionEvents ?? empty.supervisionEvents,
       agentIdentities: input.agentIdentities ?? empty.agentIdentities,

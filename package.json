@@ -24,7 +24,8 @@
     "deploy": "bash scripts/deploy.sh",
     "privacy:check": "node scripts/check-privacy.mjs",
     "privacy:test": "node --test tests/privacy/*.test.mjs",
-    "container:test": "python3 -m unittest discover -s tests/container -p 'test_*.py'"
+    "container:test": "python3 -m unittest discover -s tests/container -p 'test_*.py'",
+    "contracts:browser": "tsx scripts/export-browser-contracts.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.0.11",

@@ -274,6 +274,15 @@ export type AuditLogRecord = {
   metadata: JsonRecord;
 };
 
+export type BotOperationReceipt = {
+  operationId: string;
+  actorUserId: string;
+  action: string;
+  inputSHA256: string;
+  targetId: string;
+  createAt: number;
+};
+
 export type AuditOutboxRecord = {
   operationId: string;
   createAt: number;
@@ -380,6 +389,7 @@ export type StoreState = {
   auditSequence: number;
   auditLogs: AuditLogRecord[];
   auditOutbox: AuditOutboxRecord[];
+  botOperationReceipts: BotOperationReceipt[];
   supervisionPolicy: SupervisionPolicyRecord;
   supervisionEvents: SupervisionEventRecord[];
   agentIdentities: AgentIdentityRecord[];

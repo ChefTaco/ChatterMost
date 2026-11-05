@@ -1,3 +1,4 @@
+import { assertNewBotOperation, botOperationDigest, durableBotOperation, recordBotOperation } from './bot-operations.js';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { createChatIdentity } from './oathweave.js';
@@ -2592,22 +2593,26 @@ export class BotService {
     return botUser;
   }
 
-  public async provision(actor: UserRecord, username: string, displayName: string): Promise<{ token: string; user: UserRecord; bot: BotAccountRecord; operationId: string }> {
+  public async provision(actor: UserRecord, username: string, displayName: string, requestedOperationId?: string, createOnly = false): Promise<{ token: string; user: UserRecord; bot: BotAccountRecord; operationId: string }> {
     requireAdmin(actor);
     const normalizedUsername = username.toLowerCase();
     const existingBeforeWrite = this.users.findByUsername(normalizedUsername);
     if (existingBeforeWrite !== null && !existingBeforeWrite.isBot) {
       throw conflict('Username belongs to a non-bot account');
     }
+    if (createOnly && existingBeforeWrite !== null) throw conflict('Bot already exists; review its identity or rotate its token explicitly');
     const token = createSecretToken();
     const passwordHash = existingBeforeWrite?.passwordHash ?? (await hashPassword(createSecretToken()));
     const now = nowMs();
-    const operationId = createId();
+    const operationId = requestedOperationId ?? createId();
+    const requestDigest = botOperationDigest('bot.provisioned', [normalizedUsername, displayName, String(createOnly)]);
     const defaultTeamIds = new Set(this.teams.defaultTeamIds());
     const defaultChannelIds = new Set(this.channels.defaultChannelIds());
     const result = await this.store.write((state) => {
+      assertNewBotOperation(state, requestedOperationId, actor.id, 'bot.provisioned', requestDigest);
       let user = state.users.find((candidate) => candidate.username === normalizedUsername);
       let userCreated = false;
+      if (createOnly && user !== undefined) throw conflict('Bot already exists; review its identity or rotate its token explicitly');
       if (user !== undefined && !user.isBot) {
         throw conflict('Username belongs to a non-bot account');
       }
@@ -2691,6 +2696,7 @@ export class BotService {
       }, operationId);
       const persisted = state.bots.find((candidate) => candidate.userId === user.id);
       if (persisted === undefined) throw new Error('Bot persistence invariant failed');
+      recordBotOperation(state, requestedOperationId, actor.id, 'bot.provisioned', requestDigest, user.id);
       return { user, bot: persisted, userCreated, addedChannelIds };
     });
     this.auditLog.publishPendingSoon();
@@ -2707,13 +2713,16 @@ export class BotService {
     actor: UserRecord,
     botUserId: string,
     username: string,
-    displayName: string
+    displayName: string,
+    requestedOperationId?: string
   ): Promise<{ user: UserRecord; bot: BotAccountRecord; operationId: string }> {
     requireAdmin(actor);
     const normalizedUsername = username.toLowerCase();
     const now = nowMs();
-    const operationId = createId();
+    const operationId = requestedOperationId ?? createId();
+    const requestDigest = botOperationDigest('bot.identity_updated', [botUserId, normalizedUsername, displayName]);
     const result = await this.store.write((state) => {
+      assertNewBotOperation(state, requestedOperationId, actor.id, 'bot.identity_updated', requestDigest);
       const bot = state.bots.find((candidate) => candidate.userId === botUserId);
       const user = state.users.find((candidate) => candidate.id === botUserId);
       if (bot === undefined || user === undefined || !user.isBot) {
@@ -2746,6 +2755,7 @@ export class BotService {
         targetId: botUserId,
         metadata: { username: normalizedUsername }
       }, operationId);
+      recordBotOperation(state, requestedOperationId, actor.id, 'bot.identity_updated', requestDigest, botUserId);
       return { user, bot };
     });
     this.auditLog.publishPendingSoon();
@@ -2753,11 +2763,13 @@ export class BotService {
     return { ...result, operationId };
   }
 
-  public async regenerateToken(actor: UserRecord, botUserId: string): Promise<{ token: string; bot: BotAccountRecord; operationId: string }> {
+  public async regenerateToken(actor: UserRecord, botUserId: string, requestedOperationId?: string): Promise<{ token: string; bot: BotAccountRecord; operationId: string }> {
     requireAdmin(actor);
     const token = createSecretToken();
-    const operationId = createId();
+    const operationId = requestedOperationId ?? createId();
+    const requestDigest = botOperationDigest('bot.token_regenerated', [botUserId]);
     const bot = await this.store.write((state) => {
+      assertNewBotOperation(state, requestedOperationId, actor.id, 'bot.token_regenerated', requestDigest);
       const existing = state.bots.find((candidate) => candidate.userId === botUserId);
       if (existing === undefined) {
         throw notFound('Bot account');
@@ -2769,6 +2781,7 @@ export class BotService {
         action: 'bot.token_regenerated',
         targetId: botUserId
       }, operationId);
+      recordBotOperation(state, requestedOperationId, actor.id, 'bot.token_regenerated', requestDigest, botUserId);
       return existing;
     });
     this.auditLog.publishPendingSoon();
@@ -2777,7 +2790,9 @@ export class BotService {
 
   public operation(actor: UserRecord, operationId: string): AuditOutboxRecord {
     requireAdmin(actor);
-    const event = this.auditLog.operation(operationId);
+    const receipt = this.store.read(state => state.botOperationReceipts.find(item => item.operationId === operationId));
+    if (receipt && receipt.actorUserId !== actor.id) throw forbidden('Bot operation belongs to another administrator');
+    const event = this.auditLog.operation(operationId) ?? (receipt ? durableBotOperation(receipt) : null);
     if (event === null || !event.action.startsWith('bot.')) {
       throw notFound('Bot operation');
     }

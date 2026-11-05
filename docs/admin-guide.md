@@ -103,3 +103,25 @@ The dry run prints sample channel/post content. Treat exports and output as priv
 use synthetic exports in public reports. Supplying `--token` exposes that argument
 to the local process argument list and potentially shell history, so use a protected operator workflow.
 This helper does not replace a consistent installation backup/restore.
+
+## Browser administration contracts
+
+`npm run contracts:browser -- --output NEW_DIRECTORY` exports the product-owned
+Zod DTOs from `src/shared/browser-admin.ts` and their provenance checksum. Browser
+clients consume this release artifact without importing backend implementation.
+
+The capabilities endpoint `GET /admin/browser-capabilities` requires an active
+administrator and advertises `bot_operation_ids: caller-bound-v1`. New browser
+clients supply a fresh 26-character lowercase alphanumeric operation ID before a
+bot mutation: `operation_id` for provisioning/identity updates, or the
+`X-Bot-Operation-ID` header for token rotation. The ID is bound atomically to the
+administrator, action, inputs and committed target. A duplicate or changed request
+fails before any credential change. Durable non-secret receipts survive audit
+outbox compaction and never contain or replay the one-time token. Existing native
+clients can continue to omit this optional contract.
+
+After an interrupted request, query `GET /admin/bot-operations/{operation_id}`.
+A committed receipt confirms the effect; a lost one-time token requires a new,
+explicit rotation after review. A missing receipt leaves the outcome pending and
+must not cause an automatic repeat. Receipts are never automatically pruned; a
+full receipt ledger refuses further bound mutations until reviewed maintenance.
