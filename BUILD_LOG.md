@@ -95,3 +95,11 @@ one-time setup. Developer setup has its own guide. The documentation accuracy
 pass clarifies upload types, public-link denial, audit retention, the unused
 legacy server allowlist field and the boundary between source docs and immutable
 release artifacts. These documentation changes do not deploy a running service.
+
+Release 0.4.0 declares reviewed upgrades from published 0.3.2 and 0.3.3, each
+exercised in its own disposable lifecycle stack. It publishes the browser
+contracts, durable bot receipts, scoped identity exchange, isolated restore
+sign-in and hardened privacy boundaries made since 0.3.3. Postgres and Redis
+digests and the migration set are unchanged. Versioned installation and upgrade
+examples match these paths; native release and public-artifact verification
+cover both architectures with no operator deployment as part of publication.

@@ -10,27 +10,34 @@ or full feature parity. See [contributing](../CONTRIBUTING.md) and
 
 Documentation on `main` can improve independently of a runtime release. Each
 published bundle contains a frozen installation README; editing source docs does
-not update an existing release asset or installed image. Keep 0.3.3 immutable and
+not update an existing release asset or installed image. Keep 0.4.0 immutable and
 publish a new version only for an intentional distribution change. Client and
 Hermes instructions live in the [client guide](clients.md),
 [Hermes guide](hermes-compatibility.md) and [agent runbook](../AGENTS.md#installation-runbook-for-agents).
 
-## Unreleased source changes
+## Changes in 0.4.0
 
-The API exports browser-safe administration contracts independently of its server
-implementation. Caller-selected bot operation IDs bind credential mutations to
-an administrator and exact inputs. Durable, non-secret receipts survive audit
+Release 0.4.0 publishes the source changes made since 0.3.3. The API exports
+browser-safe administration contracts independently of its server implementation.
+Caller-selected bot operation IDs bind credential mutations to an administrator
+and exact inputs. Durable, non-secret receipts survive audit
 outbox compaction and restoration; duplicate requests refuse a second mutation.
 Native clients that omit operation IDs keep their existing protocol. Browser bot
 creation uses an explicit create-only precondition, and token rotation remains a
-separate confirmed action. These source changes do not alter an installed release.
+separate confirmed action. Browser conversation schemas and reviewed immutable
+snapshots cover the native routes used by shared browser applications. Scoped
+identity exchange, volatile sign-in for isolated restore rehearsals, hardened
+authentication/channel privacy boundaries and protected Compose secret-file
+writes are included. Clients can no longer mark their own posts as webhook
+messages. Postgres and Redis image digests are unchanged from 0.3.3, and no
+database migration was added. Publication does not alter an installed release.
 
 ## Public distribution contract
 
 | Artifact | Meaning |
 | --- | --- |
-| `ghcr.io/cheftaco/chattermost:0.3.3` | Multi-architecture application image |
-| `ghcr.io/cheftaco/chattermost-migrator:0.3.3` | Matching one-off migrator |
+| `ghcr.io/cheftaco/chattermost:0.4.0` | Multi-architecture application image |
+| `ghcr.io/cheftaco/chattermost-migrator:0.4.0` | Matching one-off migrator |
 | `VERSION-amd64`, `VERSION-arm64` image tags | Native build outputs; may exist before all release checks finish |
 | `chattermost-VERSION.tar.gz` | Allowlisted bundle: manager, Compose, manifest, installation README, Apache license and notice |
 | `release.json` | Exact app/migrator/infrastructure digests, source revision, schema/lineage, platforms and permitted upgrade sources |
@@ -38,10 +45,10 @@ separate confirmed action. These source changes do not alter an installed releas
 | `scan-*.json`, `lifecycle-proof-*.json` | Filtered vulnerability findings and sanitized native lifecycle evidence |
 
 Install a completed [GitHub release](https://github.com/ChefTaco/ChatterMost/releases),
-not a candidate architecture tag. The latest published lifecycle release is 0.3.3;
-0.3.2 is its tested upgrade baseline. The application has one writer and local
-WebSocket fanout. Both supported Linux architectures execute on native CI runners;
-there is no claim of emulated execution as native proof.
+not a candidate architecture tag. The latest published lifecycle release is 0.4.0;
+0.3.2 and 0.3.3 are its tested upgrade sources. The application has one writer
+and local WebSocket fanout. Both supported Linux architectures execute on native
+CI runners; there is no claim of emulated execution as native proof.
 
 Public GHCR pulls need no login. Package visibility is configured separately from
 repository visibility, and newly created packages can default to private. Confirm
@@ -126,7 +133,7 @@ A successful push is not installation proof. Dispatch the public verification
 workflow for the exact completed release:
 
 ```bash
-gh workflow run verify-public-release.yml --ref main -f version=0.3.3
+gh workflow run verify-public-release.yml --ref main -f version=0.4.0
 ```
 
 Substitute the newly published version. Check both native jobs and their sanitized
@@ -142,7 +149,7 @@ Review the public manifest/digests and per-architecture SBOM/provenance, verify
 all downloaded checksums, and verify the archive and checksum publisher identities:
 
 ```bash
-gh attestation verify chattermost-0.3.3.tar.gz --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
+gh attestation verify chattermost-0.4.0.tar.gz --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
 gh attestation verify SHA256SUMS --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
 ```
 
