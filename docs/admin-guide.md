@@ -107,7 +107,8 @@ This helper does not replace a consistent installation backup/restore.
 ## Browser administration contracts
 
 `npm run contracts:browser -- --output NEW_DIRECTORY` exports the product-owned
-Zod DTOs from `src/shared/browser-admin.ts` and their provenance checksum. Browser
+committed public Zod DTOs from `src/shared/browser-admin.ts` and their provenance
+checksum. Uncommitted source edits and local environment files are excluded. Browser
 clients consume this release artifact without importing backend implementation.
 
 The capabilities endpoint `GET /admin/browser-capabilities` requires an active
