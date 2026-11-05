@@ -45,6 +45,9 @@ COPY --from=build /app/schema.json schema.json
 COPY --from=production-deps /app/THIRD_PARTY_NOTICES.json ./
 COPY package.json LICENSE NOTICE ./
 RUN rm -rf /usr/local/lib/node_modules /opt/yarn* && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg
+# Nothing installs packages at runtime; drop apt and its library so the final
+# images carry no package-retrieval tooling. dpkg stays as the package database.
+RUN dpkg --purge --force-remove-protected --force-remove-essential apt libapt-pkg6.0 && rm -rf /etc/apt /var/lib/apt /var/cache/apt /var/log/apt
 RUN mkdir -p /var/lib/chattermost/files /var/lib/chattermost/profile-images && chown -R node:node /var/lib/chattermost
 USER 1000:1000
 EXPOSE 8065
