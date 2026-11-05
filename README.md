@@ -7,13 +7,24 @@ desktop apps, with Hermes Agent integration.**
 
 Connect the official apps to your ChatterMost server URL to use channels, direct
 messages, threads, reactions and file sharing. Connect Hermes Agent to the same
-backend to chat with your agents from those clients. A compact web UI is included
-for browser access and administration.
+backend to chat with your agents from those clients. A compact native web client
+is included for standalone installs and native sign-in.
 
 ChatterMost is independently developed and licensed under Apache-2.0. It implements
 Mattermost-compatible REST and WebSocket interfaces; it is not a fork of the
 upstream server. See [client setup and current limits](docs/clients.md) for the
 supported experience and verification coverage.
+
+## Browser console
+
+In the Hive:Magnus suite, the chat module of [HiveXUI](https://github.com/ChefTaco/HiveXUI)
+is the browser console, deployed by the [Hive installer](https://github.com/ChefTaco/hive).
+ChatterMost keeps its own independent API and still runs on its own. Its native web
+client remains for standalone installs and native sign-in.
+
+Invite redemption works in HiveXUI at `/signup` and creates a native chat account.
+Using chat in the console also needs an Oathweave account and an explicit link to
+that chat account: see [the Oathweave integration guide](docs/oathweave.md).
 
 ## Use the official apps
 
@@ -21,10 +32,11 @@ supported experience and verification coverage.
 2. Add your ChatterMost HTTPS server URL, such as `https://chat.example.test`.
    Use the origin, without `/api/v4` or `/websocket`.
 3. Sign in with your ChatterMost username or email and password. An administrator
-   can create your account or invite you to sign up through the web UI first.
+   can create your account or invite you to sign up through the native web client,
+   or through HiveXUI at `/signup` in the suite, first.
 
 The native mobile apps use the Mattermost-compatible API. The desktop app loads
-ChatterMost's included web UI. Mobile background push delivery, calls,
+ChatterMost's native web client. Mobile background push delivery, calls,
 upstream server plugins/marketplace and SSO are not implemented. Foreground
 messages use WebSocket delivery. [Client setup](docs/clients.md) explains TLS,
 version advertisement, troubleshooting and what the tests establish.
@@ -92,7 +104,7 @@ separate ChatterMost plugin package inside Hermes.
 - Hermes bot conversations and declared slash-command routing with the original sender identity.
 
 See [API compatibility](docs/compatibility.md) for the implemented interfaces and
-[administration](docs/admin-guide.md) for the built-in UI. Protocol fixtures and
+[administration](docs/admin-guide.md) for the native web client. Protocol fixtures and
 browser tests cover core client flows; they are not certification of every app
 version or upstream feature.
 
