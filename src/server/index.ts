@@ -5,11 +5,14 @@ import type { Duplex } from 'node:stream';
 import { serve } from '@hono/node-server';
 import type { ServerType } from '@hono/node-server';
 import { WebSocketServer, type RawData } from 'ws';
+import { createServer } from 'node:https';
 
 import { createServerApp } from './app.js';
 import { loadEnv } from './env.js';
+import { listenerTls } from './listener.js';
 
 const env = loadEnv({ envFile: process.env.CHATTERMOST_ENV_FILE ?? '.env' });
+const tls = listenerTls(env);
 const { app, services, store, abuseControl } = await createServerApp(env);
 const websocketServer = new WebSocketServer({
   noServer: true,
@@ -22,10 +25,12 @@ const knownWebSocketActions = new Set(['authentication_challenge', 'ping', 'user
 const server: ServerType = serve(
   {
     fetch: app.fetch,
-    port: env.PORT
+    port: env.PORT,
+    hostname: env.BIND_HOST,
+    ...(tls === undefined ? {} : { createServer, serverOptions: tls })
   },
   (info) => {
-    const address = `http://127.0.0.1:${info.port}`;
+    const address = `${tls === undefined ? 'http' : 'https'}://localhost:${info.port}`;
     process.stdout.write(
       JSON.stringify({
         level: 'info',
@@ -42,6 +47,10 @@ server.on('upgrade', (request: IncomingMessage, socket: Duplex, head: Buffer) =>
   void handleUpgradeRequest(request,socket,head).catch(()=>socket.destroy());
 });
 async function handleUpgradeRequest(request: IncomingMessage, socket: Duplex, head: Buffer):Promise<void> {
+  if (env.PREFLIGHT_MODE) {
+    socket.destroy();
+    return;
+  }
   if (request.url === undefined) {
     socket.destroy();
     return;

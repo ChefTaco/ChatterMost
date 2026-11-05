@@ -6,6 +6,8 @@ import path from 'node:path';
 import { PrismaClient } from '@prisma/client';
 import WebSocket, { type RawData } from 'ws';
 import { assertPrivateEnvFile, loadEnv } from '../src/server/env.js';
+import { request as httpRequest } from 'node:http';
+import { request as httpsRequest } from 'node:https';
 
 type Migration = { migration_name: string; checksum: string; finished_at: Date | null; rolled_back_at: Date | null };
 const command = process.argv[2] ?? 'serve';
@@ -37,7 +39,7 @@ async function configure(): Promise<string> {
   return env.DATABASE_URL;
 }
 
-async function migrate(url: string, apply: boolean): Promise<void> {
+async function migrate(url: string, apply: boolean, requireCurrent = false): Promise<void> {
   const policy = spawnSync(process.execPath, ['scripts/schema-policy.mjs', 'inspect', '/app'], { encoding: 'utf8' });
   if (policy.status !== 0) throw new Error('Expansion-only schema policy rejected this image');
   const prisma = new PrismaClient({ datasources: { db: { url } } });
@@ -59,6 +61,7 @@ async function migrate(url: string, apply: boolean): Promise<void> {
       if (history.some((m) => m.finished_at === null && m.rolled_back_at === null)) throw new Error('Unfinished migration; refusing automatic recovery');
       const applied = history.filter((m) => m.finished_at !== null && m.rolled_back_at === null);
       const names = (await readdir('prisma/migrations', { withFileTypes: true })).filter((e) => e.isDirectory()).map((e) => e.name).sort();
+      if (requireCurrent && applied.length !== names.length) throw new Error('Current release migration set is not completely applied');
       for (const [index, row] of applied.entries()) {
         if (names[index] !== row.migration_name) throw new Error('Database lineage is not an exact prefix of this release');
         const sql = await readFile(`prisma/migrations/${row.migration_name}/migration.sql`);
@@ -90,19 +93,32 @@ async function migrate(url: string, apply: boolean): Promise<void> {
 }
 
 async function probe(): Promise<void> {
-  const response = await fetch('http://127.0.0.1:8065/api/v4/system/ping', { signal: AbortSignal.timeout(3000) });
-  if (!response.ok) throw new Error('Health check failed');
-  if (command !== 'ready') return;
   await configure();
   const env = loadEnv({ envFile: process.env.CHATTERMOST_ENV_FILE ?? '/run/secrets/runtime.env' });
-  const login = await fetch('http://127.0.0.1:8065/api/v4/users/login', {
-    method: 'POST', headers: { 'Content-Type': 'application/json', Origin: env.SERVER_URL },
-    body: JSON.stringify({ login_id: env.ADMIN_USERNAME, password: env.ADMIN_PASSWORD })
+  const ca = env.TLS_CERT_PATH === undefined ? undefined : await readFile(env.TLS_PROBE_CA_PATH ?? env.TLS_CERT_PATH);
+  const localHost = env.BIND_HOST === '::1' ? '::1' : '127.0.0.1';
+  const localRequest = async (path: string, body?: unknown): Promise<{ status: number; token: string | undefined }> => new Promise((resolve, reject) => {
+    const send = ca === undefined ? httpRequest : httpsRequest;
+    const req = send({ hostname: localHost, port: env.PORT, path, method: body === undefined ? 'GET' : 'POST',
+      ...(ca === undefined ? {} : { ca, servername: env.TLS_PROBE_SERVER_NAME }),
+      headers: { 'Content-Type': 'application/json', Origin: env.SERVER_URL }, timeout: 3000 }, response => {
+      const tokenHeader = response.headers.token;
+      response.resume();
+      response.once('end', () => resolve({ status: response.statusCode ?? 0, token: typeof tokenHeader === 'string' ? tokenHeader : undefined }));
+    });
+    req.once('error', reject); req.once('timeout', () => req.destroy(new Error('Local readiness timeout')));
+    if (body !== undefined) req.write(JSON.stringify(body)); req.end();
   });
-  const token = login.headers.get('token');
-  if (!login.ok || token === null) throw new Error('Readiness login failed; use current administrator credentials in the protected runtime file');
+  const response = await localRequest('/api/v4/system/ping');
+  if (response.status !== 200) throw new Error('Health check failed');
+  if (command !== 'ready') return;
+  const login = await localRequest('/api/v4/users/login', { login_id: env.ADMIN_USERNAME, password: env.ADMIN_PASSWORD });
+  const token = login.token;
+  if (login.status !== 200 || token === undefined) throw new Error('Readiness login failed; use current administrator credentials in the protected runtime file');
   await new Promise<void>((resolve, reject) => {
-    const socket = new WebSocket('ws://127.0.0.1:8065/api/v4/websocket', { headers: { Authorization: `Bearer ${token}` } });
+    const socket = new WebSocket(`${ca === undefined ? 'ws' : 'wss'}://${localHost === '::1' ? '[::1]' : localHost}:${env.PORT}/api/v4/websocket`, {
+      headers: { Authorization: `Bearer ${token}` }, ...(ca === undefined ? {} : { ca, servername: env.TLS_PROBE_SERVER_NAME })
+    });
     const timer = setTimeout(() => { socket.terminate(); reject(new Error('WebSocket readiness timeout')); }, 5000);
     socket.on('message', (frame) => {
       const data: RawData = frame;
@@ -120,7 +136,7 @@ try {
   else if (command === 'schema') process.stdout.write(await readFile('/app/schema.json', 'utf8'));
   else {
     const url = await configure();
-    if (command === 'migrate' || command === 'validate') await migrate(url, command === 'migrate');
+    if (command === 'migrate' || command === 'validate' || command === 'validate-current') await migrate(url, command === 'migrate', command === 'validate-current');
     else if (command === 'serve') await import('../src/server/index.js');
     else throw new Error('Unknown container command');
   }

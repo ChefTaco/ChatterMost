@@ -21,6 +21,11 @@ const EnvSchema = z.object({
   DATABASE_URL: z.string().min(1),
   SERVER_URL: z.url(),
   PORT: z.coerce.number().int().min(1).max(65_535).default(8065),
+  BIND_HOST: z.enum(['0.0.0.0', '127.0.0.1', '::', '::1']).default('0.0.0.0'),
+  TLS_CERT_PATH: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
+  TLS_KEY_PATH: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
+  TLS_PROBE_SERVER_NAME: z.string().regex(/^[A-Za-z0-9.-]+$/u).default('localhost'),
+  TLS_PROBE_CA_PATH: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
   COOKIE_SECRET: z.string().min(24),
   TOKEN_HASH_SECRET: z.string().min(24),
   SECURITY_FUSION_SERVICE_TOKEN_HASH: z.preprocess(
@@ -30,6 +35,9 @@ const EnvSchema = z.object({
   ADMIN_USERNAME: z.string().min(2),
   ADMIN_PASSWORD: z.string().min(10),
   ADMIN_EMAIL: z.email(),
+  // Fresh installations may pin a product ID for an explicit identity link.
+  // Existing deployments leave this unset; it never renames or merges accounts.
+  ADMIN_INITIAL_ID: z.preprocess(value => value === '' ? undefined : value, z.string().regex(/^[a-z0-9]{26}$/u).optional()),
   ADMIN_FORCE_PASSWORD_RESET: Boolish.default(false),
   SESSION_COOKIE_NAME: z.string().min(1).default('MMSID'),
   SESSION_DAYS: z.coerce.number().int().positive().default(30),
@@ -61,8 +69,12 @@ const EnvSchema = z.object({
   RATE_LIMIT_LOGIN_SOURCE_MAX: z.coerce.number().int().min(1).max(10_000).default(20),
   RATE_LIMIT_LOGIN_ACCOUNT_MAX: z.coerce.number().int().min(1).max(10_000).default(20),
   PREFLIGHT_MODE: Boolish.default(false),
+  HIVE_REHEARSAL: Boolish.default(false),
   ENABLE_DEV_DEFAULTS: Boolish.default(false)
 }).superRefine((value, context) => {
+  if (Boolean(value.TLS_CERT_PATH) !== Boolean(value.TLS_KEY_PATH)) {
+    context.addIssue({ code: 'custom', path: ['TLS_CERT_PATH'], message: 'TLS_CERT_PATH and TLS_KEY_PATH must be configured together' });
+  }
   if (value.ENABLE_REDIS_FANOUT) {
     context.addIssue({
       code: 'custom',
@@ -87,7 +99,7 @@ const EnvSchema = z.object({
       context.addIssue({ code: 'custom', path: [path], message });
     }
   }
-});
+}).transform(value => ({ ...value, PREFLIGHT_MODE: value.PREFLIGHT_MODE || value.HIVE_REHEARSAL }));
 
 export type AppEnv = z.infer<typeof EnvSchema>;
 

@@ -510,6 +510,9 @@ export class UserService {
   public async ensureAdminFromEnv(): Promise<UserRecord> {
     const existing = this.findByUsername(this.env.ADMIN_USERNAME);
     if (existing !== null) {
+      if (this.env.ADMIN_INITIAL_ID !== undefined && existing.id !== this.env.ADMIN_INITIAL_ID) {
+        throw new Error('Initial administrator ID differs from the existing account; preserve its identity and use explicit account linking');
+      }
       if (this.env.ADMIN_FORCE_PASSWORD_RESET) {
         const hash = await hashPassword(this.env.ADMIN_PASSWORD);
         await this.store.write((state) => {
@@ -524,21 +527,25 @@ export class UserService {
       return this.getById(existing.id);
     }
 
+    if (this.env.ADMIN_INITIAL_ID !== undefined && this.store.read(state => state.users.length > 0)) {
+      throw new Error('An explicit initial administrator ID requires an empty account store; existing accounts require explicit adoption');
+    }
+
     return this.createUser({
       username: this.env.ADMIN_USERNAME,
       email: this.env.ADMIN_EMAIL,
       password: this.env.ADMIN_PASSWORD,
       role: 'system_admin system_user',
       actorUserId: null
-    });
+    }, this.env.ADMIN_INITIAL_ID);
   }
 
-  public async createUser(input: { username: string; email: string; password: string; role: string; actorUserId: string | null; isBot?: boolean; botDescription?: string }): Promise<UserRecord> {
+  public async createUser(input: { username: string; email: string; password: string; role: string; actorUserId: string | null; isBot?: boolean; botDescription?: string }, initialId?: string): Promise<UserRecord> {
     const normalizedUsername = input.username.toLowerCase();
     const normalizedEmail = input.email.toLowerCase();
     const now = nowMs();
     const user: UserRecord = {
-      id: createId(),
+      id: initialId ?? createId(),
       createAt: now,
       updateAt: now,
       deleteAt: 0,
@@ -566,6 +573,9 @@ export class UserService {
       }
       if (state.users.some((candidate) => candidate.email === normalizedEmail)) {
         throw conflict('Email already exists');
+      }
+      if (state.users.some((candidate) => candidate.id === user.id)) {
+        throw conflict('User ID already exists');
       }
       state.users.push(user);
       state.statuses.push({

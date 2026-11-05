@@ -39,3 +39,22 @@ when HiveXUI has a different origin from the existing `SERVER_URL`. The same
 allowlist protects session exchange, cookie mutations and WebSocket upgrades.
 Native Mattermost URLs and clients retain their existing `SERVER_URL`; unlisted
 origins remain denied. No wildcard or origin-with-path entry is accepted.
+
+For a fresh empty account store, an installer may set `ADMIN_INITIAL_ID` to an
+explicit 26-character lowercase alphanumeric product ID before first startup.
+Use that exact local ID in the reviewed issuer/subject link. Repeated startup
+requires the same ID for the configured administrator and preserves its password.
+A changed ID or an existing store without the matching administrator fails closed;
+this option never renames, combines or adopts existing accounts. Existing
+installations leave it unset and retain their reviewed account mappings.
+
+Native backend TLS is optional. Set both `TLS_CERT_PATH` and `TLS_KEY_PATH` to
+regular files when the API is reached across hosts or through a separate container
+edge. Keep the key owner-only. The TLS listener also serves the existing native
+WebSocket upgrade path. `BIND_HOST` controls its local bind address;
+`TLS_PROBE_SERVER_NAME` names the certificate for verified container probes and
+defaults to `localhost`. Set `TLS_PROBE_CA_PATH` to the issuing authority bundle when the server certificate is CA-signed; its default is the server certificate for self-signed TLS. Trust the certificate chain using
+`NODE_EXTRA_CA_CERTS` or the calling product's explicit CA configuration. The
+container probes use the configured port, verified HTTPS and WSS, and native
+login credentials. Existing standalone HTTP behind an HTTPS edge remains the
+default when both TLS references are unset.

@@ -289,3 +289,35 @@ restart/recreation, retaining project identity and the pinned images. Database
 password, signing-key and token-key rotation require coordinated procedures;
 editing a secret file alone is not a supported rotation. Native rotation scripts
 operate the old systemd/database layout and must not be used on this distribution.
+
+## Optional native backend TLS
+
+The application also supports `TLS_CERT_PATH` and `TLS_KEY_PATH` for a directly
+verified HTTPS backend, including WebSocket upgrades. Mount both regular files
+read-only, keep the private key owner-only, and set `TLS_PROBE_SERVER_NAME` to a
+DNS name in the certificate (default `localhost`). For CA-signed certificates, set
+`TLS_PROBE_CA_PATH` to the issuing authority bundle; self-signed evaluation defaults
+to the server certificate. Preserve `SERVER_URL` as the
+public client origin. Health and authenticated readiness use the configured
+`PORT` and verify the certificate; the WSS probe sends its credential only in the
+Authorization header. The existing distribution's HTTP listener behind a
+separate HTTPS edge remains its default. A distributed suite must prepare its
+own explicit mounts, trust and listeners; enabling TLS does not configure an edge
+or change another installation.
+
+
+The migration image additionally exposes `validate-current`. It requires the
+complete exact packaged migration set with no pending migrations and performs the
+same schema comparison as `validate`. `validate` retains its prefix-validation
+contract for upgrade planning. Suite installers can use `validate-current` to
+reconcile a claimed initial migration without replaying unknown writes.
+
+For development, `npx tsx scripts/native-tls-rehearsal.ts --output
+NEW_PRIVATE_DIRECTORY` exercises the real native HTTPS listener, certificate
+verification, native login, WSS delivery, restart persistence and refusal of a
+changed initial administrator ID. It selects only fresh synthetic JSON storage;
+it does not contact or reset an installed application.
+
+`HIVE_REHEARSAL=true` selects the product's read-only preflight behavior for
+isolated restored data: health is available; bootstrap, audit dispatch, other API
+requests and WebSocket upgrades are disabled. It never migrates or repairs data.

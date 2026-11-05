@@ -420,7 +420,7 @@ describe('deployment secret controls', () => {
     ).rejects.toThrow('migration set differs');
   });
 
-  it('keeps preflight health-only and prevents startup or request writes', async () => {
+  it.each(['PREFLIGHT_MODE', 'HIVE_REHEARSAL'])('keeps %s health-only and prevents startup or request writes', async (mode) => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'chattermost-preflight-'));
     const storePath = path.join(root, 'store.json');
     const filesPath = path.join(root, 'files-not-created');
@@ -431,7 +431,7 @@ describe('deployment secret controls', () => {
       enforceFileMode: false,
       overrides: {
         NODE_ENV: 'test',
-        PREFLIGHT_MODE: 'true',
+        [mode]: 'true',
         STORE_BACKEND: 'json',
         STORE_PATH: storePath,
         FILE_STORAGE_PATH: filesPath,
