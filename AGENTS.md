@@ -25,7 +25,7 @@ For source development, use [docs/development.md](docs/development.md).
    ```bash
    set -eu
    umask 077
-   VERSION=0.4.0
+   VERSION=0.4.1
    INSTALL_DIR="$HOME/chattermost-installation"
    test ! -e "$INSTALL_DIR"
    DOWNLOAD_DIR="$(mktemp -d)"
@@ -66,7 +66,7 @@ For source development, use [docs/development.md](docs/development.md).
 
 Documentation work does not authorize installation, gateway reconfiguration,
 credential rotation or deployment. Published releases are immutable; documentation
-updates on `main` do not change the installed 0.4.0 image or bundle.
+updates on `main` do not change the installed 0.4.1 image or bundle.
 
 ## Project Shape
 
