@@ -59,6 +59,30 @@ describe('Security and correctness hardening', () => {
     expect(JSON.stringify(body)).not.toContain(marker);
   });
 
+  it('does not let a client post impersonate a webhook', async () => {
+    const server = await createTestServer();
+    const adminToken = await login(server);
+    const member = await createMember(server, adminToken, 'webhookforger');
+    const channels = await server.app.request('/api/v4/users/me/channels', { headers: bearer(member.token) });
+    const [channel] = (await channels.json()) as { id: string }[];
+    if (channel === undefined) throw new Error('missing channel');
+    const posted = await server.app.request('/api/v4/posts', {
+      method: 'POST',
+      headers: bearer(member.token),
+      body: JSON.stringify({
+        channel_id: channel.id,
+        message: 'pretending to be an integration',
+        props: { from_webhook: 'true', override_username: 'Trusted Integration', webhook_id: 'fake', webhook_label: 'fake', webhook_owner_id: 'fake', webhook_owner_username: 'fake', attachments: [] }
+      })
+    });
+    expect(posted.status).toBe(201);
+    const { props } = (await posted.json()) as { props: Record<string, unknown> };
+    for (const key of ['from_webhook', 'override_username', 'webhook_id', 'webhook_label', 'webhook_owner_id', 'webhook_owner_username']) {
+      expect(props).not.toHaveProperty(key);
+    }
+    expect(props).toHaveProperty('attachments');
+  });
+
   it('delivers a targeted push event only to its intended user', async () => {
     const server = await createTestServer();
     const adminToken = await login(server);

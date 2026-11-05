@@ -990,7 +990,7 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
       rootId: body.root_id,
       fileIds: body.file_ids,
       pendingPostId: body.pending_post_id,
-      props: asJsonRecord(body.props)
+      props: withoutWebhookIdentity(asJsonRecord(body.props))
     });
     return c.json(toMattermostPost(post), 201);
   });
@@ -1829,6 +1829,13 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
   );
 
   return { app, services, store, abuseControl };
+}
+
+/** Only the webhook route may set these. A client must not make its post look like a webhook's. */
+const WEBHOOK_IDENTITY_PROPS = ['from_webhook', 'webhook_id', 'webhook_label', 'webhook_owner_id', 'webhook_owner_username', 'override_username'];
+
+function withoutWebhookIdentity(props: JsonRecord): JsonRecord {
+  return Object.fromEntries(Object.entries(props).filter(([key]) => !WEBHOOK_IDENTITY_PROPS.includes(key))) as JsonRecord;
 }
 
 function isProtectedWebhookDisplayName(displayName: string, services: ServiceBundle): boolean {
