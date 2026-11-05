@@ -321,3 +321,25 @@ it does not contact or reset an installed application.
 `HIVE_REHEARSAL=true` selects the product's read-only preflight behavior for
 isolated restored data: health is available; bootstrap, audit dispatch, other API
 requests and WebSocket upgrades are disabled. It never migrates or repairs data.
+
+
+### Authenticated isolated restore checks
+
+The default `HIVE_REHEARSAL=true` remains health-only. An isolated, disposable
+restore may additionally select `AUTHENTICATED_REHEARSAL=true` to validate existing
+passwords, explicitly linked Oathweave identities, read APIs, attachments and
+read-only WebSocket authentication. The flag is rejected without `HIVE_REHEARSAL`.
+Keep all networks isolated, preserve the original issuer/signing keys and verify
+peer HTTPS certificates. This mode does not perform schema migrations, bootstrap,
+file-directory creation, audit outbox delivery or Redis abuse-counter writes.
+
+The source JSON/Postgres store opens read-only. Authentication sessions and auth
+audit entries exist only in memory; captured source sessions are excluded and
+new sessions disappear on restart. HTTP mutations other than login, exchange and
+logout return 503. WebSocket input permits authentication, ping and status reads;
+typing and other actions close the socket. The in-memory store independently
+rejects changes to product records, attachments, permissions, configuration,
+operation receipts and audit outbox. Use read-only filesystem mounts and PostgreSQL
+`default_transaction_read_only=on` as additional rehearsal fences. Confirm source
+records and files remain unchanged before discarding the clone. This mode does
+not authorize production activation or account recovery.

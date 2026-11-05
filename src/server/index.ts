@@ -1,3 +1,4 @@
+import { rehearsalSocketActionAllowed } from './rehearsal.js';
 import { configuredBrowserOrigins } from './oathweave.js';
 import { guardedSocketSender, authenticateSocketUpgrade } from './bound-socket.js';
 import type { IncomingMessage } from 'node:http';
@@ -47,7 +48,7 @@ server.on('upgrade', (request: IncomingMessage, socket: Duplex, head: Buffer) =>
   void handleUpgradeRequest(request,socket,head).catch(()=>socket.destroy());
 });
 async function handleUpgradeRequest(request: IncomingMessage, socket: Duplex, head: Buffer):Promise<void> {
-  if (env.PREFLIGHT_MODE) {
+  if (env.PREFLIGHT_MODE && !env.AUTHENTICATED_REHEARSAL) {
     socket.destroy();
     return;
   }
@@ -62,7 +63,7 @@ async function handleUpgradeRequest(request: IncomingMessage, socket: Duplex, he
     socket.destroy();
     return;
   }
-  if (env.PREFLIGHT_MODE || shuttingDown || requestUrl.pathname !== '/api/v4/websocket') {
+  if ((env.PREFLIGHT_MODE && !env.AUTHENTICATED_REHEARSAL) || shuttingDown || requestUrl.pathname !== '/api/v4/websocket') {
     socket.destroy();
     return;
   }
@@ -124,6 +125,7 @@ async function handleUpgradeRequest(request: IncomingMessage, socket: Duplex, he
         );
       }
       void Promise.resolve().then(async()=>{
+        if (env.AUTHENTICATED_REHEARSAL && !rehearsalSocketActionAllowed(rawDataToString(data))) { websocket.close(1008, 'Read-only rehearsal'); return; }
         if(bound && !(await validate())){websocket.close(1008,'Session expired');return;}
         await services.hub.handleClientMessage(connection.id, rawDataToString(data), (token) => services.sessions.authenticateToken(token), services.statuses);
       })

@@ -70,8 +70,12 @@ const EnvSchema = z.object({
   RATE_LIMIT_LOGIN_ACCOUNT_MAX: z.coerce.number().int().min(1).max(10_000).default(20),
   PREFLIGHT_MODE: Boolish.default(false),
   HIVE_REHEARSAL: Boolish.default(false),
+  AUTHENTICATED_REHEARSAL: Boolish.default(false),
   ENABLE_DEV_DEFAULTS: Boolish.default(false)
 }).superRefine((value, context) => {
+  if (value.AUTHENTICATED_REHEARSAL && !value.HIVE_REHEARSAL) {
+    context.addIssue({ code: 'custom', path: ['AUTHENTICATED_REHEARSAL'], message: 'AUTHENTICATED_REHEARSAL requires HIVE_REHEARSAL isolation' });
+  }
   if (Boolean(value.TLS_CERT_PATH) !== Boolean(value.TLS_KEY_PATH)) {
     context.addIssue({ code: 'custom', path: ['TLS_CERT_PATH'], message: 'TLS_CERT_PATH and TLS_KEY_PATH must be configured together' });
   }

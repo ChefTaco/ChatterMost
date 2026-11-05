@@ -332,4 +332,4 @@ function mergeConcurrentMetricIncrements(draft: StoreState, current: Readonly<Me
   }
 }
 
-export type StateStore = JsonStore | PostgresStore;
+export type StateStore = Pick<JsonStore, 'initialize' | 'read' | 'incrementMetric' | 'write' | 'close'>;

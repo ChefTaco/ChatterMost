@@ -76,6 +76,21 @@ describe('Postgres runtime store', () => {
     );
     await preflight.store.close();
     expect(await prismaState(postgresUrl)).toBe(beforePreflight);
+
+    const restored = await createServerApp({
+      ...env, PREFLIGHT_MODE: true, HIVE_REHEARSAL: true, AUTHENTICATED_REHEARSAL: true,
+      DATABASE_URL: withReadOnlyTransactions(postgresUrl)
+    });
+    const restoredLogin = await restored.app.request('/api/v4/users/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ login_id: 'pgtest', password: env.ADMIN_PASSWORD })
+    });
+    expect(restoredLogin.status).toBe(200);
+    const restoredHeaders = { Authorization: `Bearer ${restoredLogin.headers.get('Token')}` };
+    expect((await restored.app.request(`/api/v4/posts/${post.id}`, { headers: restoredHeaders })).status).toBe(200);
+    expect((await restored.app.request('/api/v4/posts', { method: 'POST', headers: restoredHeaders, body: '{}' })).status).toBe(503);
+    await restored.store.close(); await restored.abuseControl.close();
+    expect(await prismaState(postgresUrl)).toBe(beforePreflight);
   });
 });
 

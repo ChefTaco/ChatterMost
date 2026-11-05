@@ -1,3 +1,4 @@
+import { AuthenticatedRehearsalStore, rehearsalRequestAllowed } from './rehearsal.js';
 import { configuredBrowserOrigins } from './oathweave.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
@@ -247,14 +248,16 @@ const MattermostImportSchema = z.object({
 });
 
 export async function createServerApp(env: AppEnv, options: { storePath?: string | null } = {}): Promise<ServerApp> {
+  if (env.AUTHENTICATED_REHEARSAL && (!env.HIVE_REHEARSAL || !env.PREFLIGHT_MODE)) throw new Error('Authenticated rehearsal requires read-only isolation');
   if (!env.PREFLIGHT_MODE) {
     await mkdir(resolveDataPath(env.FILE_STORAGE_PATH), { recursive: true, mode: 0o700 });
     await mkdir(resolveDataPath(env.PROFILE_IMAGE_STORAGE_PATH), { recursive: true, mode: 0o700 });
   }
-  const store =
+  const sourceStore =
     env.STORE_BACKEND === 'postgres' && options.storePath !== null
       ? new PostgresStore(env.DATABASE_URL, env.PREFLIGHT_MODE)
       : new JsonStore(options.storePath === undefined ? resolveDataPath(env.STORE_PATH) : options.storePath, env.PREFLIGHT_MODE);
+  const store: StateStore = env.AUTHENTICATED_REHEARSAL ? new AuthenticatedRehearsalStore(sourceStore) : sourceStore;
   await store.initialize();
   const services = createServices(store, env);
   if (!env.PREFLIGHT_MODE) await bootstrap(services);
@@ -265,7 +268,8 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
   const app = new Hono<AppHonoEnv>();
   if (env.PREFLIGHT_MODE) {
     app.use('*', async (c, next) => {
-      if (c.req.method === 'GET' && c.req.path === '/api/v4/system/ping') {
+      if ((c.req.method === 'GET' && c.req.path === '/api/v4/system/ping') ||
+          (env.AUTHENTICATED_REHEARSAL && rehearsalRequestAllowed(c.req.method, c.req.path))) {
         await next();
         return;
       }

@@ -295,3 +295,5 @@ See [Oathweave sign-in](oathweave.md) for the verified HTTPS endpoints, explicit
 account links and cookie/session behavior needed by HiveXUI. Existing native
 clients retain their current authentication. Bound identity sessions require the
 documented revocation step before a downgrade to an older runtime.
+
+For explicit authenticated checks against a disposable restore, see [authenticated isolated restore checks](containers.md#authenticated-isolated-restore-checks). This nested mode does not change normal preflight behavior.

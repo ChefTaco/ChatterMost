@@ -312,6 +312,34 @@ try {
     rehearsalDigest,
     'Rehearsal changed restored storage'
   );
+  values.AUTHENTICATED_REHEARSAL = 'true';
+  save(); start(); await ready();
+  assert.equal((await request('/api/v4/users/me', undefined, {Authorization:'Bearer '+secondToken})).status,401,'Captured source session authorized a clone');
+  const volatileToken = await login();
+  assert.equal((await request('/api/v4/posts/'+Entity.parse(post.body).id,undefined,{Authorization:'Bearer '+volatileToken})).status,200);
+  assert.equal((await request('/api/v4/posts',{channel_id:channel.id,message:'forbidden'}, {Authorization:'Bearer '+volatileToken})).status,503);
+  websocket = new WebSocket(`wss://127.0.0.1:${String(port)}/api/v4/websocket`, {ca,agent:new Agent({ca,servername:'localhost'}),headers:{Authorization:'Bearer '+volatileToken}});
+  const authSocket=websocket;
+  await new Promise<void>((done,reject)=>{
+    const timer=setTimeout(()=>reject(Error('Authenticated restore socket read timeout')),5000);
+    authSocket.on('error',reject);
+    authSocket.on('message',(data:RawData)=>{
+      const value:unknown=JSON.parse(rawText(data));
+      if(typeof value==='object' && value!==null && 'event' in value && value.event==='hello') authSocket.send(JSON.stringify({seq:1,action:'ping',data:{}}));
+      if(typeof value==='object' && value!==null && 'seq_reply' in value && value.seq_reply===1){clearTimeout(timer);done();}
+    });
+  });
+  const refused=new Promise<void>((done,reject)=>{
+    const timer=setTimeout(()=>reject(Error('Restore typing action not refused')),5000);
+    authSocket.once('close',code=>{clearTimeout(timer);assert.equal(code,1008);done();});
+  });
+  authSocket.send(JSON.stringify({seq:2,action:'user_typing',data:{channel_id:channel.id}}));
+  await refused;
+  assert.equal((await request('/api/v4/users/logout',{}, {Authorization:'Bearer '+volatileToken})).status,200);
+  assert.equal((await request('/api/v4/users/me',undefined,{Authorization:'Bearer '+volatileToken})).status,401);
+  await stop();
+  assert.equal(createHash('sha256').update(readFileSync(store)).digest('hex'),rehearsalDigest,'Authenticated restore changed storage bytes');
+  delete values.AUTHENTICATED_REHEARSAL;
   delete values.HIVE_REHEARSAL;
   values.ADMIN_INITIAL_ID = randomBytes(13).toString('hex');
   save();
@@ -345,7 +373,8 @@ try {
       'Mattermost-compatible posted event over WSS',
       'restart retains account ID, password hash and posted content',
       'changed bootstrap ID refuses startup without changing saved state',
-      'rehearsal preserves storage bytes and denies authentication mutations and WebSockets'
+      'rehearsal preserves storage bytes and denies authentication mutations and WebSockets',
+      'explicit authenticated restore allows native HTTPS reads and WSS ping with volatile sessions only; typing and durable mutations refused'
     ]
   });
   console.log(
@@ -353,4 +382,8 @@ try {
   );
 } finally {
   await stop();
+}
+
+function rawText(data: RawData): string {
+  return Array.isArray(data) ? Buffer.concat(data).toString('utf8') : Buffer.from(data as ArrayBuffer).toString('utf8');
 }

@@ -271,3 +271,5 @@ policy before builds or publication. Each path proves source backup/restoration,
 rollback, retained credentials/data and writes made after upgrading. Historical
 0.3.2 verification still uses its published 0.2.3 policy. Keep cross-guide links usable when
 `docs/containers.md` is packaged as the distribution's root `README.md`.
+
+For isolated authenticated restore verification, follow the guarded mode in `docs/containers.md`. `AUTHENTICATED_REHEARSAL` requires `HIVE_REHEARSAL`, uses volatile authentication only and never authorizes activation or password resets. Preserve durable state and verify exact peer TLS endpoints.
