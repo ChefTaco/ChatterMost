@@ -141,10 +141,6 @@ export function rateLimit(env: AppEnv, abuseControl: AbuseControl): MiddlewareHa
   };
 }
 
-export function resolveClientAddress(c: Context<AppHonoEnv>, trustedProxies: TrustedProxySet): string {
-  return resolveClientIdentity(c, trustedProxies).address;
-}
-
 function resolveClientIdentity(c: Context<AppHonoEnv>, trustedProxies: TrustedProxySet): { address: string; decision: ProxyDecision } {
   const peerAddress = normalizeAddress(c.env?.incoming?.socket.remoteAddress) ?? 'local';
   if (!trustedProxies.has(peerAddress)) return { address: peerAddress, decision: 'direct_untrusted' };

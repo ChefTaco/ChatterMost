@@ -57,10 +57,6 @@ export function isSameWebSocketOrigin(origin: string | undefined, serverUrl: str
   }
 }
 
-export function passwordCostDescription(): string {
-  return `bcrypt cost ${BCRYPT_COST}`;
-}
-
 function hashWithSecret(token: string, secret: string): string {
   return createHash('sha256').update(secret).update(':').update(token).digest('hex');
 }
