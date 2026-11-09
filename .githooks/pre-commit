@@ -1,3 +1,6 @@
 #!/bin/sh
 set -eu
 node scripts/check-privacy.mjs
+
+# Check exact index bytes as well as the existing privacy policy.
+bash "$(git rev-parse --show-toplevel)/scripts/gitleaks.sh" --staged
