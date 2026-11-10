@@ -18,7 +18,7 @@ try:
     if result.returncode:
         raise RuntimeError('Docker context audit export failed')
     files = {p.relative_to(work).as_posix() for p in work.rglob('*') if p.is_file()}
-    exact = {'package.json', 'package-lock.json', 'tsconfig.json', 'LICENSE', 'NOTICE', 'deploy/Dockerfile', 'deploy/schema-policy.json', 'prisma/schema.prisma', 'scripts/container.ts', 'scripts/image-notices.ts', 'scripts/schema-policy.mjs'}
+    exact = {'package.json', 'package-lock.json', 'tsconfig.json', 'LICENSE', 'NOTICE', 'deploy/Dockerfile', 'deploy/schema-policy.json', 'prisma/schema.prisma', 'scripts/container.ts', 'scripts/probe-tls.ts', 'scripts/image-notices.ts', 'scripts/schema-policy.mjs'}
     assert exact <= files
     assert not {f for f in files if f not in exact and not f.startswith(('src/', 'prisma/migrations/'))}
     assert not any('sentinel' in f for f in files)

@@ -40,6 +40,8 @@ jobs:
       - run: npm run privacy:check
       - run: npm run privacy:test
       - run: npm run container:test
+      - name: Verify actual Docker build context privacy
+        run: python3 tests/container/context.py
       - run: npx prisma validate
       - name: Create disposable shadow database
         run: |
