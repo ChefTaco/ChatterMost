@@ -1,4 +1,5 @@
 # syntax=docker/dockerfile:1.7
+ARG RUNTIME_IMAGE=ghcr.io/cheftaco/hive-node-runtime:26.13.0-1@sha256:48948514bce59a27f8ee2a3eabaea0a04cbfa87e087297a52f8501c0d465c84f
 FROM node:22.23.4-bookworm-slim@sha256:de170b39439eb0e5a3444ad7d60b015614a381e10fecae2e30ec9e735122f38d AS base
 WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
@@ -27,7 +28,9 @@ FROM build AS migration-deps
 RUN npm pkg set dependencies.prisma="$(node -p "require('prisma/package.json').version")" && npm pkg delete devDependencies.prisma && npm prune --omit=dev --omit=peer --ignore-scripts && npm cache clean --force
 RUN node dist/scripts/image-notices.js prune
 
-FROM base AS runtime
+FROM ${RUNTIME_IMAGE} AS runtime
+USER root
+WORKDIR /app
 ARG VERSION=development
 ARG REVISION=local
 ARG CREATED=1970-01-01T00:00:00Z
@@ -44,10 +47,6 @@ COPY --from=build /app/dist/ dist/
 COPY --from=build /app/schema.json schema.json
 COPY --from=production-deps /app/THIRD_PARTY_NOTICES.json ./
 COPY package.json LICENSE NOTICE ./
-RUN rm -rf /usr/local/lib/node_modules /opt/yarn* && rm -f /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn /usr/local/bin/yarnpkg
-# Nothing installs packages at runtime; drop apt and its library so the final
-# images carry no package-retrieval tooling. dpkg stays as the package database.
-RUN dpkg --purge --force-remove-protected --force-remove-essential apt libapt-pkg6.0 && rm -rf /etc/apt /var/lib/apt /var/cache/apt /var/log/apt
 RUN mkdir -p /var/lib/chattermost/files /var/lib/chattermost/profile-images && chown -R node:node /var/lib/chattermost
 USER 1000:1000
 EXPOSE 8065

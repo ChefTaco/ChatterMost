@@ -164,3 +164,7 @@ attestations; they do not assert that the Docker build attestations have a separ
 GitHub/cosign image signature. Report candidate-digest testing separately from
 final anonymous public-archive testing and native execution separately from
 emulation. Retain operator verification receipts privately.
+
+## 0.4.2
+
+The application and migration images use a pinned, patched Node 26 runtime with maintained system libraries. Reviewed upgrade paths cover 0.3.2, 0.3.3 and 0.4.1, preserving credentials, messages and attachments.
