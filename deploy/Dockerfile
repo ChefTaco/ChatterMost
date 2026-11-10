@@ -11,7 +11,7 @@ RUN npm ci --ignore-scripts
 COPY prisma/schema.prisma prisma/schema.prisma
 RUN npx prisma generate --schema prisma/schema.prisma
 COPY src/ src/
-COPY scripts/container.ts scripts/image-notices.ts scripts/
+COPY scripts/container.ts scripts/probe-tls.ts scripts/image-notices.ts scripts/
 COPY scripts/schema-policy.mjs scripts/schema-policy.mjs
 COPY prisma/migrations/ prisma/migrations/
 COPY deploy/schema-policy.json deploy/schema-policy.json

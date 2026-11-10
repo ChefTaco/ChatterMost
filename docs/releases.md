@@ -10,7 +10,7 @@ or full feature parity. See [contributing](../CONTRIBUTING.md) and
 
 Documentation on `main` can improve independently of a runtime release. Each
 published bundle contains a frozen installation README; editing source docs does
-not update an existing release asset or installed image. Keep 0.4.1 immutable and
+not update an existing release asset or installed image. Keep published releases immutable and
 publish a new version only for an intentional distribution change. Client and
 Hermes instructions live in the [client guide](clients.md),
 [Hermes guide](hermes-compatibility.md) and [agent runbook](../AGENTS.md#installation-runbook-for-agents).
@@ -41,8 +41,8 @@ database migration was added. Publication does not alter an installed release.
 
 | Artifact | Meaning |
 | --- | --- |
-| `ghcr.io/cheftaco/chattermost:0.4.1` | Multi-architecture application image |
-| `ghcr.io/cheftaco/chattermost-migrator:0.4.1` | Matching one-off migrator |
+| `ghcr.io/cheftaco/chattermost:0.4.3` | Multi-architecture application image |
+| `ghcr.io/cheftaco/chattermost-migrator:0.4.3` | Matching one-off migrator |
 | `VERSION-amd64`, `VERSION-arm64` image tags | Native build outputs; may exist before all release checks finish |
 | `chattermost-VERSION.tar.gz` | Allowlisted bundle: manager, Compose, manifest, installation README, Apache license and notice |
 | `release.json` | Exact app/migrator/infrastructure digests, source revision, schema/lineage, platforms and permitted upgrade sources |
@@ -50,8 +50,8 @@ database migration was added. Publication does not alter an installed release.
 | `scan-*.json`, `lifecycle-proof-*.json` | Filtered vulnerability findings and sanitized native lifecycle evidence |
 
 Install a completed [GitHub release](https://github.com/ChefTaco/ChatterMost/releases),
-not a candidate architecture tag. The latest published lifecycle release is 0.4.1;
-0.3.2 and 0.3.3 are its tested upgrade sources. The application has one writer
+not a candidate architecture tag. The latest lifecycle release is 0.4.3;
+0.3.2, 0.3.3, 0.4.1 and 0.4.2 are its tested upgrade sources. The application has one writer
 and local WebSocket fanout. Both supported Linux architectures execute on native
 CI runners; there is no claim of emulated execution as native proof.
 
@@ -138,7 +138,7 @@ A successful push is not installation proof. Dispatch the public verification
 workflow for the exact completed release:
 
 ```bash
-gh workflow run verify-public-release.yml --ref main -f version=0.4.1
+gh workflow run verify-public-release.yml --ref main -f version=0.4.3
 ```
 
 Substitute the newly published version. Check both native jobs and their sanitized
@@ -154,7 +154,7 @@ Review the public manifest/digests and per-architecture SBOM/provenance, verify
 all downloaded checksums, and verify the archive and checksum publisher identities:
 
 ```bash
-gh attestation verify chattermost-0.4.1.tar.gz --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
+gh attestation verify chattermost-0.4.3.tar.gz --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
 gh attestation verify SHA256SUMS --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
 ```
 
@@ -164,6 +164,10 @@ attestations; they do not assert that the Docker build attestations have a separ
 GitHub/cosign image signature. Report candidate-digest testing separately from
 final anonymous public-archive testing and native execution separately from
 emulation. Retain operator verification receipts privately.
+
+## 0.4.3
+
+Fix container HTTPS and WebSocket readiness checks for verified IP product endpoints on Node 26. IP identities are checked against the certificate IP SAN without sending an invalid TLS SNI value. DNS endpoints, trusted CA validation and certificate mismatch refusal remain enforced. The release also tests upgrades from 0.4.2 alongside the existing supported baselines.
 
 ## 0.4.2
 

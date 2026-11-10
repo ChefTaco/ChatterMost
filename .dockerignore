@@ -6,6 +6,7 @@
 !src/
 !src/**
 !scripts/container.ts
+!scripts/probe-tls.ts
 !scripts/image-notices.ts
 !scripts/schema-policy.mjs
 !prisma/schema.prisma
