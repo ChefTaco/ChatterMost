@@ -8,6 +8,7 @@ import WebSocket, { type RawData } from 'ws';
 import { assertPrivateEnvFile, loadEnv } from '../src/server/env.js';
 import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
+import { probeTls } from './probe-tls.js';
 
 type Migration = { migration_name: string; checksum: string; finished_at: Date | null; rolled_back_at: Date | null };
 const command = process.argv[2] ?? 'serve';
@@ -100,7 +101,7 @@ async function probe(): Promise<void> {
   const localRequest = async (path: string, body?: unknown): Promise<{ status: number; token: string | undefined }> => new Promise((resolve, reject) => {
     const send = ca === undefined ? httpRequest : httpsRequest;
     const req = send({ hostname: localHost, port: env.PORT, path, method: body === undefined ? 'GET' : 'POST',
-      ...(ca === undefined ? {} : { ca, servername: env.TLS_PROBE_SERVER_NAME }),
+      ...(ca === undefined ? {} : probeTls(ca, env.TLS_PROBE_SERVER_NAME)),
       headers: { 'Content-Type': 'application/json', Origin: env.SERVER_URL }, timeout: 3000 }, response => {
       const tokenHeader = response.headers.token;
       response.resume();
@@ -117,7 +118,7 @@ async function probe(): Promise<void> {
   if (login.status !== 200 || token === undefined) throw new Error('Readiness login failed; use current administrator credentials in the protected runtime file');
   await new Promise<void>((resolve, reject) => {
     const socket = new WebSocket(`${ca === undefined ? 'ws' : 'wss'}://${localHost === '::1' ? '[::1]' : localHost}:${env.PORT}/api/v4/websocket`, {
-      headers: { Authorization: `Bearer ${token}` }, ...(ca === undefined ? {} : { ca, servername: env.TLS_PROBE_SERVER_NAME })
+      headers: { Authorization: `Bearer ${token}` }, ...(ca === undefined ? {} : probeTls(ca, env.TLS_PROBE_SERVER_NAME))
     });
     const timer = setTimeout(() => { socket.terminate(); reject(new Error('WebSocket readiness timeout')); }, 5000);
     socket.on('message', (frame) => {

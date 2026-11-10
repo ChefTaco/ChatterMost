@@ -165,6 +165,10 @@ GitHub/cosign image signature. Report candidate-digest testing separately from
 final anonymous public-archive testing and native execution separately from
 emulation. Retain operator verification receipts privately.
 
+## 0.4.3
+
+Fix container HTTPS and WebSocket readiness checks for verified IP product endpoints on Node 26. IP identities are checked against the certificate IP SAN without sending an invalid TLS SNI value. DNS endpoints, trusted CA validation and certificate mismatch refusal remain enforced. The release also tests upgrades from 0.4.2 alongside the existing supported baselines.
+
 ## 0.4.2
 
 The application and migration images use a pinned, patched Node 26 runtime with maintained system libraries. Reviewed upgrade paths cover 0.3.2, 0.3.3 and 0.4.1, preserving credentials, messages and attachments.
