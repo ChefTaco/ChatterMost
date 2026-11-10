@@ -343,3 +343,5 @@ operation receipts and audit outbox. Use read-only filesystem mounts and Postgre
 `default_transaction_read_only=on` as additional rehearsal fences. Confirm source
 records and files remain unchanged before discarding the clone. This mode does
 not authorize production activation or account recovery.
+
+The 0.4.2 container release runs Node 26 on a maintained glibc distribution. The standalone source requirements are unchanged.
