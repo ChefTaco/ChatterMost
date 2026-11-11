@@ -11,16 +11,16 @@ Keep credentials, backup paths, diagnostics and recovery evidence private.
 | --- | --- | --- |
 | Published Compose 0.2.3 | Published Compose 0.3.2 | Run the verified **0.3.2 manager** against the existing directory with `upgrade 0.3.2` |
 | Published Compose 0.3.2 | Published Compose 0.3.3 | Run the verified **0.3.3 manager** with `upgrade 0.3.3` |
-| Published Compose 0.3.2, 0.3.3, 0.4.1 or 0.4.2 | Published Compose 0.4.4 | Run the verified **0.4.4 manager** with `upgrade 0.4.4` |
-| Compose 0.4.4 | Same version | No upgrade required; `start` checks/starts the selected release |
-| Compose 0.4.4 | A future release | Only when that published target explicitly lists `0.4.4` in `release.json` → `upgrade_from` and the path has release-test coverage |
+| Published Compose 0.3.2, 0.3.3, 0.4.1, 0.4.2 or 0.4.4 | Published Compose 0.4.5 | Run the verified **0.4.5 manager** with `upgrade 0.4.5` |
+| Compose 0.4.5 | Same version | No upgrade required; `start` checks/starts the selected release |
+| Compose 0.4.5 | A future release | Only when that published target explicitly lists `0.4.5` in `release.json` → `upgrade_from` and the path has release-test coverage |
 | Compose with a recorded previous release | That previous release | `rollback`, only when generation, lineage and actual schema checks permit it |
 | Native SSH/systemd | Compatible newer native release | Verified backup, then the native staged migration/preflight/activation transaction |
 | Native SSH/systemd or JSON store | Compose | Separate authorized migration; not an ordinary version upgrade or a cross-installation `restore` |
 
-The current published release is **0.4.4**. Its reviewed `upgrade_from` list contains
-**0.3.2, 0.3.3, 0.4.1 and 0.4.2**. An older 0.2.3 installation must first upgrade to the historical
-0.3.2 release using its verified manager; a direct 0.2.3 → 0.4.4 path is unsupported.
+The current published release is **0.4.5**. Its reviewed `upgrade_from` list contains
+**0.3.2, 0.3.3, 0.4.1, 0.4.2 and 0.4.4**. An older 0.2.3 installation must first upgrade to the historical
+0.3.2 release using its verified manager; a direct 0.2.3 → 0.4.5 path is unsupported.
 The `v0.4.0` tag was never published as a release and is not an upgrade target.
 Do not infer a path from version ordering, source tags or the presence
 of an architecture-specific image. Failed candidate versions are not installations.
@@ -49,11 +49,11 @@ editing the mounted file alone does not reload the running process.
 2. Review the target's `upgrade_from`, infrastructure image digests and schema
    contract. Verify the current `status`, and take a backup with the new manager.
    Plan a brief interruption: backup drains the app and resumes it afterward if
-   it was running. In this example, both commands use the downloaded 0.4.4 tool:
+   it was running. In this example, both commands use the downloaded 0.4.5 tool:
 
    ```bash
-   ./chattermost-0.4.4/chattermost --directory /srv/chattermost status
-   ./chattermost-0.4.4/chattermost --directory /srv/chattermost backup
+   ./chattermost-0.4.5/chattermost --directory /srv/chattermost status
+   ./chattermost-0.4.5/chattermost --directory /srv/chattermost backup
    ```
 
    Save the printed backup path privately, copy the complete backup off-host and
@@ -64,11 +64,11 @@ editing the mounted file alone does not reload the running process.
 3. Request the exact version:
 
    ```bash
-   ./chattermost-0.4.4/chattermost --directory /srv/chattermost upgrade 0.4.4
+   ./chattermost-0.4.5/chattermost --directory /srv/chattermost upgrade 0.4.5
    /srv/chattermost/chattermost --directory /srv/chattermost status
    ```
 
-   The example assumes the download directory contains `chattermost-0.4.4/`;
+   The example assumes the download directory contains `chattermost-0.4.5/`;
    do not run it from inside that extracted directory with the same relative path.
    After a successful upgrade, the manager is installed at the installation root.
 4. Check public HTTPS ping/client configuration against the selected manifest's
