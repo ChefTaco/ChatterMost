@@ -120,7 +120,7 @@ npm run build
 
 Run `npx playwright test` separately before or after deploy for the browser gate.
 
-The lockfile currently resolves `@hono/node-server` 2.x. ChatterMost's supported patched Node ranges are in `package.json`; `.nvmrc` pins source development and the Dockerfile pins the container runtime. The native deploy script checks Node major 22 or newer, which is not a substitute for satisfying the package engine ranges. Run `npm audit` after dependency changes; the supported tree is expected to report zero known vulnerabilities.
+The lockfile currently resolves `@hono/node-server` 2.x. ChatterMost's supported patched Node ranges are in `package.json`; `.nvmrc` pins source development and the Dockerfile pins the container runtime. The native deploy script requires Node.js 24.22.3 or later on the 24.x line, or 26.13.1 or later on the 26.x line, before migration or activation. Other runtime lines and prerelease versions are rejected. Run `npm audit` after dependency changes; the supported tree is expected to report zero known vulnerabilities.
 
 ## Security Fusion Provisioning And Export
 

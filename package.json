@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Mattermost-compatible supervised chat facade for Hermes Agent and web users.",
   "engines": {
-    "node": ">=22.23.4 <23 || >=24.22.1 <25 || >=26.12.1 <27"
+    "node": "^24.22.3 || ^26.13.1"
   },
   "scripts": {
     "dev": "tsx src/server/index.ts",
@@ -35,7 +35,7 @@
     "bcryptjs": "^3.0.2",
     "cookie": "^1.0.2",
     "dotenv": "^16.6.1",
-    "hono": "^4.13.1",
+    "hono": "^4.13.18",
     "jose": "6.2.3",
     "nanoid": "^5.1.5",
     "pgsql-parser": "^18.1.1",

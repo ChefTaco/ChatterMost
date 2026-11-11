@@ -120,8 +120,9 @@ validate_manifest_argument() {
 run_transaction() {
   local phase="$1" manifest="$2" release_root
   release_root="${manifest%/release-manifest.json}"
-  if ! ssh "${SSH_OPTS[@]}" "$REMOTE" "node -e 'process.exit(Number(process.versions.node.split(\".\")[0]) >= 22 ? 0 : 1)'" >/dev/null 2>&1; then
-    echo 'Node.js 22+ is required on the deployment target before migration or activation.' >&2
+  local node_check='const [major,minor,patch]=process.versions.node.split(".").map(Number);process.exit(/^(24|26)\.\d+\.\d+$/.test(process.versions.node)&&((major===24&&(minor>22||(minor===22&&patch>=3)))||(major===26&&(minor>13||(minor===13&&patch>=1))))?0:1)'
+  if ! ssh "${SSH_OPTS[@]}" "$REMOTE" "node -e '$node_check'" >/dev/null 2>&1; then
+    echo 'Node.js 24.22.3+ on the 24.x line or 26.13.1+ on the 26.x line is required before migration or activation.' >&2
     exit 1
   fi
   remote_sudo "env CHATTERMOST_MANIFEST='$manifest' '$release_root/scripts/release-transaction.sh' '$phase'"

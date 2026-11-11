@@ -4,6 +4,7 @@ import { chmod, mkdir, readFile, mkdtemp, stat, writeFile } from 'node:fs/promis
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { runInNewContext } from 'node:vm';
 
 import { describe, expect, it } from 'vitest';
 
@@ -14,6 +15,25 @@ import { createEmptyState } from '../../src/server/store.js';
 describe('deployment secret controls', () => {
   const execFileAsync = promisify(execFile);
   const digest = (value: string): string => createHash('sha256').update(value).digest('hex');
+
+  it('rejects unpatched runtime versions before native migration or activation', async () => {
+    const deploy = await readFile('scripts/deploy.sh', 'utf8');
+    const check = /local node_check='(?<script>[^']+)'/u.exec(deploy)?.groups?.script;
+    if (check === undefined) throw new Error('Missing remote deployment runtime check');
+    const status = (version: string): unknown => runInNewContext(check, {
+      process: { versions: { node: version }, exit: (code: number) => code }
+    });
+    for (const version of ['24.22.3', '24.23.0', '26.13.1', '26.14.0']) {
+      expect(status(version), version).toBe(0);
+    }
+    for (const version of ['22.23.4', '24.22.0', '24.22.1', '24.22.2', '25.0.0', '26.12.1', '26.13.0', '27.0.0', '24.22.3-rc.1', '26.14.0-rc.1', 'invalid']) {
+      expect(status(version), version).toBe(1);
+    }
+    expect(deploy).toContain('"node -e \'$node_check\'"');
+    expect(deploy.indexOf('"node -e \'$node_check\'"')).toBeLessThan(
+      deploy.indexOf('remote_sudo "env CHATTERMOST_MANIFEST=')
+    );
+  });
 
   async function createPolicyRoot(root: string, migrations: Record<string, string>): Promise<void> {
     await mkdir(path.join(root, 'deploy'), { recursive: true });
