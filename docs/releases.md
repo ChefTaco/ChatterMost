@@ -15,6 +15,11 @@ publish a new version only for an intentional distribution change. Client and
 Hermes instructions live in the [client guide](clients.md),
 [Hermes guide](hermes-compatibility.md) and [agent runbook](../AGENTS.md#installation-runbook-for-agents).
 
+## Unreleased security changes
+
+- Build and run CI with pinned Node.js 24.22.3 and require patched Node.js 24/26 versions, including before native deployment migration or activation. Node.js 22 is no longer accepted because this release validates the patched 24/26 runtime lines.
+- Upgrade Hono to 4.13.18 for bounded memory when request bodies arrive in tiny chunks (GHSA-39q9-qp46-w8xg). JSON and multipart body limits retain their existing response shapes.
+
 ## Changes in 0.4.1
 
 The `v0.4.0` tag exists but 0.4.0 was never published: its release run failed the

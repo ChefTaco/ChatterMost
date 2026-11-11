@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
-        with: {node-version: 22.23.4, cache: npm}
+        with: {node-version: 24.22.3, cache: npm}
       - run: npm ci
       - name: Anonymous release and registry install, real persistence and WebSocket proof
         env:
