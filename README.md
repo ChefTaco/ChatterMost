@@ -7,24 +7,31 @@ desktop apps, with Hermes Agent integration.**
 
 Connect the official apps to your ChatterMost server URL to use channels, direct
 messages, threads, reactions and file sharing. Connect Hermes Agent to the same
-backend to chat with your agents from those clients. A compact native web client
-is included for standalone installs and native sign-in.
+backend to chat with your agents from those clients. ChatterMost has no built-in
+web UI: [HiveXUI](https://github.com/ChefTaco/HiveXUI) is the browser UI.
 
 ChatterMost is independently developed and licensed under Apache-2.0. It implements
 Mattermost-compatible REST and WebSocket interfaces; it is not a fork of the
 upstream server. See [client setup and current limits](docs/clients.md) for the
 supported experience and verification coverage.
 
-## Browser console
+## Web UI: HiveXUI
 
-In the Hive:Magnus suite, the chat module of [HiveXUI](https://github.com/ChefTaco/HiveXUI)
-is the browser console, deployed by the [Hive installer](https://github.com/ChefTaco/hive).
-ChatterMost keeps its own independent API and still runs on its own. Its native web
-client remains for standalone installs and native sign-in.
+[HiveXUI](https://github.com/ChefTaco/HiveXUI) is the only UI for the Hive:Magnus
+product line, deployed by the [Hive installer](https://github.com/ChefTaco/hive).
+Its chat module provides conversations, invite redemption (`/signup` in HiveXUI)
+and administration. ChatterMost keeps its own independent API and still runs on
+its own for the official apps and Hermes; the standalone web UI it used to serve
+is retired.
 
-Invite redemption works in HiveXUI at `/signup` and creates a native chat account.
-Using chat in the console also needs an Oathweave account and an explicit link to
-that chat account: see [the Oathweave integration guide](docs/oathweave.md).
+The old UI paths `/`, `/login`, `/signup` and `/admin/system-console` now serve a
+small static page saying ChatterMost is managed in HiveXUI. Set `HIVEXUI_URL` to
+an absolute `http(s)` URL (no credentials or fragment) to redirect those paths
+there instead with `302`; the request path is not appended. An invalid value
+stops startup. `/api/v4` and the WebSocket are unchanged.
+
+Using chat in HiveXUI also needs an Oathweave account and an explicit link to a
+native chat account: see [the Oathweave integration guide](docs/oathweave.md).
 
 ## Use the official apps
 
@@ -32,11 +39,12 @@ that chat account: see [the Oathweave integration guide](docs/oathweave.md).
 2. Add your ChatterMost HTTPS server URL, such as `https://chat.example.test`.
    Use the origin, without `/api/v4` or `/websocket`.
 3. Sign in with your ChatterMost username or email and password. An administrator
-   can create your account or invite you to sign up through the native web client,
-   or through HiveXUI at `/signup` in the suite, first.
+   can create your account, or invite you to sign up through HiveXUI at `/signup`,
+   first.
 
-The native mobile apps use the Mattermost-compatible API. The desktop app loads
-ChatterMost's native web client. Mobile background push delivery, calls,
+The native mobile apps use the Mattermost-compatible API. The desktop app loads a
+server's web UI, which ChatterMost no longer serves; use HiveXUI in a browser on
+desktop. Mobile background push delivery, calls,
 upstream server plugins/marketplace and SSO are not implemented. Foreground
 messages use WebSocket delivery. [Client setup](docs/clients.md) explains TLS,
 version advertisement, troubleshooting and what the tests establish.
@@ -100,12 +108,12 @@ separate ChatterMost plugin package inside Hermes.
 - Invite-only accounts, cookie sessions, bearer tokens, bot tokens and personal access tokens.
 - Teams, public/private channels, DMs/group DMs, threads, search, reactions, pins and files.
 - Profile images, preferences, presence, typing and real-time WebSocket events.
-- Browser administration for users, invites, privacy, bots, supervision and agent policy.
+- Administration APIs for users, invites, privacy, bots, supervision and agent policy, used by HiveXUI.
 - Hermes bot conversations and declared slash-command routing with the original sender identity.
 
 See [API compatibility](docs/compatibility.md) for the implemented interfaces and
-[administration](docs/admin-guide.md) for the native web client. Protocol fixtures and
-browser tests cover core client flows; they are not certification of every app
+[administration](docs/admin-guide.md). Protocol fixtures and real-server API and
+WebSocket tests cover core client flows; they are not certification of every app
 version or upstream feature.
 
 ## Operations and documentation

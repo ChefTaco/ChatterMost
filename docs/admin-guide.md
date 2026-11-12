@@ -4,75 +4,44 @@ Admins sign in with the configured administrator account. Compose setup stores
 its initial credentials in the protected installation `secrets/runtime.env`;
 source/native installations bootstrap from `.env` or `CHAT_SERVER_ADMIN_*` values.
 Keep the current administrator password in the protected readiness configuration
-when changing it through the UI. See [container operations](containers.md) and
+when changing it through HiveXUI or the API. See [container operations](containers.md) and
 [upgrades/recovery](upgrading.md) before installation-level changes.
 
 People can connect official apps to the same backend using the [client guide](clients.md).
 For agents, configure Hermes' bundled `mattermost-platform` platform plugin using
-[Hermes setup](hermes-compatibility.md#quick-setup). User/invite/bot administration
-below describes the included ChatterMost web UI, not the native mobile interface.
+[Hermes setup](hermes-compatibility.md#quick-setup). ChatterMost no longer ships its
+own web UI: [HiveXUI](https://github.com/ChefTaco/HiveXUI) is the browser UI for the
+Hive:Magnus product line, and its chat module administers ChatterMost through the
+admin API and the [browser contracts](#browser-administration-contracts) below.
+The old `/`, `/login`, `/signup` and `/admin/system-console` paths serve a short
+notice, or redirect to HiveXUI when `HIVEXUI_URL` is set.
 
-## Navigation
+## Conversations
 
-- `+ Channel` opens the New panel for public/private channel creation.
-- `+ DM` opens Direct messages. Search for a person or bot, then choose `Message` for a new DM or `Open` for an existing conversation.
-- `Members` opens the right-side member rail. Direct and group conversations show fixed conversation members only; channels show current members and add-user controls.
-- `Files`, `Pinned`, and `Policy` are channel inspector tabs for attachments, pinned messages, and channel-level agent controls.
-- The moon/sun icon in the chat header toggles light/dark mode and stores `chattermost-theme` in browser `localStorage`.
-- The profile card opens Profile settings for display details and profile images.
+The official apps and HiveXUI provide channels, DMs, threads, reactions, pins,
+attachments and emoji through the Mattermost-compatible API. Private channels are
+visible only to listed members; channel admins and system admins can add members.
+Direct messages are fixed one-to-one conversations and group direct messages are
+fixed multi-user conversations.
 
-## Channels And DMs
-
-Private channels are visible only to listed members. Channel admins and system admins can add users from the Members panel.
-
-Direct messages are fixed one-to-one conversations. Group direct messages are fixed multi-user conversations. Use `+ DM` to start or reopen them.
-
-The composer supports:
-
-- Text messages.
-- File/image attachment selection and an attachment tray before send.
-- Paste/drop file attachments, upload status, and recoverable send errors.
-- Searchable emoji selection with recent emoji and admin-managed custom emoji.
-- Thread replies from `Reply in thread` on a post.
-- Pin/unpin message actions. Pinned messages appear in the Pinned inspector tab.
-- A command deck when `/` is typed in a bot conversation. Use `/commands` for the connected Hermes gateway's live command and installed-skill list.
-
-On mobile, the composer is fixed at the bottom of the viewport so message entry, attachments, emoji, and send remain reachable.
-
-Slash commands are text-only. One-to-one bot DMs need no mention. Group DMs and channels with one bot target it automatically; conversations with multiple bots require one explicit `@bot`. A rejected command remains in the composer so it can be corrected. Hermes enforces the sender's command access and any confirmation prompt.
+Slash commands are text-only. One-to-one bot DMs need no mention. Group DMs and channels with one bot target it automatically; conversations with multiple bots require one explicit `@bot`. Hermes enforces the sender's command access and any confirmation prompt.
 
 ## Administration
 
-Use the Admin users and invites panel to:
+Administrators use HiveXUI's chat module, or the admin API directly, to:
 
-- Create one-use invites.
-- Review and revoke active invites.
-- List users.
-- Revoke user sessions.
-- Deactivate users.
-- Reactivate users.
-- Reset passwords.
+- Create one-use invites, and review or revoke active invites.
+- List users, revoke user sessions, deactivate, reactivate and reset passwords.
 - Dry-run and apply cleanup for generated `testotron-*` users and `Test*` channels.
+- Manage privacy and compatibility settings: telemetry, diagnostics, security alert
+  checks, email/full-name visibility, file uploads, public links, custom emoji and
+  bot creation.
+- Switch supervision between audit-only and pre-moderation. Backend policy support also includes disabled and post-moderation modes.
 
-Use System to manage privacy and compatibility settings:
+Use agent administration to register native AI agents, edit structured permissions/allowlists/memory policy, and run policy simulation.
 
-- Telemetry.
-- Diagnostics.
-- Security alert checks.
-- Email/full-name visibility.
-- File uploads.
-- Public links.
-- Custom emoji.
-- Bot creation.
-
-Custom emoji can be added and removed from System when enabled. Users see active custom emoji in the composer picker.
-
-Use Supervision to switch between audit-only and pre-moderation from the current web UI. Backend policy support also includes disabled and post-moderation modes.
-
-Use Agents to register native AI agents, edit structured permissions/allowlists/memory policy, and run policy simulation.
-
-Use Hermes to review bot-token configuration, bot accounts, WSS connection count, last bot post, recent agent events, and to rotate the bot token intentionally. A rotated token is shown only in the rotation response; update Hermes immediately.
-This panel reports backend bot state; it does not install or start a Hermes
+Use Hermes administration to review bot-token configuration, bot accounts, WSS connection count, last bot post, recent agent events, and to rotate the bot token intentionally. A rotated token is shown only in the rotation response; update Hermes immediately.
+This reports backend bot state; it does not install or start a Hermes
 gateway. Fresh Compose setup already generates a token for the seeded `hermes`
 bot. Obtain it privately from `secrets/runtime.env`; creating another gateway uses
 a dedicated bot through `POST /admin/bots`. Repeating that provisioning call for
@@ -118,8 +87,8 @@ bot mutation: `operation_id` for provisioning/identity updates, or the
 `X-Bot-Operation-ID` header for token rotation. The ID is bound atomically to the
 administrator, action, inputs and committed target. A duplicate or changed request
 fails before any credential change. Durable non-secret receipts survive audit
-outbox compaction and never contain or replay the one-time token. Existing native
-clients can continue to omit this optional contract.
+outbox compaction and never contain or replay the one-time token. Older clients can
+continue to omit this optional contract.
 
 After an interrupted request, query `GET /admin/bot-operations/{operation_id}`.
 A committed receipt confirms the effect; a lost one-time token requires a new,

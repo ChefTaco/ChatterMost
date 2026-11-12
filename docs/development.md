@@ -59,7 +59,8 @@ npx playwright install chromium
 npx playwright test
 ```
 
-For UI changes, also capture and inspect screenshots. Keep local screenshots and
+Playwright starts the real server and runs API and WebSocket checks for the
+official apps; the standalone web UI is retired in favour of HiveXUI. Keep local
 traces under ignored `output/playwright/`; never publish live evidence.
 
 Optional real-Postgres runtime smoke, against a disposable database configured

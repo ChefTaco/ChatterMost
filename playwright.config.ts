@@ -5,8 +5,8 @@ const runId = Date.now();
 
 export default defineConfig({
   testDir: 'tests/playwright',
-  // Files share one synthetic server and administrator. Keep file fixtures isolated;
-  // the realtime test still runs its two browser contexts concurrently.
+  // Files share one synthetic server and administrator. The standalone web UI is
+  // retired, so these are real-server API and WebSocket checks for the official apps.
   workers: 1,
   timeout: 60_000,
   expect: {

@@ -15,10 +15,10 @@ import { parse as parseCookie, serialize as serializeCookie } from 'cookie';
 import { z } from 'zod';
 
 import { HttpAppError, asJsonRecord, badRequest, forbidden, mattermostError, notFound, ok, unauthorized, type JsonRecord } from '../shared/mattermost.js';
-import { renderShell, webClient, webFavicon, webStyles } from '../web/assets.js';
 import { websocketFanout } from './capabilities.js';
 import type { AppEnv } from './env.js';
 import { resolveDataPath } from './env.js';
+import { HIVEXUI_STUB_PATHS, hiveXuiStubResponse } from './hivexui-stub.js';
 import { bootstrap, createIncomingWebhook, createServices, isAdmin, requireAdmin, type AuthContext, type ServiceBundle } from './services.js';
 import { JsonStore, PostgresStore, type StateStore } from './store.js';
 import { toMattermostChannel, toMattermostChannelMember, toMattermostCommand, toMattermostFileInfo, toMattermostPost, toMattermostPostList, toMattermostPreference, toMattermostReaction, toMattermostTeam, toMattermostTeamMember, toMattermostUser } from './mappers.js';
@@ -274,13 +274,11 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
     return c.json(mattermostError(appError, requestId), 500);
   });
 
-  app.get('/assets/styles.css', (c) => c.text(webStyles, 200, { 'Content-Type': 'text/css; charset=utf-8' }));
-  app.get('/assets/app.js', (c) => c.text(webClient, 200, { 'Content-Type': 'application/javascript; charset=utf-8' }));
-  app.get('/favicon.svg', (c) => c.text(webFavicon, 200, { 'Content-Type': 'image/svg+xml; charset=utf-8' }));
-  app.get('/', (c) => c.html(renderShell()));
-  app.get('/login', (c) => c.html(renderShell()));
-  app.get('/signup', (c) => c.html(renderShell()));
-  app.get('/admin/system-console', (c) => c.html(renderShell()));
+  // The standalone web UI is retired; HiveXUI is the UI. Old bookmarks get a static notice
+  // or, with HIVEXUI_URL set, a redirect. /api/v4 and the WebSocket are unchanged.
+  for (const path of HIVEXUI_STUB_PATHS) {
+    app.get(path, (c) => hiveXuiStubResponse(c, 'ChatterMost', env.HIVEXUI_URL));
+  }
 
   app.get('/api/v4/system/ping', (c) =>
     c.json({
@@ -1977,7 +1975,7 @@ function requestContext(store: StateStore, env: AppEnv): MiddlewareHandler<AppHo
   };
 }
 
-// CSRF protection for cookie-authenticated Web UI writes. Bearer-token API
+// CSRF protection for cookie-authenticated browser writes. Bearer-token API
 // clients (Hermes, mobile, mmctl) are exempt because tokens are not sent
 // automatically by browsers. Cookie-authenticated unsafe methods must carry a
 // same-origin Origin or Referer header.
@@ -2044,7 +2042,8 @@ function secureHeaders(env: AppEnv): MiddlewareHandler {
     c.header('X-Frame-Options', 'DENY');
     c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
     c.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-    c.header('Content-Security-Policy', "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'");
+    // Keep a stricter policy a handler already chose (the HiveXUI stub page).
+    if (!c.res.headers.has('Content-Security-Policy')) c.header('Content-Security-Policy', "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'");
   };
 }
 

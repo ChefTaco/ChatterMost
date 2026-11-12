@@ -3,15 +3,18 @@
 ChatterMost is a Mattermost-compatible backend for the official mobile and desktop
 apps. Use the same server and accounts for people and Hermes Agent conversations.
 The native mobile apps communicate through REST `/api/v4` and WebSocket
-`/api/v4/websocket`; the desktop app hosts ChatterMost's included web UI.
+`/api/v4/websocket`. ChatterMost no longer serves its own web UI; the browser UI is
+[HiveXUI](https://github.com/ChefTaco/HiveXUI). The old `/`, `/login`, `/signup` and
+`/admin/system-console` paths show a short notice, or redirect to HiveXUI when the
+operator sets `HIVEXUI_URL`.
 
 ## Connect a client
 
 1. [Install ChatterMost](containers.md) behind a working HTTPS reverse proxy.
    Use a certificate trusted by the device and a hostname reachable from it.
    A private-network installation requires the device to have that network access.
-2. Create an account through an administrator or a web invite. Public signup is
-   disabled. Use the browser to redeem the invite before signing into an app.
+2. Create an account through an administrator or an invite. Public signup is
+   disabled. Redeem the invite in HiveXUI before signing into an app.
 3. Download an [official mobile or desktop app](https://mattermost.com/apps/).
    Add a server using your ChatterMost origin, for example
    `https://chat.example.test`, and a display name of your choice. Include a port
@@ -22,8 +25,8 @@ The native mobile apps communicate through REST `/api/v4` and WebSocket
    For an agent conversation, follow [Hermes gateway setup](hermes-compatibility.md).
 
 The upstream [client connection instructions](https://docs.mattermost.com/end-user-guide/access/access-your-workspace)
-describe the apps' add-server workflow. The backend's account administration and
-web interface are ChatterMost's own, as described in the [admin guide](admin-guide.md).
+describe the apps' add-server workflow. Account administration happens in HiveXUI
+or through the admin API, as described in the [admin guide](admin-guide.md).
 
 ## Server requirements
 
@@ -49,7 +52,7 @@ server credentials.
 | --- | --- |
 | Core chat | Username/email login, teams, channels, DMs/group DMs, posts, threads, reactions, files, profiles, presence and typing have Mattermost-compatible endpoints. |
 | Files | Uploads accept PNG, JPEG, GIF, WebP and plain text, subject to file signatures and size limits. General audio, video, PDF and office-document uploads are not implemented. |
-| Desktop | The official desktop shell loads the backend's ChatterMost web interface; it does not provide the upstream web interface or all native-shell integrations. |
+| Desktop | The official desktop shell loads a server-hosted web interface. ChatterMost no longer serves one (the retired paths show the HiveXUI notice or redirect), so use HiveXUI in a browser on desktop. |
 | Mobile notifications | Foreground connected clients receive WebSocket events. Device/notification compatibility acknowledgements are present, but background APNs/FCM push transport is disabled. |
 | Accounts | Invite/admin-created accounts and username/email/password login. SSO discovery reports OIDC, SAML and LDAP disabled. |
 | Extensions | Calls and the upstream server plugin/marketplace runtime are unsupported. Hermes uses a platform plugin on the Hermes host. |
@@ -57,8 +60,8 @@ server credentials.
 
 The repository replays mobile request fixtures with an iOS `2.22.0` user agent and
 tests additional native-client contracts: channel bootstrap, roles, reconnect
-sequences, heartbeat, files and permissions. Playwright verifies the included web
-UI and real WebSocket behavior. These tests are not physical-device/App Store
+sequences, heartbeat, files and permissions. Playwright runs the real server and
+verifies ping, login and WebSocket delivery the way the official apps use them. These tests are not physical-device/App Store
 certification, and the fixture user agent is not a promise that every app version
 or upstream feature is covered. Record the actual app version and platform when
 checking a deployment or reporting an issue. See [API compatibility](compatibility.md).

@@ -70,7 +70,7 @@ updates on `main` do not change the installed 0.5.1 image or bundle.
 
 ## Project Shape
 
-ChatterMost is a strictly typed TypeScript/Hono Mattermost-compatible backend for official clients, supervised chat and Hermes Agent communication. It exposes Mattermost-compatible REST under `/api/v4`, WebSocket at `/api/v4/websocket`, and a lightweight web UI from `src/web/assets.ts`.
+ChatterMost is a strictly typed TypeScript/Hono Mattermost-compatible backend for official clients, supervised chat and Hermes Agent communication. It exposes Mattermost-compatible REST under `/api/v4`, WebSocket at `/api/v4/websocket`, and no built-in web UI: HiveXUI is the UI for the Hive:Magnus product line. The retired UI paths (`/`, `/login`, `/signup`, `/admin/system-console`) serve a static HiveXUI notice, or a `302` to `HIVEXUI_URL` when set (`src/server/hivexui-stub.ts`).
 
 Important paths:
 
@@ -81,9 +81,10 @@ Important paths:
 - `src/server/domain.ts`: internal record types.
 - `src/server/mappers.ts`: Mattermost-compatible snake_case response builders.
 - `src/shared/mattermost.ts`: public API types, ID generation, app errors.
-- `src/web/assets.ts`: CSS/HTML/JS strings for the web UI.
+- `src/server/hivexui-stub.ts`: HiveXUI notice/redirect for the retired web UI paths and `HIVEXUI_URL` validation.
+- `src/shared/browser-chat.ts`, `src/shared/browser-admin.ts`: browser API contracts consumed by HiveXUI; keep them and `docs/openapi-browser.json` in sync.
 - `prisma/schema.prisma` and `prisma/migrations/`: deployment database schema/migration artifacts.
-- `tests/vitest/` and `tests/playwright/`: unit/integration and browser coverage.
+- `tests/vitest/` and `tests/playwright/`: unit/integration coverage and real-server API/WebSocket smoke checks for the official apps.
 - `scripts/deploy.sh`, `scripts/setup-ssh-cert-auth.sh`, `deploy/nginx.conf`, `deploy/chattermost.service`: deployment tools.
 - `BUILD_LOG.md`: short build-session summary replacing the old completed checklist and backlog files.
 
@@ -106,8 +107,6 @@ npm run test:unit
 npm run build
 npx playwright test
 ```
-
-For UI-affecting changes, also capture and inspect screenshots with Playwright. Existing final screenshot examples live under `output/playwright/visual/`.
 
 The lint gate is strict typed ESLint with `--max-warnings=0`. Do not weaken rules to make a change pass.
 
@@ -153,7 +152,7 @@ Preserve these compatibility constraints:
 - Version advertisement is controlled by `ALLOW_VERSION_ADVERTISEMENT`.
 - Current compatibility version/profile: `11.8.0` / `mattermost-v11.8`.
 
-Auth/CSRF: the Web UI uses the `SameSite=Lax` session cookie (`SESSION_COOKIE_NAME`, default `MMSID`). Cookie-authenticated writes require a same-origin `Origin`/`Referer` matching `SERVER_URL`; bearer-token clients are exempt. Test API calls that authenticate by an accumulated cookie must send an `Origin` header, mirroring a browser (see `tests/playwright/helpers.ts`). Cookie-authenticated WebSocket upgrades require a matching `Origin` (CSWSH guard in `src/server/index.ts` via `isSameWebSocketOrigin`); clients without an `Origin` must use a bearer token.
+Auth/CSRF: browser clients use the `SameSite=Lax` session cookie (`SESSION_COOKIE_NAME`, default `MMSID`). Cookie-authenticated writes require a same-origin `Origin`/`Referer` matching `SERVER_URL`; bearer-token clients are exempt. Test API calls that authenticate by an accumulated cookie must send an `Origin` header, mirroring a browser (see `tests/playwright/helpers.ts`). Cookie-authenticated WebSocket upgrades require a matching `Origin` (CSWSH guard in `src/server/index.ts` via `isSameWebSocketOrigin`); clients without an `Origin` must use a bearer token.
 
 Install the compatibility CLI separately and set `MMCTL` to its absolute path:
 
@@ -179,30 +178,11 @@ scripts/mmctl-compat-smoke.sh
 
 Mattermost-compatible WebSocket `posted` events are public compatibility payloads, not internal records. Emit `data.post` using `toMattermostPost(...)` and include `channel_id`, `channel_type`, `team_id`, and `sender_name`. Hermes Agent uses `channel_type: "D"` to identify direct messages and skip channel mention gating.
 
-## Web UI Notes
+## Web UI
 
-The UI is intentionally compact and operational, not a landing page. Avoid marketing-style rewrites. Keep mobile and desktop layouts free of overlapping or clipped text.
+ChatterMost has no built-in web UI; do not add one. UI work belongs in HiveXUI, which consumes the `/api/v4` and `/admin` APIs through the browser contracts above. Keep the retired-path notice/redirect small, static and script-free.
 
-Known UI race: WebSocket fanout can re-render the app while a user is typing. Preserve `state.drafts` behavior in `src/web/assets.ts` so composer drafts survive live refreshes.
-
-Channel creation is panel-based, not prompt-based. `+ Channel` opens the New panel, supports public/private channels, and newly created private channels should land on Members so the creator can add users immediately. The System console rail button should open the System panel, not the Users admin panel.
-
-Direct messaging is panel-based too. `+ DM` opens Direct messages, supports searching people and bot accounts, and should show `Open` for existing conversations or `Message` for new one-to-one DMs. Direct and group conversations have fixed membership; the Members rail should show conversation members only and must not show irrelevant add-user controls.
-
-The desktop inspector has purpose-specific tabs: Members, Files, Pinned, Policy, DMs, New, Profile, and admin-only Users/System/Supervision/Agents/Hermes. Keep controls in the tab where the user expects them; avoid adding a button that only reveals another empty area.
-
-The mobile composer is a fixed footer. Keep message entry, attachment selection, emoji selection, and Send reachable at the bottom of the viewport on iPhone-sized screens. The attachment control should produce visible attachment chips after selection; the emoji control should open a usable grid of emoji choices.
-
-Bot conversations support Hermes slash commands. The web composer submits slash-prefixed text through `/api/v4/commands/execute` and shows a compact command deck; dynamic installed skills remain discoverable through Hermes `/commands`, but only explicitly declared triggers may be forwarded. Preserve exact command text in one-to-one bot DMs, auto-mention the sole bot outside DMs, and require one explicit target when several bots are present. Commands must remain user-authored posts so Hermes receives the original sender identity and enforces its own access policy.
-
-The Light/Dark control in the chat header stores `chattermost-theme` in `localStorage`. When changing theme CSS, verify readable text contrast in both modes rather than relying on visual preference alone.
-
-After visual changes, inspect at least:
-
-- desktop login
-- desktop app after login
-- mobile app after login
-- deployed app screenshot when deployment is part of the task
+Hermes slash commands are submitted through `/api/v4/commands/execute`; only explicitly declared triggers may be forwarded. Preserve exact command text in one-to-one bot DMs, auto-mention the sole bot outside DMs, and require one explicit target when several bots are present. Commands must remain user-authored posts so Hermes receives the original sender identity and enforces its own access policy.
 
 ## Deployment
 
@@ -241,7 +221,7 @@ Describe this project as **Mattermost-compatible**. Keep necessary protocol iden
 - Keep `.env` at `600`.
 - Leave unrelated generated data under `data/`, `dist/`, `output/`, and `node_modules/` alone unless the task explicitly concerns them.
 - Prefer existing service boundaries over direct route-handler storage changes.
-- Add route tests when changing API behavior; add Playwright tests when changing user-visible flows.
+- Add route tests when changing API behavior; add Playwright tests when changing client-visible API or WebSocket flows.
 - If a task changes deployment, update `docs/deployment.md`, `.env.example`, and this file when the topology or commands change.
 
 ## Container distribution

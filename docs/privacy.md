@@ -18,7 +18,7 @@ enable telemetry. Published mobile clients need stable identifiers for discovery
 
 ## Authentication
 
-The Web UI uses a `HttpOnly`, `SameSite=Lax` session cookie. Cookie-authenticated browser writes require same-origin `Origin` or `Referer` headers matching `SERVER_URL`. Cookie-authenticated WebSocket upgrades require a matching `Origin`; clients without an `Origin` use bearer tokens.
+Browser clients use a `HttpOnly`, `SameSite=Lax` session cookie. Cookie-authenticated browser writes require same-origin `Origin` or `Referer` headers matching `SERVER_URL`. Cookie-authenticated WebSocket upgrades require a matching `Origin`; clients without an `Origin` use bearer tokens.
 
 Bearer-token clients such as Hermes and scripted API users authenticate explicitly through `Authorization: Bearer <token>` and are exempt from browser CSRF checks.
 

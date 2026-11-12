@@ -4,6 +4,8 @@ import path from 'node:path';
 import { z } from 'zod';
 import { parse as parseDotenv } from 'dotenv';
 
+import { HIVEXUI_URL_ERROR, parseHiveXuiUrl } from './hivexui-stub.js';
+
 const Boolish = z.union([z.boolean(), z.enum(['0', '1', 'false', 'true', 'no', 'yes', 'off', 'on'])]).transform((value) => (typeof value === 'boolean' ? value : ['1', 'true', 'yes', 'on'].includes(value)));
 
 const DEV_COOKIE_SECRET = 'dev-cookie-secret-change-before-production';
@@ -18,6 +20,22 @@ const EnvSchema = z.object({
   OATHWEAVE_USERINFO_URL: z.preprocess(value=>value===''?undefined:value,z.url().optional()),
   OATHWEAVE_BROWSER_ORIGINS_JSON: z.string().default('[]'),
   OATHWEAVE_CHAT_IDENTITIES_JSON: z.string().default('[]'),
+  // Optional HiveXUI address. Retired web UI paths redirect here; unset serves a static notice.
+  HIVEXUI_URL: z.preprocess(
+    (value) => (value === '' ? undefined : value),
+    z
+      .string()
+      .optional()
+      .transform((value, context) => {
+        if (value === undefined) return undefined;
+        const normalized = parseHiveXuiUrl(value);
+        if (normalized === undefined) {
+          context.addIssue({ code: 'custom', message: HIVEXUI_URL_ERROR });
+          return z.NEVER;
+        }
+        return normalized;
+      })
+  ),
   DATABASE_URL: z.string().min(1),
   SERVER_URL: z.url(),
   PORT: z.coerce.number().int().min(1).max(65_535).default(8065),

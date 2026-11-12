@@ -7,7 +7,8 @@ official mobile and desktop apps and Hermes Agent's gateway. It implements
 Mattermost-compatible JSON, 26-character lowercase public IDs, millisecond
 timestamps, snake_case external fields, REST under `/api/v4`, and WebSocket at
 `/api/v4/websocket`. Start with [client setup](clients.md) for app connection steps
-and the distinction between native mobile clients and the desktop web shell.
+and the desktop limits. The standalone web UI is retired; [HiveXUI](https://github.com/ChefTaco/HiveXUI)
+is the browser UI, and the old UI paths serve a notice or redirect to `HIVEXUI_URL`.
 
 ## Supported Surfaces
 
@@ -50,7 +51,7 @@ One-to-one bot DMs preserve the command exactly. Group DMs and channels with one
 
 ## Authentication And CSRF
 
-- The Web UI authenticates with a `HttpOnly`, `SameSite=Lax` session cookie (`SESSION_COOKIE_NAME`, default `MMSID`).
+- Browser clients authenticate with a `HttpOnly`, `SameSite=Lax` session cookie (`SESSION_COOKIE_NAME`, default `MMSID`).
 - Cookie-authenticated methods other than `GET`/`HEAD`/`OPTIONS` must carry a same-origin `Origin` or `Referer` matching `SERVER_URL`.
 - Cookie-authenticated WebSocket upgrades must also be same-origin to prevent Cross-Site WebSocket Hijacking.
 - Bearer-token API clients such as Hermes, `mmctl`, and scripted tests are exempt from CSRF/CSWSH origin checks because browsers do not attach bearer tokens automatically.
@@ -68,7 +69,6 @@ One-to-one bot DMs preserve the command exactly. Group DMs and channels with one
 - Reverse proxies must pass `Upgrade` and `Connection: upgrade`.
 - Long WebSocket read timeouts are required.
 - Proxies must preserve `Origin` and `Referer`.
-- The web UI has responsive mobile layouts, a fixed mobile composer, attachment selection, and emoji picker controls.
 - Mobile app request/response fixtures for login type, login, client config, and websocket upgrade guard live in `tests/fixtures/mobile-app-compatibility.json` and are replayed by `tests/vitest/mobile-fixtures.test.ts`.
 - Client config includes stable, non-empty `DiagnosticId` and `TelemetryId` values plus string-valued email/username login capability flags so Mattermost-compatible native mobile clients can identify the server and present its password login form.
 - Team selection supports the native mobile channel bootstrap contract: joined channels, the current user's channel memberships, and Mattermost-compatible sidebar categories are returned together.

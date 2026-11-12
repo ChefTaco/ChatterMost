@@ -118,7 +118,13 @@ npm run test:unit
 npm run build
 ```
 
-Run `npx playwright test` separately before or after deploy for the browser gate.
+Run `npx playwright test` separately before or after deploy for the real-server API and WebSocket gate.
+
+ChatterMost has no built-in web UI. To redirect the retired `/`, `/login`, `/signup`
+and `/admin/system-console` paths to HiveXUI, set `HIVEXUI_URL` (an absolute
+`http(s)` URL without credentials or fragment) in the operator environment; the
+runtime environment renderer copies it when set. Unset, those paths show a static
+notice.
 
 The lockfile currently resolves `@hono/node-server` 2.x. ChatterMost's supported patched Node ranges are in `package.json`; `.nvmrc` pins source development and the Dockerfile pins the container runtime. The native deploy script requires Node.js 24.22.3 or later on the 24.x line, or 26.13.1 or later on the 26.x line, before migration or activation. Other runtime lines and prerelease versions are rejected. Run `npm audit` after dependency changes; the supported tree is expected to report zero known vulnerabilities.
 
@@ -224,7 +230,7 @@ Nginx must preserve WebSocket upgrade headers. The template in `deploy/nginx.con
 
 The rendered nginx site accepts only the configured certificate hostname, redirects port 80 to the configured TLS hostname and port, and sends HSTS on TLS responses. The systemd unit runs without capabilities or device access and uses read-only home/system mounts except for the release's explicit shared state path.
 
-The reverse proxy must forward client `Origin` and `Referer` headers unchanged. Cookie-authenticated Web UI writes validate those headers against `SERVER_URL`; stripping or rewriting them breaks browser writes.
+The reverse proxy must forward client `Origin` and `Referer` headers unchanged. Cookie-authenticated browser writes validate those headers against `SERVER_URL`; stripping or rewriting them breaks browser writes.
 
 Set `TRUSTED_PROXIES` to the exact CIDRs allowed to append forwarding data. The deployment defaults to loopback only (`127.0.0.1/32,::1/128`) because nginx and ChatterMost share the host. Direct clients and untrusted peers cannot influence source identity with `X-Forwarded-For` or `X-Real-IP`; trusted requests are resolved by walking the complete chain from the socket peer to the first untrusted hop. Rate limiting keeps independent bounded source-address and login-account counters and evicts old keys instead of merging unrelated traffic into an overflow identity.
 

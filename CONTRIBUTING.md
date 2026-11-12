@@ -22,7 +22,7 @@ npx playwright install chromium
 npx playwright test
 ```
 
-Add route coverage for API changes and browser coverage for changed user flows. Inspect desktop and mobile screenshots when changing UI. Keep the service boundary, snake_case protocol fields, public IDs, authentication, and persistence guarantees intact.
+Add route coverage for API changes and real-server Playwright coverage for changed client flows. ChatterMost has no built-in web UI; UI changes belong in HiveXUI. Keep the service boundary, snake_case protocol fields, public IDs, authentication, and persistence guarantees intact.
 
 Describe ChatterMost as **Mattermost-compatible**. Use the compatibility qualifier in descriptive text. Exact protocol identifiers, header names, fixture user agents, and upstream configuration keys are retained for interoperability. Do not add upstream logos or imply affiliation, endorsement, certification, or full feature parity. Retain the trademark attribution in the README.
 

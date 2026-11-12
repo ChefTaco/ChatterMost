@@ -1,26 +1,53 @@
-import { expect, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, type APIRequestContext } from '@playwright/test';
+import NodeWebSocket from 'ws';
 
 // A real browser always attaches an Origin header on same-origin writes. The
 // API request fixture accumulates the session cookie across calls, so setup
 // requests that authenticate by cookie must present a same-origin Origin for
-// the server's CSRF protection to accept them, exactly as the Web UI does.
-const webOrigin = 'http://127.0.0.1:8097';
+// the server's CSRF protection to accept them, exactly as a browser client does.
+export const webOrigin = 'http://127.0.0.1:8097';
+export const websocketUrl = 'ws://127.0.0.1:8097/api/v4/websocket';
 
-export async function loginAsAdmin(page: Page): Promise<void> {
-  await page.goto('/login');
-  await page.getByLabel('Username or email').fill('admin');
-  await page.getByLabel('Password').fill('AdminChangeMe123!');
-  await page.getByRole('button', { name: 'Sign in' }).click();
-  await expect(page.getByTestId('post-list')).toBeVisible();
-}
+export type WebSocketFrame = Record<string, unknown> & {
+  event?: string;
+  data?: Record<string, unknown>;
+};
 
-export async function enableAdminMode(page: Page): Promise<void> {
-  const toggle = page.getByRole('switch', { name: 'Admin mode' });
-  await expect(toggle).toBeVisible();
-  if ((await toggle.getAttribute('aria-checked')) !== 'true') {
-    await toggle.click();
-  }
-  await expect(toggle).toHaveAttribute('aria-checked', 'true');
+// Opens a bearer-token WebSocket as the official apps do and resolves with the first
+// frame that matches. The returned socket is already subscribed when `ready` resolves.
+export function waitForFrame(
+  token: string,
+  match: (frame: WebSocketFrame) => boolean,
+  timeoutMs = 10_000
+): { ready: Promise<void>; frame: Promise<WebSocketFrame> } {
+  const socket = new NodeWebSocket(websocketUrl, { headers: { Authorization: `Bearer ${token}` } });
+  let markReady: () => void = () => undefined;
+  const ready = new Promise<void>((resolve) => {
+    markReady = resolve;
+  });
+  const frame = new Promise<WebSocketFrame>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      socket.terminate();
+      reject(new Error('WebSocket frame timeout'));
+    }, timeoutMs);
+    socket.on('message', (data) => {
+      const text = Array.isArray(data)
+        ? Buffer.concat(data).toString('utf8')
+        : Buffer.from(data as ArrayBuffer).toString('utf8');
+      const parsed = JSON.parse(text) as WebSocketFrame;
+      if (parsed.event === 'hello') markReady();
+      if (match(parsed)) {
+        clearTimeout(timeout);
+        socket.close();
+        resolve(parsed);
+      }
+    });
+    socket.once('error', (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+  });
+  return { ready, frame };
 }
 
 export async function adminToken(request: APIRequestContext): Promise<string> {
@@ -91,4 +118,10 @@ export async function createUserViaInvite(
     throw new Error('missing user token');
   }
   return userToken;
+}
+
+// Mattermost frames carry posts and reactions as JSON strings inside `data`.
+export function frameText(frame: WebSocketFrame, key: string): string {
+  const value = frame.data?.[key];
+  return typeof value === 'string' ? value : JSON.stringify(value ?? '');
 }

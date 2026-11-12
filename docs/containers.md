@@ -86,9 +86,12 @@ the same database. Do not use `docker compose down --volumes` on an installation
 
 After the backend is healthy behind HTTPS, add its public origin to the official
 apps using the [client guide](https://github.com/ChefTaco/ChatterMost/blob/main/docs/clients.md).
-Human accounts are created by an administrator or through the browser invite flow.
-Mobile clients use the Mattermost-compatible API; the desktop app loads the
-included ChatterMost web UI. Background mobile push delivery is not implemented.
+Human accounts are created by an administrator or through the invite flow in
+HiveXUI. Mobile clients use the Mattermost-compatible API. ChatterMost has no
+built-in web UI: its old browser paths show a notice, or redirect to HiveXUI when
+`HIVEXUI_URL` (an absolute `http(s)` URL) is added to the protected
+`secrets/runtime.env` before the next restart. Background mobile push delivery is
+not implemented.
 
 Fresh setup already generates the seeded `hermes` bot token in protected
 `secrets/runtime.env`. Keep it private and use it as `MATTERMOST_TOKEN` on the

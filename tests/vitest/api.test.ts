@@ -60,7 +60,7 @@ describe('Mattermost-compatible API', () => {
     const server = await createTestServer({ TRUSTED_PROXIES: '127.0.0.1/32' });
     let response = new Response();
     for (let index = 0; index <= 240; index += 1) {
-      response = await server.app.request('/favicon.svg', {
+      response = await server.app.request('/api/v4/system/ping', {
         headers: { 'X-Forwarded-For': `198.51.100.${index % 250}` }
       }, peer('203.0.113.9'));
     }
@@ -72,7 +72,7 @@ describe('Mattermost-compatible API', () => {
     const server = await createTestServer({ TRUSTED_PROXIES: '127.0.0.1/32,10.0.0.0/8' });
     let response = new Response();
     for (let index = 0; index <= 240; index += 1) {
-      response = await server.app.request('/favicon.svg', {
+      response = await server.app.request('/api/v4/system/ping', {
         headers: { 'X-Forwarded-For': `198.51.100.7, 10.${index % 250}.0.1` }
       }, peer('127.0.0.1'));
     }
@@ -117,20 +117,6 @@ describe('Mattermost-compatible API', () => {
     const token = await login(server);
     const me = await server.app.request('/api/v4/users/me', { headers: bearer(token) });
     expect((await me.json()) as { username: string }).toMatchObject({ username: 'admin' });
-  });
-
-  it('serves a message-themed favicon from the web shell', async () => {
-    const server = await createTestServer();
-    const shell = await server.app.request('/');
-    expect(await shell.text()).toContain('<link rel="icon" href="/favicon.svg" type="image/svg+xml">');
-
-    const favicon = await server.app.request('/favicon.svg');
-    expect(favicon.status).toBe(200);
-    expect(favicon.headers.get('content-type')).toContain('image/svg+xml');
-    const svg = await favicon.text();
-    expect(svg).toContain('<svg');
-    expect(svg).toContain('#149a91');
-    expect(svg).toContain('#e1a72f');
   });
 
   it('creates invite, enrolls once, and blocks reuse', async () => {

@@ -96,6 +96,9 @@ function runtimeValues() {
   if (process.env.SECURITY_FUSION_SERVICE_TOKEN_HASH) {
     values.SECURITY_FUSION_SERVICE_TOKEN_HASH = process.env.SECURITY_FUSION_SERVICE_TOKEN_HASH;
   }
+  if (process.env.HIVEXUI_URL) {
+    values.HIVEXUI_URL = process.env.HIVEXUI_URL;
+  }
   return values;
 }
 
