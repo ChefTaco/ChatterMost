@@ -135,6 +135,8 @@ jobs:
         env:
           CHATTERMOST_LIFECYCLE_BROWSER: 'true'
           CHATTERMOST_LIFECYCLE_REPORT: lifecycle-proof-${{ matrix.arch }}.json
+          # Authenticated metadata reads keep many upgrade paths within the GitHub API budget.
+          CHATTERMOST_GITHUB_API_TOKEN: ${{ github.token }}
           APP_DIGEST: ${{ steps.publish_app.outputs.digest }}
           MIGRATOR_DIGEST: ${{ steps.publish_migrator.outputs.digest }}
         run: python3 tests/container/lifecycle.py "$VERSION" "$APP_DIGEST" "$MIGRATOR_DIGEST"
