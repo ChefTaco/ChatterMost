@@ -30,13 +30,13 @@
     "check:openapi:browser": "tsx scripts/browser-openapi.ts"
   },
   "dependencies": {
+    "@hivemagnus/hive-common": "^0.1.0",
     "@hono/node-server": "^2.0.11",
     "@prisma/client": "^6.11.1",
     "bcryptjs": "^3.0.2",
     "cookie": "^1.0.2",
     "dotenv": "^16.6.1",
     "hono": "^4.13.18",
-    "jose": "6.2.3",
     "nanoid": "^5.1.5",
     "pgsql-parser": "^18.1.1",
     "redis": "^4.7.0",
@@ -51,6 +51,7 @@
     "@types/node": "^24.0.8",
     "@types/ws": "^8.18.1",
     "eslint": "^10.8.0",
+    "jose": "6.2.3",
     "prettier": "^3.6.2",
     "prisma": "^6.11.1",
     "tsx": "^4.20.3",

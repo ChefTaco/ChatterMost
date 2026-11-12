@@ -1,7 +1,13 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 import { z } from 'zod';
-import { decodeJwt } from 'jose';
-import { createOathweaveVerifier } from './oathweave-verifier.js';
+import {
+  OathweaveError,
+  createOathweaveVerifier,
+  requireIdentityLink,
+  requirePermissions,
+  type OathweaveUserPrincipal,
+  type OathweaveVerifierOptions
+} from '@hivemagnus/hive-common/oathweave';
 import type { AppEnv } from './env.js';
 
 const linksSchema = z
@@ -16,6 +22,34 @@ const linksSchema = z
   )
   .max(10000);
 
+export const CHAT_AUDIENCE = 'chattermost';
+export const CHAT_SESSION_PERMISSION = 'chattermost:session';
+
+export type ChatVerifierOptions = Pick<
+  OathweaveVerifierOptions,
+  'issuer' | 'jwksUrl' | 'userinfoUrl' | 'fetch' | 'now'
+> & { audience?: string };
+
+/**
+ * The shared Oathweave verifier with ChatterMost's established rules: user principals only,
+ * no clock tolerance, a required `roles` array and an online session check on every call,
+ * so a signed-out session stops working immediately rather than after a cache window.
+ */
+export function createChatVerifier(options: ChatVerifierOptions) {
+  const verifier = createOathweaveVerifier({
+    ...options,
+    audience: options.audience ?? CHAT_AUDIENCE,
+    accept: 'user',
+    clockToleranceSec: 0,
+    sessionCacheTtlMs: 0
+  });
+  return async (token: string): Promise<OathweaveUserPrincipal> => {
+    const principal = await verifier.verifyUser(token);
+    if (!Array.isArray(principal.claims.roles)) throw new OathweaveError('invalid_claims');
+    return principal;
+  };
+}
+
 export function createChatIdentity(env: AppEnv) {
   if (!env.OATHWEAVE_ISSUER && !env.OATHWEAVE_JWKS_URL && !env.OATHWEAVE_USERINFO_URL)
     return undefined;
@@ -28,27 +62,20 @@ export function createChatIdentity(env: AppEnv) {
     if (seen.has(id)) throw new Error('Duplicate identity account link');
     seen.add(id);
   }
-  const verify = createOathweaveVerifier({
+  const verify = createChatVerifier({
     issuer: env.OATHWEAVE_ISSUER,
     jwksUrl: env.OATHWEAVE_JWKS_URL,
-    userinfoUrl: env.OATHWEAVE_USERINFO_URL,
-    audience: 'chattermost'
+    userinfoUrl: env.OATHWEAVE_USERINFO_URL
   });
   const key = createHash('sha256')
     .update('chattermost:oathweave:session:v1\0')
     .update(env.COOKIE_SECRET)
     .digest();
   async function authenticate(token: string) {
-    const identity = await verify(token);
-    if (!identity.permissions.includes('chattermost:session'))
-      throw new Error('Chat sign-in permission required');
-    const link = links.find(
-      (value) => value.issuer === identity.issuer && value.subject === identity.subject
-    );
-    if (!link) throw new Error('Explicit chat account link required');
-    const claims = decodeJwt(token);
-    if (typeof claims.exp !== 'number') throw new Error('Identity expiry required');
-    return { localUserId: link.localUserId, expiresAt: claims.exp * 1000 };
+    const principal = await verify(token);
+    requirePermissions(principal, [CHAT_SESSION_PERMISSION], { wildcards: false });
+    const link = requireIdentityLink(links, principal);
+    return { localUserId: link.localUserId, expiresAt: principal.expiresAt * 1000 };
   }
   function seal(token: string): string {
     const nonce = randomBytes(12);
