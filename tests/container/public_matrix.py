@@ -1,23 +1,63 @@
 #!/usr/bin/env python3
 """Plan and aggregate anonymous native verification of immutable public releases."""
 import argparse
+import hashlib
+import io
 import json
 import os
 from pathlib import Path
 import runpy
+import tarfile
 import tempfile
+import urllib.request
 
 POLICY = runpy.run_path(str(Path(__file__).with_name('lifecycle.py')), run_name='public_matrix_policy')
 RUNNERS = {'ubuntu-24.04': 'x86_64', 'ubuntu-24.04-arm': 'aarch64'}
 
 
+def download_release(version):
+    POLICY['version_tuple'](version)
+    repository = 'ChefTaco/ChatterMost'
+    with urllib.request.urlopen(f'https://api.github.com/repos/{repository}/releases/tags/v{version}', timeout=30) as response:
+        published = json.load(response)
+    if published.get('draft') or published.get('prerelease') or published.get('tag_name') != f'v{version}':
+        raise ValueError('Only the exact stable public release is supported')
+    asset = next(a for a in published['assets'] if a['name'] == f'chattermost-{version}.tar.gz')
+    if not asset['browser_download_url'].startswith(f'https://github.com/{repository}/releases/download/v{version}/'):
+        raise ValueError('Unexpected public release asset origin')
+    with urllib.request.urlopen(asset['browser_download_url'], timeout=60) as response:
+        archive = response.read(8 * 1024 * 1024 + 1)
+    digest = 'sha256:' + hashlib.sha256(archive).hexdigest()
+    if len(archive) > 8 * 1024 * 1024 or digest != asset.get('digest'):
+        raise ValueError('Public release archive integrity mismatch')
+    prefix = f'chattermost-{version}'
+    allowed = {prefix, *(prefix + '/' + name for name in ('chattermost', 'compose.yaml', 'release.json', 'README.md', 'LICENSE', 'NOTICE'))}
+    with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+        members = tar.getmembers()
+        if ({m.name for m in members} != allowed or len(members) != len(allowed)
+                or any(not (m.isfile() or m.isdir()) or m.size > 2 * 1024 * 1024 for m in members)):
+            raise ValueError('Unexpected public archive members')
+        release = json.load(tar.extractfile(prefix + '/release.json'))
+    if POLICY['version_tuple'](version) >= (0, 3, 0):
+        # Reuse the stock modern policy validator without imposing it on old fresh-only bundles.
+        manager = runpy.run_path('distribution/chattermost', run_name='public_policy_validation')
+        with tempfile.TemporaryDirectory(prefix='chattermost-public-policy-') as temporary:
+            directory = Path(temporary)
+            (directory / 'release.json').write_text(json.dumps(release))
+            release = manager['metadata'](directory)
+    return release, digest
+
+
 def plan_release(version, release, archive_digest):
-    sources = POLICY['upgrade_sources'](version, release)
-    if POLICY['version_tuple'](version) < (0, 3, 0):
-        sources = []  # Historical 0.2 releases have fresh-install verification only.
+    target = POLICY['version_tuple'](version)
+    if release.get('version') != version:
+        raise ValueError('Published release differs from the requested version')
+    # Historical 0.2 releases predate upgrade policies and get fresh-install proof only.
+    sources = [] if target < (0, 3, 0) else POLICY['upgrade_sources'](version, release)
     return {
         'version': version, 'upgrade_from': sources, 'runners': RUNNERS,
-        'app_image': release['app_image'], 'migrator_image': release['migrator_image'],
+        'app_image': release['app_image'],
+        'migrator_image': release.get('migrator_image') if target < (0, 3, 0) else release['migrator_image'],
         'archive_digest': archive_digest,
         'matrix': {'include': [
             {'runner': runner, 'architecture': architecture, 'baseline': baseline}
@@ -79,14 +119,8 @@ def main():
     os.umask(0o077)
     args.output.unlink(missing_ok=True)
     if args.command == 'plan':
-        POLICY['version_tuple'](args.version)
-        manager = runpy.run_path('distribution/chattermost', run_name='anonymous_matrix_plan')
-        with tempfile.TemporaryDirectory(prefix='chattermost-public-plan-') as temporary:
-            root = Path(temporary)
-            (root / 'releases').mkdir(mode=0o700)
-            release = manager['fetch_release'](root, args.version)
-            receipt = json.loads((root / 'releases' / args.version / '.verified.json').read_text())
-            result = plan_release(args.version, release, receipt['asset_digest'])
+        release, digest = download_release(args.version)
+        result = plan_release(args.version, release, digest)
         if os.environ.get('GITHUB_OUTPUT'):
             with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
                 output.write('matrix=' + json.dumps(result['matrix']) + '\n')
