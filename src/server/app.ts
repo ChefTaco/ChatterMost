@@ -1962,9 +1962,13 @@ function contentDisposition(disposition: 'inline' | 'attachment', filename: stri
 
 function requestContext(store: StateStore, env: AppEnv): MiddlewareHandler<AppHonoEnv> {
   return async (c, next) => {
-    // Accepts a safe inbound x-request-id (or x-hive-request-id / x-correlation-id) and W3C
-    // traceparent; otherwise generates a UUID as before. Logs read the ID from `requestId`.
-    const context = createRequestContext((name) => c.req.header(name), { generateRequestId: randomUUID });
+    // Internet-facing: callers must not choose request IDs, so every request gets a fresh UUID
+    // as before. hive-common's trustInbound also governs traceparent, so inbound trace context
+    // is not continued either. Logs read the ID from `requestId`.
+    const context = createRequestContext((name) => c.req.header(name), {
+      trustInbound: false,
+      generateRequestId: randomUUID
+    });
     c.set('requestId', context.requestId);
     c.set('env', env);
     c.header('X-Request-Id', context.requestId);

@@ -63,21 +63,30 @@ describe('Suite health and request context', () => {
     await server.store.close();
   });
 
-  it('echoes a safe inbound request ID and keeps the Mattermost error shape', async () => {
+  it('ignores inbound request IDs and keeps the Mattermost error shape', async () => {
     const server = await createTestServer();
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
     const response = await server.app.request('/api/v4/users/me', {
-      headers: { 'x-request-id': 'probe-1234', traceparent: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01' }
+      headers: {
+        'x-request-id': 'caller-chosen-id',
+        'x-hive-request-id': 'caller-chosen-hive-id',
+        'x-correlation-id': 'caller-chosen-correlation-id',
+        traceparent: '00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01'
+      }
     });
     expect(response.status).toBe(401);
-    expect(response.headers.get('x-request-id')).toBe('probe-1234');
+    const requestId = response.headers.get('x-request-id');
+    expect(requestId).toMatch(uuid);
+    expect(requestId).not.toContain('caller-chosen');
     const body = (await response.json()) as Record<string, unknown>;
     expect(Object.keys(body).sort()).toEqual(['detailed_error', 'id', 'message', 'request_id', 'status_code']);
-    expect(body.request_id).toBe('probe-1234');
+    expect(body.request_id).toBe(requestId);
 
-    const unsafe = await server.app.request('/api/v4/system/ping', { headers: { 'x-request-id': 'bad id with spaces' } });
-    expect(unsafe.headers.get('x-request-id')).toMatch(/^[0-9a-f-]{36}$/u);
-    const generated = await server.app.request('/api/v4/system/ping');
-    expect(generated.headers.get('x-request-id')).toMatch(/^[0-9a-f-]{36}$/u);
+    const first = await server.app.request('/api/v4/system/ping', { headers: { 'x-request-id': 'caller-chosen-id' } });
+    const second = await server.app.request('/api/v4/system/ping', { headers: { 'x-request-id': 'caller-chosen-id' } });
+    expect(first.headers.get('x-request-id')).toMatch(uuid);
+    expect(second.headers.get('x-request-id')).toMatch(uuid);
+    expect(first.headers.get('x-request-id')).not.toBe(second.headers.get('x-request-id'));
     await server.abuseControl.close();
     await server.store.close();
   });

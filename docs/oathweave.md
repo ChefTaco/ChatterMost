@@ -71,7 +71,8 @@ default when both TLS references are unset.
 `GET /health/live` and `GET /health/ready` serve the suite health format
 (`service: "chattermost"`, no version). Preflight mode allows them alongside
 `/api/v4/system/ping`, which remains the Mattermost-compatible probe used by
-native clients and the container health check. Every response carries
-`X-Request-Id`: a safe inbound `x-request-id`, `x-hive-request-id` or
-`x-correlation-id` is echoed, otherwise a UUID is generated. The same ID appears
-in Mattermost error bodies (`request_id`) and request error logs.
+native clients and the container health check. Every response carries a freshly
+generated UUID in `X-Request-Id`. Because ChatterMost is internet-facing, inbound
+`x-request-id`, `x-hive-request-id`, `x-correlation-id` and `traceparent` headers
+are ignored, so callers cannot choose request IDs. The same ID appears in
+Mattermost error bodies (`request_id`) and request error logs.
