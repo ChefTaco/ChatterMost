@@ -463,6 +463,8 @@ describe('deployment secret controls', () => {
     const ping = await server.app.request('/api/v4/system/ping');
     const blocked = await server.app.request('/api/v4/users', { method: 'POST', body: '{}' });
     expect(ping.status).toBe(200);
+    expect((await server.app.request('/health/live')).status).toBe(200);
+    expect((await server.app.request('/health/ready')).status).toBe(200);
     expect(blocked.status).toBe(503);
     await expect(server.services.users.ensureAdminFromEnv()).rejects.toThrow(
       'Writes are disabled in preflight mode'

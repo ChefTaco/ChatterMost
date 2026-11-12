@@ -29,6 +29,13 @@ tokens and unavailable identity verification fail closed. Browser file downloads
 use the same native cookie. WebSocket URLs never carry credentials. Native
 authentication challenges cannot bypass bound-session checks.
 
+Token verification uses the suite's shared verifier from
+`@hivemagnus/hive-common`, configured with ChatterMost's established rules: user
+tokens only, RS256, exact `chattermost` audience, no clock tolerance, a required
+`roles` array, an exact `chattermost:session` permission (no wildcards) and an
+online userinfo check on every validation, without a session cache. Any refusal,
+including an unreachable identity provider, remains a Mattermost-shaped 401.
+
 Keep the identity mappings, cookie secret and RuntimeState together in private
 backups. Revoke all bound sessions before downgrading to a runtime that predates
 this integration: older binaries do not enforce the new identity binding. The
@@ -58,3 +65,13 @@ defaults to `localhost`. Set `TLS_PROBE_CA_PATH` to the issuing authority bundle
 container probes use the configured port, verified HTTPS and WSS, and native
 login credentials. Existing standalone HTTP behind an HTTPS edge remains the
 default when both TLS references are unset.
+
+## Suite health and request IDs
+
+`GET /health/live` and `GET /health/ready` serve the suite health format
+(`service: "chattermost"`, no version). Preflight mode allows them alongside
+`/api/v4/system/ping`, which remains the Mattermost-compatible probe used by
+native clients and the container health check. Every response carries
+`X-Request-Id`: a safe inbound `x-request-id`, `x-hive-request-id` or
+`x-correlation-id` is echoed, otherwise a UUID is generated. The same ID appears
+in Mattermost error bodies (`request_id`) and request error logs.

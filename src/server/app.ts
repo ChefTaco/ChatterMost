@@ -4,6 +4,9 @@ import { configuredBrowserOrigins } from './oathweave.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 
+import { createRequestContext, runWithRequestContext } from '@hivemagnus/hive-common/context';
+import { HEALTH_PATHS } from '@hivemagnus/hive-common/health';
+import { registerHealthRoutes } from '@hivemagnus/hive-common/hono';
 import { Hono } from 'hono';
 import type { Context, MiddlewareHandler } from 'hono';
 import { bodyLimit as honoBodyLimit } from 'hono/body-limit';
@@ -220,7 +223,7 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
   const app = new Hono<AppHonoEnv>();
   if (env.PREFLIGHT_MODE) {
     app.use('*', async (c, next) => {
-      if ((c.req.method === 'GET' && c.req.path === '/api/v4/system/ping') ||
+      if ((c.req.method === 'GET' && (c.req.path === '/api/v4/system/ping' || c.req.path === HEALTH_PATHS.live || c.req.path === HEALTH_PATHS.ready)) ||
           (env.AUTHENTICATED_REHEARSAL && rehearsalRequestAllowed(c.req.method, c.req.path))) {
         await next();
         return;
@@ -294,6 +297,9 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
       compatibility_profile: env.COMPATIBILITY_PROFILE
     })
   );
+  // Suite-standard probes. `/api/v4/system/ping` above stays the Mattermost-compatible
+  // health endpoint that native clients and the container health check call.
+  registerHealthRoutes(app, { service: 'chattermost', aliases: false });
   app.get('/api/v4/system/version', (c) =>
     c.json({
       version: env.ALLOW_VERSION_ADVERTISEMENT ? env.COMPATIBILITY_SERVER_VERSION : '0.0.0-compatible'
@@ -1956,12 +1962,14 @@ function contentDisposition(disposition: 'inline' | 'attachment', filename: stri
 
 function requestContext(store: StateStore, env: AppEnv): MiddlewareHandler<AppHonoEnv> {
   return async (c, next) => {
-    const requestId = randomUUID();
-    c.set('requestId', requestId);
+    // Accepts a safe inbound x-request-id (or x-hive-request-id / x-correlation-id) and W3C
+    // traceparent; otherwise generates a UUID as before. Logs read the ID from `requestId`.
+    const context = createRequestContext((name) => c.req.header(name), { generateRequestId: randomUUID });
+    c.set('requestId', context.requestId);
     c.set('env', env);
-    c.header('X-Request-Id', requestId);
+    c.header('X-Request-Id', context.requestId);
     store.incrementMetric('httpRequests');
-    await next();
+    await runWithRequestContext(context, next);
   };
 }
 
