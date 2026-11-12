@@ -35,7 +35,7 @@ Version advertisement is controlled by `ALLOW_VERSION_ADVERTISEMENT`.
 - Native deploy script and Compose setup default: on, returns `11.8.0` and `mattermost-v11.8`.
 
 The compatibility profile is distinct from the ChatterMost release (for example,
-0.4.5). Container `BuildHash` is the full source revision and `ReleaseId` is the
+0.5.0). Container `BuildHash` is the full source revision and `ReleaseId` is the
 selected distribution version. Use the release manifest for upgrade identity.
 
 Keep mobile smoke tests passing before advertising a Mattermost-compatible

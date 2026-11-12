@@ -15,6 +15,13 @@ publish a new version only for an intentional distribution change. Client and
 Hermes instructions live in the [client guide](clients.md),
 [Hermes guide](hermes-compatibility.md) and [agent runbook](../AGENTS.md#installation-runbook-for-agents).
 
+## Changes in 0.5.0
+
+- Verify Oathweave tokens with the suite's shared verifier from `@hivemagnus/hive-common`, keeping ChatterMost's existing rules: user tokens only, RS256, exact `chattermost` audience, no clock tolerance, a required `roles` array, an exact `chattermost:session` permission and an online userinfo check on every validation. Refusals remain Mattermost-shaped 401 responses.
+- Add `GET /health/live` and `GET /health/ready` in the suite health format. `/api/v4/system/ping` remains the Mattermost-compatible probe used by native clients and the container health check.
+- Every response carries a freshly generated `X-Request-Id`. Inbound `x-request-id`, `x-hive-request-id`, `x-correlation-id` and `traceparent` headers are ignored, so callers cannot choose request IDs. The same ID appears in Mattermost error bodies and request error logs.
+- No database migration was added. 0.4.5 is an additional reviewed upgrade source.
+
 ## Changes in 0.4.5
 
 - Build and run CI with pinned Node.js 24.22.3 and require patched Node.js 24/26 versions, including before native deployment migration or activation. Node.js 22 is no longer accepted because this release validates the patched 24/26 runtime lines.
@@ -46,8 +53,8 @@ database migration was added. Publication does not alter an installed release.
 
 | Artifact | Meaning |
 | --- | --- |
-| `ghcr.io/cheftaco/chattermost:0.4.5` | Multi-architecture application image |
-| `ghcr.io/cheftaco/chattermost-migrator:0.4.5` | Matching one-off migrator |
+| `ghcr.io/cheftaco/chattermost:0.5.0` | Multi-architecture application image |
+| `ghcr.io/cheftaco/chattermost-migrator:0.5.0` | Matching one-off migrator |
 | `VERSION-amd64`, `VERSION-arm64` image tags | Native build outputs; may exist before all release checks finish |
 | `chattermost-VERSION.tar.gz` | Allowlisted bundle: manager, Compose, manifest, installation README, Apache license and notice |
 | `release.json` | Exact app/migrator/infrastructure digests, source revision, schema/lineage, platforms and permitted upgrade sources |
@@ -55,8 +62,8 @@ database migration was added. Publication does not alter an installed release.
 | `scan-*.json`, `lifecycle-proof-*.json` | Filtered vulnerability findings and sanitized native lifecycle evidence |
 
 Install a completed [GitHub release](https://github.com/ChefTaco/ChatterMost/releases),
-not a candidate architecture tag. The latest lifecycle release is 0.4.5;
-0.3.2, 0.3.3, 0.4.1, 0.4.2 and 0.4.4 are its tested upgrade sources. The application has one writer
+not a candidate architecture tag. The latest lifecycle release is 0.5.0;
+0.3.2, 0.3.3, 0.4.1, 0.4.2, 0.4.4 and 0.4.5 are its tested upgrade sources. The application has one writer
 and local WebSocket fanout. Both supported Linux architectures execute on native
 CI runners; there is no claim of emulated execution as native proof.
 
@@ -143,7 +150,7 @@ A successful push is not installation proof. Dispatch the public verification
 workflow for the exact completed release:
 
 ```bash
-gh workflow run verify-public-release.yml --ref main -f version=0.4.5
+gh workflow run verify-public-release.yml --ref main -f version=0.5.0
 ```
 
 Substitute the newly published version. Check both native fresh-install jobs,
@@ -160,7 +167,7 @@ Review the public manifest/digests and per-architecture SBOM/provenance, verify
 all downloaded checksums, and verify the archive and checksum publisher identities:
 
 ```bash
-gh attestation verify chattermost-0.4.5.tar.gz --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
+gh attestation verify chattermost-0.5.0.tar.gz --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
 gh attestation verify SHA256SUMS --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
 ```
 
