@@ -12,6 +12,8 @@ import tarfile
 import tempfile
 import urllib.request
 
+import github_api
+
 parser = argparse.ArgumentParser()
 parser.add_argument('version')
 parser.add_argument('--keep', type=Path)
@@ -31,6 +33,7 @@ os.environ['DOCKER_CONFIG'] = str(config)
 plugin_source = Path.home() / '.docker/cli-plugins'
 if plugin_source.exists():
     (config / 'cli-plugins').symlink_to(plugin_source)
+github_api.install()
 release_url = f'https://api.github.com/repos/ChefTaco/ChatterMost/releases/tags/v{args.version}'
 release = json.load(urllib.request.urlopen(release_url))
 asset = next(a for a in release['assets'] if a['name'] == f'chattermost-{args.version}.tar.gz')

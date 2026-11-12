@@ -17,6 +17,8 @@ import sys
 import tempfile
 import urllib.request
 
+import github_api
+
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('version')
 parser.add_argument('app_digest', nargs='?')
@@ -32,6 +34,7 @@ work = Path(tempfile.mkdtemp(prefix='chattermost-lifecycle-'))
 root = work / 'installation'
 port = os.environ.get('CHATTERMOST_LIFECYCLE_PORT', '18065')
 os.umask(0o077)
+github_api.install()
 try:
     subprocess.run(['python3', 'tests/container/published.py', baseline, '--keep', str(work), '--port', port], check=True)
     # Build jobs already use authenticated GHCR pushes, while the baseline

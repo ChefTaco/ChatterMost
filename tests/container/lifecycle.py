@@ -15,6 +15,8 @@ import subprocess
 import sys
 import tempfile
 
+import github_api
+
 REQUIRED_BASELINE = '0.3.2'
 VERSION = re.compile(r'^0\.(?:[2-9]|[1-9][0-9]+)\.[0-9]+$')
 REQUIRED_PROOFS = {
@@ -103,6 +105,7 @@ def main():
         parser.error('Local candidate mode cannot establish public archive proof')
     version_tuple(args.version)
     os.umask(0o077)
+    github_api.install()
     with tempfile.TemporaryDirectory(prefix='chattermost-lifecycle-plan-') as directory:
         work = Path(directory)
         if args.plan or args.app_digest:
