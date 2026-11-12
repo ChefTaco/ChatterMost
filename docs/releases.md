@@ -146,13 +146,14 @@ workflow for the exact completed release:
 gh workflow run verify-public-release.yml --ref main -f version=0.4.5
 ```
 
-Substitute the newly published version. Check both native jobs and their sanitized
-proof artifacts; the workflow installs anonymously from release assets/registry
-without a local application build and repeats the public manager's lifecycle and
-browser checks for every declared upgrade source. Each aggregate lifecycle report
-lists `upgrade_from` and a `paths` array with one complete native proof per source;
-any failed or missing path prevents a success report. Review logs and all uploaded
-reports for privacy before sharing.
+Substitute the newly published version. Check both native fresh-install jobs,
+every source/platform lifecycle job and the final aggregate. Each lifecycle job
+uses the published manager anonymously for one declared source, keeping repeated
+release-metadata requests within GitHub's anonymous API budget. No local application
+build or registry credentials are used. The aggregate requires both native
+architectures, every declared source, browser and recovery proof, and the exact
+published archive/image digests. Missing, failed, skipped or mismatched coverage
+prevents a success report. Review logs and all uploaded reports for privacy before sharing.
 The workflow is manually dispatched, not automatically started by publication.
 
 Review the public manifest/digests and per-architecture SBOM/provenance, verify

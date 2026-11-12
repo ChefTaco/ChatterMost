@@ -9,7 +9,25 @@ on:
 permissions:
   contents: read
 jobs:
+  plan:
+    runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      has_paths: ${{ steps.plan.outputs.has_paths }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read the integrity-checked public release policy anonymously
+        id: plan
+        env:
+          VERSION: ${{ inputs.version }}
+        run: python3 tests/container/public_matrix.py plan "$VERSION" --output /tmp/public-release-plan.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: public-release-plan
+          path: /tmp/public-release-plan.json
+          if-no-files-found: error
   install:
+    needs: plan
     strategy:
       fail-fast: false
       matrix:
@@ -24,24 +42,12 @@ jobs:
         env:
           VERSION: ${{ inputs.version }}
         run: python3 tests/container/published.py "$VERSION" --keep /tmp/chattermost-public-proof
-      - name: Install native browser for public lifecycle proof
-        if: ${{ !startsWith(inputs.version, '0.2.') }}
-        run: npx playwright install --with-deps chromium
-      - name: Real published lifecycle and CLI proof for every declared upgrade source
-        if: ${{ !startsWith(inputs.version, '0.2.') }}
-        env:
-          VERSION: ${{ inputs.version }}
-          CHATTERMOST_LIFECYCLE_PORT: '18067'
-          CHATTERMOST_LIFECYCLE_BROWSER: 'true'
-          CHATTERMOST_LIFECYCLE_REPORT: /tmp/chattermost-public-proof/lifecycle-proof.json
-        run: python3 tests/container/lifecycle.py "$VERSION"
       - name: Upload sanitized synthetic evidence
         uses: actions/upload-artifact@v4
         with:
           name: public-proof-${{ matrix.runner }}
-          path: |
-            /tmp/chattermost-public-proof/public-verification.json
-            /tmp/chattermost-public-proof/lifecycle-proof.json
+          path: /tmp/chattermost-public-proof/public-verification.json
+          if-no-files-found: error
       - name: Stop only the synthetic test installation
         if: always()
         run: |
@@ -52,3 +58,59 @@ jobs:
           if (root / 'installation.json').exists():
               runpy.run_path(str(root / 'chattermost'), run_name='test_manager')['compose'](root, 'down', '--volumes', '--remove-orphans')
           PY
+  lifecycle:
+    needs: plan
+    if: ${{ needs.plan.outputs.has_paths == 'true' }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 24.22.3, cache: npm}
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Real anonymous published CLI lifecycle for one declared source
+        env:
+          VERSION: ${{ inputs.version }}
+          BASELINE: ${{ matrix.baseline }}
+          CHATTERMOST_LIFECYCLE_PORT: '18067'
+          CHATTERMOST_LIFECYCLE_BROWSER: 'true'
+          CHATTERMOST_LIFECYCLE_REPORT: /tmp/chattermost-public-proof/lifecycle-path.json
+          DOCKER_CONFIG: /tmp/chattermost-anonymous-docker
+        run: |
+          mkdir -m 700 "$DOCKER_CONFIG"
+          printf '%s\n' '{"auths":{}}' > "$DOCKER_CONFIG/config.json"
+          if [ -d "$HOME/.docker/cli-plugins" ]; then
+            ln -s "$HOME/.docker/cli-plugins" "$DOCKER_CONFIG/cli-plugins"
+          fi
+          python3 tests/container/lifecycle_case.py "$VERSION" --baseline "$BASELINE"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: public-lifecycle-${{ matrix.runner }}-${{ matrix.baseline }}
+          path: /tmp/chattermost-public-proof/lifecycle-path.json
+          if-no-files-found: error
+  aggregate:
+    needs: [plan, install, lifecycle]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: public-*
+          path: /tmp/chattermost-public-evidence
+      - name: Require both anonymous installs and every native source/platform proof
+        env:
+          PUBLIC_JOB_RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 tests/container/public_matrix.py aggregate \
+            --plan /tmp/chattermost-public-evidence/public-release-plan/public-release-plan.json \
+            --proofs /tmp/chattermost-public-evidence \
+            --output /tmp/chattermost-public-aggregate.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: public-verification-complete
+          path: /tmp/chattermost-public-aggregate.json
+          if-no-files-found: error
