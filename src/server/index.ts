@@ -21,6 +21,14 @@ const websocketServer = new WebSocketServer({
   perMessageDeflate: false
 });
 let shuttingDown = false;
+// A client that never authenticates must not hold a connection open indefinitely.
+const WEBSOCKET_AUTHENTICATION_DEADLINE_MS = 30_000;
+// Idle connections receive nothing, so a sweep closes those whose credential stopped working.
+const WEBSOCKET_AUTHORIZATION_SWEEP_MS = 15_000;
+const authorizationSweep = setInterval(() => {
+  services.hub.closeUnauthorized();
+}, WEBSOCKET_AUTHORIZATION_SWEEP_MS);
+authorizationSweep.unref();
 const knownWebSocketActions = new Set(['authentication_challenge', 'ping', 'user_typing', 'get_statuses', 'get_statuses_by_ids']);
 
 const server: ServerType = serve(
@@ -93,15 +101,20 @@ async function handleUpgradeRequest(request: IncomingMessage, socket: Duplex, he
         websocket.send(payload);
     };
     const send=bound?guardedSocketSender({send:emit,close:(code,reason)=>websocket.close(code,reason)},validate):emit;
-    const tracedSocket={send};
+    const tracedSocket={send,close:(code:number,reason:string)=>websocket.close(code,reason)};
     const requestedSequence = Number(requestUrl.searchParams.get('sequence_number'));
     const requestedConnectionId = requestUrl.searchParams.get('connection_id');
     const attachOptions = {
       ...(requestedConnectionId ? { connectionId: requestedConnectionId } : {}),
-      ...(Number.isSafeInteger(requestedSequence) && requestedSequence >= 0 ? { eventSeq: requestedSequence } : {})
+      ...(Number.isSafeInteger(requestedSequence) && requestedSequence >= 0 ? { eventSeq: requestedSequence } : {}),
+      ...(auth?.stillValid === undefined ? {} : { authorized: auth.stillValid })
     };
     const connection = services.hub.attach(tracedSocket, auth?.user.id ?? null, attachOptions);
     connectionId = connection.id;
+    const authenticationDeadline = setTimeout(() => {
+      if (connection.userId === null) websocket.close(1008, 'Authentication required');
+    }, WEBSOCKET_AUTHENTICATION_DEADLINE_MS);
+    authenticationDeadline.unref();
     const socketContext = {
       connection_id: connection.id,
       authenticated_on_upgrade: auth !== null,
@@ -142,6 +155,7 @@ async function handleUpgradeRequest(request: IncomingMessage, socket: Duplex, he
         });
     });
     websocket.on('close', (code) => {
+      clearTimeout(authenticationDeadline);
       process.stdout.write(
         JSON.stringify({
           level: 'info',
@@ -184,6 +198,7 @@ for (const signal of ['SIGTERM', 'SIGINT'] as const) {
 async function shutdown(signal: 'SIGTERM' | 'SIGINT'): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
+  clearInterval(authorizationSweep);
   process.stdout.write(JSON.stringify({ level: 'info', message: 'chattermost_server_stopping', signal }) + '\n');
   for (const websocket of websocketServer.clients) {
     websocket.close(1001, 'Server shutting down');
