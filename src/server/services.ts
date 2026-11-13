@@ -44,6 +44,11 @@ export type AuthContext = {
   user: UserRecord;
   sessionId: string | null;
   authMethod: 'cookie' | 'bearer' | 'bot' | 'personal_access_token' | 'test';
+  /**
+   * Re-checks the credential behind this context, for connections that outlive one request.
+   * It keeps the credential's hashes, never the credential itself.
+   */
+  stillValid?: () => boolean;
 };
 
 export type LoginResult = {
@@ -124,15 +129,19 @@ type HubConnection = {
   userId: string | null;
   eventSeq: number;
   socket: SocketLike;
+  /** False once the credential that authenticated this connection stops working. */
+  authorized: (() => boolean) | null;
 };
 
 export type SocketLike = {
   send(data: string): void;
+  close?(code: number, reason: string): void;
 };
 
 export type WebSocketAttachOptions = {
   connectionId?: string;
   eventSeq?: number;
+  authorized?: () => boolean;
 };
 
 export class AuditLogService {
@@ -646,6 +655,7 @@ export class UserService {
         }
       }
     });
+    this.hub.closeUnauthorized();
     await this.auditLog.record({
       actorUserId: actor.id,
       action: 'password.changed',
@@ -681,6 +691,7 @@ export class UserService {
       }
       return user;
     });
+    this.hub.closeUnauthorized();
     await this.auditLog.record({
       actorUserId: actor.id,
       action: disabled ? 'admin.user.deactivated' : 'admin.user.reactivated',
@@ -695,7 +706,8 @@ export class SessionService {
   public constructor(
     private readonly store: StateStore,
     private readonly env: AppEnv,
-    private readonly auditLog: AuditLogService
+    private readonly auditLog: AuditLogService,
+    private readonly hub?: WebSocketHub
   ) { this.identity=createChatIdentity(env); }
 
   public async createSession(user: UserRecord, deviceId = '', boundIdentity?:{context:string;expiresAt:number}): Promise<LoginResult> {
@@ -713,6 +725,9 @@ export class SessionService {
     };
     await this.store.write((state) => {
       if(boundIdentity && !state.users.some(candidate=>candidate.id===user.id && candidate.disabledAt===0 && candidate.deleteAt===0 && !candidate.isBot)) throw unauthorized();
+      // Expired and revoked sessions can never authenticate again. Dropping them here keeps the
+      // persisted document from growing with every sign-in and every short-lived bound session.
+      state.sessions = state.sessions.filter((candidate) => candidate.revokedAt === 0 && candidate.expiresAt > now);
       state.sessions.push(session);
     });
     await this.auditLog.record({
@@ -759,6 +774,18 @@ export class SessionService {
   private resolveToken(token: string): AuthContext | null {
     const sessionHash = hashSessionToken(token, this.env);
     const tokenHash = hashToken(token, this.env);
+    const auth = this.resolveHashes(sessionHash, tokenHash);
+    if (auth === null) return null;
+    return {
+      ...auth,
+      stillValid: () => {
+        const current = this.resolveHashes(sessionHash, tokenHash);
+        return current !== null && current.user.id === auth.user.id && current.sessionId === auth.sessionId && current.authMethod === auth.authMethod;
+      }
+    };
+  }
+
+  private resolveHashes(sessionHash: string, tokenHash: string): AuthContext | null {
     return this.store.read((state) => {
       const session = state.sessions.find((candidate) => candidate.tokenHash === sessionHash && candidate.revokedAt === 0 && candidate.expiresAt > nowMs());
       if (session !== undefined) {
@@ -816,6 +843,7 @@ export class SessionService {
         session.revokedAt = nowMs();
       }
     });
+    this.hub?.closeUnauthorized();
     await this.auditLog.record({ actorUserId: actor.id, action: 'logout', targetId: sessionId });
   }
 
@@ -831,6 +859,7 @@ export class SessionService {
         }
       }
     });
+    this.hub?.closeUnauthorized();
     await this.auditLog.record({
       actorUserId: actor.id,
       action: actor.id === userId ? 'sessions.revoked' : 'admin.session_revocation',
@@ -1370,8 +1399,13 @@ export class ChannelService {
       agentPolicy: {},
       retentionDays: null
     };
+    if (input.actor !== undefined && (input.type === 'D' || input.type === 'G')) {
+      // A caller-named conversation would be found by direct() later and handed to the people it
+      // names, with its creator still a member. Only direct() may create these.
+      throw badRequest('Direct and group conversations are created through the direct message endpoints');
+    }
     await this.store.write((state) => {
-      if ((input.type === 'O' || input.type === 'P') && input.teamId.length > 0) {
+      if (input.type === 'O' || input.type === 'P') {
         const team = state.teams.find((candidate) => candidate.id === input.teamId && candidate.deleteAt === 0);
         if (team === undefined) {
           throw notFound('Team');
@@ -1424,7 +1458,12 @@ export class ChannelService {
   }
 
   public async deleteChannel(channelId: string, actor: UserRecord): Promise<ChannelRecord> {
-    this.assertMember(channelId, actor.id);
+    const existing = this.getChannel(channelId);
+    if (existing.type === 'D' || existing.type === 'G') {
+      throw badRequest('Direct and group conversations cannot be deleted');
+    }
+    // Deleting is a management action like renaming: it removes the channel for every member.
+    this.requireChannelManager(channelId, actor);
     const deleted = await this.store.write((state) => {
       const channel = state.channels.find((candidate) => candidate.id === channelId);
       if (channel === undefined) {
@@ -1448,6 +1487,9 @@ export class ChannelService {
       if (!selfJoiningPublicChannel) {
         this.requireChannelManager(channelId, actor);
       }
+    }
+    if (!this.store.read((state) => state.users.some((user) => user.id === userId))) {
+      throw notFound('User');
     }
     const existing = this.store.read((state) => state.channelMembers.find((member) => member.channelId === channelId && member.userId === userId));
     if (existing !== undefined) {
@@ -1564,6 +1606,9 @@ export class ChannelService {
     if (!sorted.includes(creatorId)) {
       sorted.push(creatorId);
       sorted.sort();
+    }
+    if (this.store.read((state) => sorted.some((userId) => !state.users.some((user) => user.id === userId)))) {
+      throw notFound('User');
     }
     const type: MattermostChannelType = sorted.length === 2 ? 'D' : 'G';
     const name = sorted.join('__');
@@ -1760,19 +1805,42 @@ export class PostService {
     return post;
   }
 
+  /**
+   * A post the actor may read: in a channel they belong to, not deleted, and not held back from
+   * them by supervision. Anything else is reported as missing, so its existence is not confirmed.
+   */
+  public getVisiblePost(postId: string, actor: UserRecord): PostRecord {
+    const post = this.getPost(postId);
+    this.channels.assertMember(post.channelId, actor.id);
+    if (post.deleteAt > 0 || !isLifecycleVisibleTo(post, actor)) {
+      throw notFound('Post');
+    }
+    return post;
+  }
+
+  /** Who is told about a post over WebSocket: the channel, or only its author and admins while it is held. */
+  private audience(post: PostRecord): WebSocketBroadcast {
+    if (post.lifecycleState === 'approved' || post.lifecycleState === 'deleted') {
+      return { channel_id: post.channelId };
+    }
+    const adminIds = this.store.read((state) => state.users.filter((user) => user.deleteAt === 0 && isAdmin(user)).map((user) => user.id));
+    return { channel_id: post.channelId, user_ids: [...new Set([post.userId, ...adminIds])] };
+  }
+
   public listChannelPosts(channelId: string, actor: UserRecord): PostRecord[] {
     this.channels.assertMember(channelId, actor.id);
     return this.store.read((state) => state.posts.filter((post) => post.channelId === channelId && post.deleteAt === 0 && isLifecycleVisibleTo(post, actor)));
   }
 
   public thread(rootId: string, actor: UserRecord): PostRecord[] {
-    const root = this.getPost(rootId);
-    this.channels.assertMember(root.channelId, actor.id);
-    return this.store.read((state) => state.posts.filter((post) => post.channelId === root.channelId && (post.id === rootId || post.rootId === rootId) && isLifecycleVisibleTo(post, actor)));
+    const root = this.getVisiblePost(rootId, actor);
+    return this.store.read((state) => state.posts.filter((post) => post.channelId === root.channelId && (post.id === rootId || post.rootId === rootId) && post.deleteAt === 0 && isLifecycleVisibleTo(post, actor)));
   }
 
   public async createPost(input: { actor: UserRecord; channelId: string; message: string; rootId?: string; fileIds?: string[]; pendingPostId?: string; props?: JsonRecord }): Promise<PostRecord> {
     this.channels.assertMember(input.channelId, input.actor.id);
+    // Resolve the channel before anything is written: an archived channel accepts no posts.
+    const channel = this.channels.getChannel(input.channelId);
     if (input.rootId) {
       const validRoot = this.store.read((state) => state.posts.some((post) => post.id === input.rootId && post.channelId === input.channelId && post.rootId === '' && post.deleteAt === 0));
       if (!validRoot) throw badRequest('Invalid thread root for channel');
@@ -1847,7 +1915,6 @@ export class PostService {
     });
     await this.supervision.recordPost(post, input.actor);
     if (lifecycleState !== 'submitted') {
-      const channel = this.channels.getChannel(input.channelId);
       await this.hub.broadcast(
         'posted',
         {
@@ -1857,10 +1924,10 @@ export class PostService {
           team_id: channel.teamId,
           sender_name: input.actor.username
         },
-        { channel_id: input.channelId }
+        this.audience(post)
       );
       if (post.rootId !== '') {
-        await this.hub.broadcast('thread_updated', { post_id: post.id, root_id: post.rootId }, { channel_id: input.channelId });
+        await this.hub.broadcast('thread_updated', { post_id: post.id, root_id: post.rootId }, this.audience(post));
       }
     }
     return post;
@@ -1880,8 +1947,7 @@ export class PostService {
   }
 
   public async patchPost(postId: string, patch: Partial<Pick<PostRecord, 'message' | 'isPinned' | 'fileIds'>>, actor: UserRecord): Promise<PostRecord> {
-    const existing = this.getPost(postId);
-    this.channels.assertMember(existing.channelId, actor.id);
+    const existing = this.getVisiblePost(postId, actor);
     if (existing.userId !== actor.id && !isAdmin(actor)) {
       throw forbidden();
     }
@@ -1937,7 +2003,7 @@ export class PostService {
         post_id: postId,
         post: JSON.stringify(toMattermostPost(updated))
       },
-      { channel_id: updated.channelId }
+      this.audience(updated)
     );
     return updated;
   }
@@ -1946,8 +2012,7 @@ export class PostService {
   // post, and doing so must not fabricate edit history or mark the post as
   // edited. It only toggles the pinned flag and notifies the channel.
   public async setPinned(postId: string, isPinned: boolean, actor: UserRecord): Promise<PostRecord> {
-    const existing = this.getPost(postId);
-    this.channels.assertMember(existing.channelId, actor.id);
+    this.getVisiblePost(postId, actor);
     const updated = await this.store.write((state) => {
       const post = state.posts.find((candidate) => candidate.id === postId);
       if (post === undefined) {
@@ -1964,14 +2029,13 @@ export class PostService {
         post_id: postId,
         post: JSON.stringify(toMattermostPost(updated))
       },
-      { channel_id: updated.channelId }
+      this.audience(updated)
     );
     return updated;
   }
 
   public async deletePost(postId: string, actor: UserRecord): Promise<PostRecord> {
-    const existing = this.getPost(postId);
-    this.channels.assertMember(existing.channelId, actor.id);
+    const existing = this.getVisiblePost(postId, actor);
     if (existing.userId !== actor.id && !isAdmin(actor)) {
       throw forbidden();
     }
@@ -2003,8 +2067,7 @@ export class PostService {
   }
 
   public editHistory(postId: string, actor: UserRecord): PostEditHistoryRecord[] {
-    const post = this.getPost(postId);
-    this.channels.assertMember(post.channelId, actor.id);
+    this.getVisiblePost(postId, actor);
     return this.store.read((state) => state.postEditHistory.filter((entry) => entry.postId === postId));
   }
 }
@@ -2019,14 +2082,12 @@ export class ReactionService {
   ) {}
 
   public list(postId: string, actor: UserRecord): ReactionRecord[] {
-    const post = this.posts.getPost(postId);
-    this.channels.assertMember(post.channelId, actor.id);
+    this.posts.getVisiblePost(postId, actor);
     return this.store.read((state) => state.reactions.filter((reaction) => reaction.postId === postId));
   }
 
   public async add(input: { actor: UserRecord; postId: string; emojiName: string }): Promise<ReactionRecord> {
-    const post = this.posts.getPost(input.postId);
-    this.channels.assertMember(post.channelId, input.actor.id);
+    const post = this.posts.getVisiblePost(input.postId, input.actor);
     const existing = this.store.read((state) => state.reactions.find((reaction) => reaction.postId === input.postId && reaction.userId === input.actor.id && reaction.emojiName === input.emojiName));
     if (existing !== undefined) {
       return existing;
@@ -2058,6 +2119,7 @@ export class ReactionService {
 
   public async remove(input: { actor: UserRecord; userId: string; postId: string; emojiName: string }): Promise<void> {
     const post = this.posts.getPost(input.postId);
+    this.channels.assertMember(post.channelId, input.actor.id);
     if (input.actor.id !== input.userId && !isAdmin(input.actor)) {
       throw forbidden();
     }
@@ -2081,9 +2143,8 @@ export class ReactionService {
   public reactionsForPosts(postIds: string[], actor: UserRecord): Record<string, ReactionRecord[]> {
     const allowed = new Set(
       postIds.filter((postId) => {
-        const post = this.posts.getPost(postId);
         try {
-          this.channels.assertMember(post.channelId, actor.id);
+          this.posts.getVisiblePost(postId, actor);
           return true;
         } catch {
           return false;
@@ -2176,6 +2237,7 @@ export class FileService {
 
   public async storeFile(input: UploadInput): Promise<FileInfoRecord> {
     this.channels.assertMember(input.channelId, input.userId);
+    this.channels.getChannel(input.channelId);
     if (input.bytes.byteLength > 25 * 1024 * 1024) {
       throw badRequest('File is too large');
     }
@@ -2280,8 +2342,7 @@ export class FileService {
   }
 
   public fileInfosForPost(postId: string, actor: UserRecord, posts: PostService): FileInfoRecord[] {
-    const post = posts.getPost(postId);
-    this.channels.assertMember(post.channelId, actor.id);
+    const post = posts.getVisiblePost(postId, actor);
     return this.store.read((state) => state.files.filter((file) => post.fileIds.includes(file.id)));
   }
 
@@ -2699,6 +2760,7 @@ export class BotService {
       recordBotOperation(state, requestedOperationId, actor.id, 'bot.provisioned', requestDigest, user.id);
       return { user, bot: persisted, userCreated, addedChannelIds };
     });
+    this.hub.closeUnauthorized();
     this.auditLog.publishPendingSoon();
     if (result.userCreated) {
       await this.hub.broadcast('new_user', { user_id: result.user.id, username: result.user.username }, {});
@@ -2784,6 +2846,7 @@ export class BotService {
       recordBotOperation(state, requestedOperationId, actor.id, 'bot.token_regenerated', requestDigest, botUserId);
       return existing;
     });
+    this.hub.closeUnauthorized();
     this.auditLog.publishPendingSoon();
     return { token, bot, operationId };
   }
@@ -3125,7 +3188,8 @@ export class WebSocketHub {
       id: canResume ? requestedConnectionId : createId(),
       userId,
       eventSeq: canResume && Number.isSafeInteger(options.eventSeq) && (options.eventSeq ?? -1) >= 0 ? (options.eventSeq ?? 0) : 0,
-      socket
+      socket,
+      authorized: options.authorized ?? null
     };
     this.connections.set(connection.id, connection);
     this.store.incrementMetric('websocketConnections');
@@ -3147,21 +3211,46 @@ export class WebSocketHub {
     return this.connections.size;
   }
 
-  public authenticate(connectionId: string, userId: string): void {
-    const connection = this.connections.get(connectionId);
-    if (connection !== undefined) {
-      connection.userId = userId;
-      this.sendEvent(connection, 'hello', {
-        server_version: '11.8.0',
-        connection_id: connection.id,
-        sequence_number: connection.eventSeq
-      });
+  /**
+   * Ends every connection whose credential no longer works (sign-out, session revocation or
+   * expiry, account deactivation, bot token rotation). Returns how many were closed.
+   */
+  public closeUnauthorized(): number {
+    let closed = 0;
+    for (const connection of [...this.connections.values()]) {
+      if (!this.isAuthorized(connection)) {
+        this.expire(connection);
+        closed += 1;
+      }
+    }
+    return closed;
+  }
+
+  private isAuthorized(connection: HubConnection): boolean {
+    if (connection.userId === null || connection.authorized === null) return true;
+    try {
+      return connection.authorized();
+    } catch {
+      return false;
+    }
+  }
+
+  private expire(connection: HubConnection): void {
+    this.connections.delete(connection.id);
+    try {
+      connection.socket.close?.(1008, 'Session expired');
+    } catch {
+      // The socket is already gone; it is no longer a delivery target either way.
     }
   }
 
   public async handleClientMessage(connectionId: string, raw: string, authenticateToken: (token: string) => AuthContext | null, statuses: StatusService): Promise<void> {
     const connection = this.connections.get(connectionId);
     if (connection === undefined) {
+      return;
+    }
+    if (!this.isAuthorized(connection)) {
+      this.expire(connection);
       return;
     }
     const parsed = parseWebSocketRequest(raw);
@@ -3181,6 +3270,7 @@ export class WebSocketHub {
         return;
       }
       connection.userId = auth.user.id;
+      connection.authorized = auth.stillValid ?? null;
       this.sendEvent(connection, 'hello', {
         server_version: '11.8.0',
         connection_id: connection.id,
@@ -3256,6 +3346,11 @@ export class WebSocketHub {
 
   public async broadcast(event: string, data: JsonRecord, broadcast: WebSocketBroadcast): Promise<void> {
     for (const connection of this.connections.values()) {
+      if (!this.isAuthorized(connection)) {
+        // A connection must not outlive its credential: nothing is delivered after sign-out.
+        this.expire(connection);
+        continue;
+      }
       if (this.shouldReceive(connection, broadcast)) {
         this.sendEvent(connection, event, data, broadcast);
       }
@@ -3321,7 +3416,7 @@ export function createServices(store: StateStore, env: AppEnv): ServiceBundle {
   const teams = new TeamService(store);
   const channels = new ChannelService(store, hub);
   const supervision = new SupervisionService(store, auditLog);
-  const sessions = new SessionService(store, env, auditLog);
+  const sessions = new SessionService(store, env, auditLog, hub);
   const auth = new AuthService(users, sessions, auditLog);
   const invites = new InviteService(store, env, teams, channels, auditLog, hub);
   const posts = new PostService(store, channels, supervision, auditLog, hub);

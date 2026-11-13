@@ -646,19 +646,25 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
     return c.json(services.teams.listVisibleTeams(auth.user).map(toMattermostTeam));
   });
   app.get('/api/v4/teams/:team_id', async (c) => {
-    await requireAuth(c, services);
-    return c.json(toMattermostTeam(services.teams.getTeam(c.req.param('team_id'))));
+    const auth = await requireAuth(c, services);
+    const team = services.teams.getTeam(c.req.param('team_id'));
+    requireTeamAccess(services, team.id, auth);
+    return c.json(toMattermostTeam(team));
   });
   app.get('/api/v4/teams/name/:team_name', async (c) => {
-    await requireAuth(c, services);
-    return c.json(toMattermostTeam(services.teams.getTeamByName(c.req.param('team_name'))));
+    const auth = await requireAuth(c, services);
+    const team = services.teams.getTeamByName(c.req.param('team_name'));
+    requireTeamAccess(services, team.id, auth);
+    return c.json(toMattermostTeam(team));
   });
   app.get('/api/v4/teams/:team_id/members', async (c) => {
-    await requireAuth(c, services);
+    const auth = await requireAuth(c, services);
+    requireTeamAccess(services, c.req.param('team_id'), auth);
     return c.json(services.teams.listMembers(c.req.param('team_id')).map(toMattermostTeamMember));
   });
   app.get('/api/v4/teams/:team_id/members/:user_id', async (c) => {
-    await requireAuth(c, services);
+    const auth = await requireAuth(c, services);
+    requireTeamAccess(services, c.req.param('team_id'), auth);
     return c.json(toMattermostTeamMember(services.teams.getMember(c.req.param('team_id'), c.req.param('user_id'))));
   });
   app.post('/api/v4/teams/:team_id/members', async (c) => {
@@ -670,6 +676,8 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
       }
     }
     const body = await readJson(c, z.object({ user_id: z.string() }));
+    services.teams.getTeam(c.req.param('team_id'));
+    services.users.getById(body.user_id);
     return c.json(toMattermostTeamMember(await services.teams.addUserToTeam(c.req.param('team_id'), body.user_id, '')));
   });
   app.delete('/api/v4/teams/:team_id/members/:user_id', async (c) => {
@@ -1002,9 +1010,7 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
   });
   app.get('/api/v4/posts/:post_id', async (c) => {
     const auth = await requireAuth(c, services);
-    const post = services.posts.getPost(c.req.param('post_id'));
-    services.channels.assertMember(post.channelId, auth.user.id);
-    return c.json(toMattermostPost(post));
+    return c.json(toMattermostPost(services.posts.getVisiblePost(c.req.param('post_id'), auth.user)));
   });
   app.put('/api/v4/posts/:post_id', async (c) => patchPostRoute(c, services));
   app.put('/api/v4/posts/:post_id/patch', async (c) => patchPostRoute(c, services));
@@ -1055,8 +1061,7 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
       .filter((preference) => preference.category === 'flagged_post' && preference.value === 'true')
       .flatMap((preference) => {
         try {
-          const post = services.posts.getPost(preference.name);
-          services.channels.assertMember(post.channelId, auth.user.id);
+          const post = services.posts.getVisiblePost(preference.name, auth.user);
           const channel = services.channels.getChannel(post.channelId);
           if (channelId.length > 0 && post.channelId !== channelId) return [];
           if (teamId.length > 0 && channel.teamId !== teamId) return [];
@@ -1072,12 +1077,7 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
     const ids = await readJson(c, z.array(z.string()));
     return c.json(
       toMattermostPostList(
-        ids
-          .map((id) => services.posts.getPost(id))
-          .filter((post) => {
-            services.channels.assertMember(post.channelId, auth.user.id);
-            return true;
-          })
+        ids.map((id) => services.posts.getVisiblePost(id, auth.user))
       )
     );
   });
@@ -2108,6 +2108,13 @@ async function requireAuth(c: Context<AppHonoEnv>, services: ServiceBundle): Pro
     throw unauthorized();
   }
   return auth;
+}
+
+/** Team details and rosters are for the team's members and system admins. */
+function requireTeamAccess(services: ServiceBundle, teamId: string, auth: AuthContext): void {
+  if (!isAdmin(auth.user)) {
+    services.teams.getMember(teamId, auth.user.id);
+  }
 }
 
 async function authenticateRequest(c: Context<AppHonoEnv>, services: ServiceBundle): Promise<AuthContext | null> {

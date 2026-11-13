@@ -175,7 +175,7 @@ Broader scripted smoke:
 scripts/mmctl-compat-smoke.sh
 ```
 
-`@hono/node-server` 2.x exports a WebSocket helper, but ChatterMost intentionally retains the direct Node `ws` upgrade bridge in `src/server/index.ts`. That bridge owns Mattermost-specific bearer/cookie authentication, CSWSH enforcement, reconnect sequence handling, frame tracing, payload limits, and graceful shutdown. Preserve those behaviors if the integration is ever replaced.
+`@hono/node-server` 2.x exports a WebSocket helper, but ChatterMost intentionally retains the direct Node `ws` upgrade bridge in `src/server/index.ts`. That bridge owns Mattermost-specific bearer/cookie authentication, CSWSH enforcement, reconnect sequence handling, frame tracing, payload limits, and graceful shutdown. Preserve those behaviors if the integration is ever replaced. A socket must not outlive its credential: `WebSocketHub` re-checks each connection's `AuthContext.stillValid` before every delivery and client action, session/bot-token revocation calls `hub.closeUnauthorized()`, the bridge sweeps idle sockets every 15 seconds, and a socket that has not authenticated within 30 seconds is closed.
 
 Mattermost-compatible WebSocket `posted` events are public compatibility payloads, not internal records. Emit `data.post` using `toMattermostPost(...)` and include `channel_id`, `channel_type`, `team_id`, and `sender_name`. Hermes Agent uses `channel_type: "D"` to identify direct messages and skip channel mention gating.
 

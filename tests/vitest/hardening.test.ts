@@ -920,3 +920,300 @@ describe('Security and correctness hardening', () => {
     expect(afterAdminReset.status).toBe(401);
   });
 });
+
+type RecordedSocket = { frames: string[]; closes: { code: number; reason: string }[]; send: (payload: string) => void; close: (code: number, reason: string) => void };
+
+function recordedSocket(): RecordedSocket {
+  const frames: string[] = [];
+  const closes: { code: number; reason: string }[] = [];
+  return { frames, closes, send: (payload) => frames.push(payload), close: (code, reason) => closes.push({ code, reason }) };
+}
+
+function eventNames(socket: RecordedSocket): string[] {
+  return socket.frames.flatMap((payload) => {
+    const event = (JSON.parse(payload) as { event?: string }).event;
+    return event === undefined ? [] : [event];
+  });
+}
+
+function attachAuthenticated(server: TestServer, token: string): RecordedSocket {
+  const auth = server.services.sessions.authenticateToken(token);
+  if (auth === null || auth.stillValid === undefined) throw new Error('missing authentication');
+  const socket = recordedSocket();
+  server.services.hub.attach(socket, auth.user.id, { authorized: auth.stillValid });
+  return socket;
+}
+
+describe('WebSocket connections end with their credential', () => {
+  it('closes a session socket at sign-out and delivers nothing afterwards', async () => {
+    const server = await createTestServer();
+    const adminToken = await login(server);
+    const member = await createMember(server, adminToken, 'socketsignout');
+    const channelId = await firstChannelId(server.app, member.token);
+    const socket = attachAuthenticated(server, member.token);
+    const other = attachAuthenticated(server, adminToken);
+
+    const logout = await server.app.request('/api/v4/users/logout', { method: 'POST', headers: bearer(member.token) });
+    expect(logout.status).toBe(200);
+    expect(socket.closes).toEqual([{ code: 1008, reason: 'Session expired' }]);
+    expect(other.closes).toEqual([]);
+
+    const framesAtSignOut = socket.frames.length;
+    const posted = await server.app.request('/api/v4/posts', {
+      method: 'POST', headers: bearer(adminToken), body: JSON.stringify({ channel_id: channelId, message: 'after sign-out' })
+    });
+    expect(posted.status).toBe(201);
+    expect(socket.frames).toHaveLength(framesAtSignOut);
+    expect(eventNames(other)).toContain('posted');
+    expect(server.services.hub.connectionCount()).toBe(1);
+  });
+
+  it('closes sockets on session revocation, deactivation and bot token rotation', async () => {
+    const server = await createTestServer();
+    const adminToken = await login(server);
+    const revoked = await createMember(server, adminToken, 'socketrevoked');
+    const deactivated = await createMember(server, adminToken, 'socketdisabled');
+    const revokedSocket = attachAuthenticated(server, revoked.token);
+    const deactivatedSocket = attachAuthenticated(server, deactivated.token);
+    const botSocket = attachAuthenticated(server, 'test-hermes-token');
+    const adminSocket = attachAuthenticated(server, adminToken);
+    const hermes = server.services.users.findByUsername('hermes');
+    if (hermes === null) throw new Error('missing hermes');
+
+    expect((await server.app.request(`/admin/users/${revoked.userId}/revoke-sessions`, { method: 'POST', headers: bearer(adminToken) })).status).toBe(200);
+    expect(revokedSocket.closes).toHaveLength(1);
+    expect((await server.app.request(`/admin/users/${deactivated.userId}/deactivate`, { method: 'POST', headers: bearer(adminToken) })).status).toBe(200);
+    expect(deactivatedSocket.closes).toHaveLength(1);
+    expect(botSocket.closes).toEqual([]);
+    expect((await server.app.request(`/admin/bots/${hermes.id}/regenerate-token`, { method: 'POST', headers: bearer(adminToken) })).status).toBe(200);
+    expect(botSocket.closes).toHaveLength(1);
+    expect(adminSocket.closes).toEqual([]);
+  });
+
+  it('expires a socket authenticated by challenge once its session is revoked', async () => {
+    const server = await createTestServer();
+    const adminToken = await login(server);
+    const member = await createMember(server, adminToken, 'socketchallenge');
+    const socket = recordedSocket();
+    const connection = server.services.hub.attach(socket, null);
+    const authenticate = (candidate: string) => server.services.sessions.authenticateToken(candidate);
+    await server.services.hub.handleClientMessage(connection.id, JSON.stringify({ action: 'authentication_challenge', seq: 1, data: { token: member.token } }), authenticate, server.services.statuses);
+    expect(eventNames(socket)).toEqual(['hello']);
+
+    await server.store.write((state) => {
+      for (const session of state.sessions) if (session.userId === member.userId) session.revokedAt = nowMs();
+    });
+    const framesBefore = socket.frames.length;
+    await server.services.hub.handleClientMessage(connection.id, JSON.stringify({ action: 'ping', seq: 2 }), authenticate, server.services.statuses);
+    expect(socket.frames).toHaveLength(framesBefore);
+    expect(socket.closes).toEqual([{ code: 1008, reason: 'Session expired' }]);
+    expect(server.services.hub.connectionCount()).toBe(0);
+  });
+
+  it('drops expired and revoked sessions when a new session is created', async () => {
+    const server = await createTestServer();
+    const adminToken = await login(server);
+    const member = await createMember(server, adminToken, 'sessionprune');
+    await server.app.request('/api/v4/users/logout', { method: 'POST', headers: bearer(member.token) });
+    await server.store.write((state) => {
+      const session = state.sessions.find((candidate) => candidate.userId !== member.userId);
+      if (session === undefined) throw new Error('missing admin session');
+      state.sessions.push({ ...session, id: createId(), tokenHash: 'expired', expiresAt: nowMs() - 1 });
+    });
+    expect(server.store.read((state) => state.sessions.length)).toBe(3);
+
+    await login(server);
+    const remaining = server.store.read((state) => state.sessions);
+    expect(remaining).toHaveLength(2);
+    expect(remaining.every((session) => session.revokedAt === 0 && session.expiresAt > nowMs())).toBe(true);
+    expect((await server.app.request('/api/v4/users/me', { headers: bearer(adminToken) })).status).toBe(200);
+  });
+});
+
+describe('Channel and post access boundaries', () => {
+  it('refuses caller-named direct channels so a later direct message cannot be joined in advance', async () => {
+    const server = await createTestServer();
+    const adminToken = await login(server);
+    const alice = await createMember(server, adminToken, 'dmalice');
+    const bob = await createMember(server, adminToken, 'dmbob');
+    const mallory = await createMember(server, adminToken, 'dmmallory');
+    const name = [alice.userId, bob.userId].sort().join('__');
+
+    for (const type of ['D', 'G']) {
+      const seeded = await server.app.request('/api/v4/channels', {
+        method: 'POST', headers: bearer(mallory.token), body: JSON.stringify({ name, display_name: 'seeded', type })
+      });
+      expect(seeded.status).toBe(400);
+    }
+    const teamless = await server.app.request('/api/v4/channels', {
+      method: 'POST', headers: bearer(mallory.token), body: JSON.stringify({ name: 'teamless', display_name: 'Teamless', type: 'P' })
+    });
+    expect(teamless.status).toBe(404);
+
+    const direct = await server.app.request('/api/v4/channels/direct', {
+      method: 'POST', headers: bearer(alice.token), body: JSON.stringify([alice.userId, bob.userId])
+    });
+    expect(direct.status).toBe(200);
+    const channel = (await direct.json()) as { id: string; name: string };
+    expect(channel.name).toBe(name);
+    expect(server.services.channels.listMembers(channel.id).map((member) => member.userId).sort()).toEqual([alice.userId, bob.userId].sort());
+    expect((await server.app.request(`/api/v4/channels/${channel.id}/posts`, { headers: bearer(mallory.token) })).status).toBe(404);
+
+    const unknown = await server.app.request('/api/v4/channels/direct', {
+      method: 'POST', headers: bearer(alice.token), body: JSON.stringify([alice.userId, createId()])
+    });
+    expect(unknown.status).toBe(404);
+  });
+
+  it('lets only channel managers delete a channel and never a direct conversation', async () => {
+    const server = await createTestServer();
+    const adminToken = await login(server);
+    const owner = await createMember(server, adminToken, 'channelowner');
+    const member = await createMember(server, adminToken, 'channelmember');
+    const townSquareId = await firstChannelId(server.app, member.token);
+    const teamId = server.services.channels.getChannel(townSquareId).teamId;
+
+    expect((await server.app.request(`/api/v4/channels/${townSquareId}`, { method: 'DELETE', headers: bearer(member.token) })).status).toBe(403);
+    expect(server.services.channels.getChannel(townSquareId).deleteAt).toBe(0);
+
+    const created = await server.app.request('/api/v4/channels', {
+      method: 'POST', headers: bearer(owner.token), body: JSON.stringify({ team_id: teamId, name: 'owned-room', display_name: 'Owned Room', type: 'O' })
+    });
+    expect(created.status).toBe(201);
+    const owned = (await created.json()) as { id: string };
+    expect((await server.app.request(`/api/v4/channels/${owned.id}/members`, {
+      method: 'POST', headers: bearer(member.token), body: JSON.stringify({ user_id: member.userId })
+    })).status).toBe(200);
+    expect((await server.app.request(`/api/v4/channels/${owned.id}`, { method: 'DELETE', headers: bearer(member.token) })).status).toBe(403);
+    expect((await server.app.request(`/api/v4/channels/${owned.id}`, { method: 'DELETE', headers: bearer(owner.token) })).status).toBe(200);
+
+    const direct = await server.app.request('/api/v4/channels/direct', {
+      method: 'POST', headers: bearer(owner.token), body: JSON.stringify([owner.userId, member.userId])
+    });
+    const directChannel = (await direct.json()) as { id: string };
+    for (const token of [owner.token, adminToken]) {
+      expect((await server.app.request(`/api/v4/channels/${directChannel.id}`, { method: 'DELETE', headers: bearer(token) })).status).toBe(400);
+    }
+    expect(server.services.channels.getChannel(directChannel.id).deleteAt).toBe(0);
+  });
+
+  it('stores nothing when posting or uploading to an archived channel', async () => {
+    const server = await createTestServer();
+    const adminToken = await login(server);
+    const admin = server.services.users.findByUsername('admin');
+    if (admin === null) throw new Error('missing admin');
+    const team = server.services.teams.listUserTeams(admin.id)[0];
+    if (team === undefined) throw new Error('missing team');
+    const channel = await server.services.channels.createChannel({
+      creatorId: admin.id, teamId: team.id, type: 'O', name: 'archived-room', displayName: 'Archived Room', header: '', purpose: ''
+    });
+    await server.services.channels.deleteChannel(channel.id, admin);
+    const before = server.store.read((state) => ({ posts: state.posts.length, files: state.files.length }));
+
+    const posted = await server.app.request('/api/v4/posts', {
+      method: 'POST', headers: bearer(adminToken), body: JSON.stringify({ channel_id: channel.id, message: 'into the archive' })
+    });
+    expect(posted.status).toBe(404);
+    await expect(server.services.files.storeFile({
+      userId: admin.id, channelId: channel.id, name: 'note.txt', mimeType: 'text/plain', bytes: new TextEncoder().encode('note')
+    })).rejects.toMatchObject({ statusCode: 404 });
+    expect(server.store.read((state) => ({ posts: state.posts.length, files: state.files.length }))).toEqual(before);
+  });
+
+  it('keeps held and deleted posts from other members on every post route and on the WebSocket', async () => {
+    const server = await createTestServer();
+    const adminToken = await login(server);
+    const author = await createMember(server, adminToken, 'heldauthor');
+    const reader = await createMember(server, adminToken, 'heldreader');
+    const channelId = await firstChannelId(server.app, author.token);
+    const readerSocket = attachAuthenticated(server, reader.token);
+    const authorSocket = attachAuthenticated(server, author.token);
+    const adminSocket = attachAuthenticated(server, adminToken);
+    expect((await server.app.request('/admin/supervision/policy', {
+      method: 'PUT', headers: bearer(adminToken), body: JSON.stringify({ mode: 'post_moderation', blockedTerms: ['quarantine-me'] })
+    })).status).toBe(200);
+
+    const secret = 'please quarantine-me now';
+    const heldResponse = await server.app.request('/api/v4/posts', {
+      method: 'POST', headers: bearer(author.token), body: JSON.stringify({ channel_id: channelId, message: secret })
+    });
+    expect(heldResponse.status).toBe(201);
+    const held = (await heldResponse.json()) as { id: string };
+    expect(server.services.posts.getPost(held.id).lifecycleState).toBe('quarantined');
+
+    expect((await server.app.request(`/api/v4/posts/${held.id}/pin`, { method: 'POST', headers: bearer(author.token) })).status).toBe(200);
+    expect((await server.app.request(`/api/v4/posts/${held.id}/patch`, {
+      method: 'PUT', headers: bearer(author.token), body: JSON.stringify({ message: `${secret} edited` })
+    })).status).toBe(200);
+    expect(readerSocket.frames.join('\n')).not.toContain('quarantine-me');
+    expect(eventNames(authorSocket)).toEqual(expect.arrayContaining(['posted', 'post_edited']));
+    expect(eventNames(adminSocket)).toEqual(expect.arrayContaining(['posted', 'post_edited']));
+
+    const readerRequests: [string, RequestInit][] = [
+      [`/api/v4/posts/${held.id}`, {}],
+      [`/api/v4/posts/${held.id}/thread`, {}],
+      [`/api/v4/posts/${held.id}/edit_history`, {}],
+      [`/api/v4/posts/${held.id}/reactions`, {}],
+      [`/api/v4/posts/${held.id}/files/info`, {}],
+      [`/api/v4/posts/${held.id}/pin`, { method: 'POST' }],
+      ['/api/v4/posts/ids', { method: 'POST', body: JSON.stringify([held.id]) }],
+      ['/api/v4/reactions', { method: 'POST', body: JSON.stringify({ post_id: held.id, emoji_name: 'eyes' }) }]
+    ];
+    for (const [path, init] of readerRequests) {
+      const response = await server.app.request(path, { ...init, headers: bearer(reader.token) });
+      expect([path, response.status]).toEqual([path, 404]);
+      expect(await response.text()).not.toContain('quarantine-me');
+    }
+    expect((await server.app.request(`/api/v4/posts/${held.id}`, { headers: bearer(author.token) })).status).toBe(200);
+    expect((await server.app.request(`/api/v4/posts/${held.id}`, { headers: bearer(adminToken) })).status).toBe(200);
+
+    const rootResponse = await server.app.request('/api/v4/posts', {
+      method: 'POST', headers: bearer(author.token), body: JSON.stringify({ channel_id: channelId, message: 'thread root' })
+    });
+    const root = (await rootResponse.json()) as { id: string };
+    const replyResponse = await server.app.request('/api/v4/posts', {
+      method: 'POST', headers: bearer(author.token), body: JSON.stringify({ channel_id: channelId, root_id: root.id, message: 'withdrawn reply' })
+    });
+    const reply = (await replyResponse.json()) as { id: string };
+    expect((await server.app.request(`/api/v4/posts/${reply.id}`, { method: 'DELETE', headers: bearer(author.token) })).status).toBe(200);
+    const thread = await server.app.request(`/api/v4/posts/${root.id}/thread`, { headers: bearer(reader.token) });
+    expect(thread.status).toBe(200);
+    expect(await thread.text()).not.toContain('withdrawn reply');
+    for (const token of [reader.token, author.token]) {
+      expect((await server.app.request(`/api/v4/posts/${reply.id}`, { headers: bearer(token) })).status).toBe(404);
+    }
+    expect((await server.app.request(`/api/v4/posts/${reply.id}/patch`, {
+      method: 'PUT', headers: bearer(author.token), body: JSON.stringify({ message: 'restored' })
+    })).status).toBe(404);
+  });
+
+  it('shows team details and rosters only to team members and system admins', async () => {
+    const server = await createTestServer();
+    const adminToken = await login(server);
+    const member = await createMember(server, adminToken, 'teamoutsider');
+    const admin = server.services.users.findByUsername('admin');
+    if (admin === null) throw new Error('missing admin');
+    const ownTeam = server.services.teams.listUserTeams(member.userId)[0];
+    if (ownTeam === undefined) throw new Error('missing team');
+    const otherTeamId = createId();
+    await server.store.write((state) => {
+      state.teams.push({ ...ownTeam, id: otherTeamId, name: 'other-team', displayName: 'Other Team' });
+    });
+    await server.services.teams.addUserToTeam(otherTeamId, admin.id, 'team_admin');
+
+    const paths = (teamId: string, teamName: string) => [
+      `/api/v4/teams/${teamId}`, `/api/v4/teams/name/${teamName}`, `/api/v4/teams/${teamId}/members`, `/api/v4/teams/${teamId}/members/${admin.id}`
+    ];
+    for (const path of paths(otherTeamId, 'other-team')) {
+      expect([path, (await server.app.request(path, { headers: bearer(member.token) })).status]).toEqual([path, 404]);
+      expect([path, (await server.app.request(path, { headers: bearer(adminToken) })).status]).toEqual([path, 200]);
+    }
+    for (const path of paths(ownTeam.id, ownTeam.name)) {
+      expect([path, (await server.app.request(path, { headers: bearer(member.token) })).status]).toEqual([path, 200]);
+    }
+    const phantom = await server.app.request(`/api/v4/teams/${otherTeamId}/members`, {
+      method: 'POST', headers: bearer(adminToken), body: JSON.stringify({ user_id: createId() })
+    });
+    expect(phantom.status).toBe(404);
+  });
+});
