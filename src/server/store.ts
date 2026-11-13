@@ -105,7 +105,7 @@ export class JsonStore {
 
     try {
       const raw = await readFile(this.filePath, 'utf8');
-      this.state = this.hydrate(JSON.parse(raw) as Partial<StoreState>);
+      this.state = hydrateState(JSON.parse(raw) as Partial<StoreState>);
     } catch (error) {
       if (error instanceof Error && 'code' in error && error.code === 'ENOENT') {
         if (this.readOnly) throw new Error('Read-only preflight requires an existing JSON store', { cause: error });
@@ -147,45 +147,6 @@ export class JsonStore {
   public async close(): Promise<void> {
     await this.writeQueue;
     if (!this.readOnly) await this.persist(this.state);
-  }
-
-  private hydrate(input: Partial<StoreState>): StoreState {
-    const empty = createEmptyState();
-    const auditLogs = hydrateAuditLogs(input.auditLogs ?? empty.auditLogs);
-    return {
-      ...empty,
-      ...input,
-      users: input.users ?? empty.users,
-      profileImages: input.profileImages ?? empty.profileImages,
-      sessions: input.sessions ?? empty.sessions,
-      personalAccessTokens: input.personalAccessTokens ?? empty.personalAccessTokens,
-      inviteCodes: input.inviteCodes ?? empty.inviteCodes,
-      teams: input.teams ?? empty.teams,
-      teamMembers: input.teamMembers ?? empty.teamMembers,
-      channels: input.channels ?? empty.channels,
-      channelMembers: input.channelMembers ?? empty.channelMembers,
-      posts: input.posts ?? empty.posts,
-      postEditHistory: input.postEditHistory ?? empty.postEditHistory,
-      reactions: input.reactions ?? empty.reactions,
-      customEmoji: input.customEmoji ?? empty.customEmoji,
-      files: input.files ?? empty.files,
-      preferences: input.preferences ?? empty.preferences,
-      statuses: input.statuses ?? empty.statuses,
-      bots: input.bots ?? empty.bots,
-      slashCommands: input.slashCommands ?? empty.slashCommands,
-      serverConfig: input.serverConfig ?? empty.serverConfig,
-      privacySettings: input.privacySettings ?? empty.privacySettings,
-      auditSequence: Math.max(input.auditSequence ?? 0, 0, ...auditLogs.map((record) => record.exportSequence)),
-      auditLogs,
-      auditOutbox: input.auditOutbox ?? empty.auditOutbox,
-      botOperationReceipts: input.botOperationReceipts ?? empty.botOperationReceipts,
-      supervisionPolicy: input.supervisionPolicy ?? empty.supervisionPolicy,
-      supervisionEvents: input.supervisionEvents ?? empty.supervisionEvents,
-      agentIdentities: input.agentIdentities ?? empty.agentIdentities,
-      agentConversationBindings: input.agentConversationBindings ?? empty.agentConversationBindings,
-      incomingWebhooks: input.incomingWebhooks ?? empty.incomingWebhooks,
-      metrics: input.metrics ?? empty.metrics
-    };
   }
 
   private async persist(state: StoreState = this.state): Promise<void> {
@@ -231,7 +192,7 @@ export class PostgresStore {
       await this.persist();
       return;
     }
-    this.state = this.hydrate(row.value as Partial<StoreState>);
+    this.state = hydrateState(row.value as Partial<StoreState>);
   }
 
   public read<T>(reader: (state: Readonly<StoreState>) => T): T {
@@ -267,48 +228,49 @@ export class PostgresStore {
     await this.prisma.$disconnect();
   }
 
-  private hydrate(input: Partial<StoreState>): StoreState {
-    const empty = createEmptyState();
-    const auditLogs = hydrateAuditLogs(input.auditLogs ?? empty.auditLogs);
-    return {
-      ...empty,
-      ...input,
-      users: input.users ?? empty.users,
-      profileImages: input.profileImages ?? empty.profileImages,
-      sessions: input.sessions ?? empty.sessions,
-      personalAccessTokens: input.personalAccessTokens ?? empty.personalAccessTokens,
-      inviteCodes: input.inviteCodes ?? empty.inviteCodes,
-      teams: input.teams ?? empty.teams,
-      teamMembers: input.teamMembers ?? empty.teamMembers,
-      channels: input.channels ?? empty.channels,
-      channelMembers: input.channelMembers ?? empty.channelMembers,
-      posts: input.posts ?? empty.posts,
-      postEditHistory: input.postEditHistory ?? empty.postEditHistory,
-      reactions: input.reactions ?? empty.reactions,
-      customEmoji: input.customEmoji ?? empty.customEmoji,
-      files: input.files ?? empty.files,
-      preferences: input.preferences ?? empty.preferences,
-      statuses: input.statuses ?? empty.statuses,
-      bots: input.bots ?? empty.bots,
-      slashCommands: input.slashCommands ?? empty.slashCommands,
-      serverConfig: input.serverConfig ?? empty.serverConfig,
-      privacySettings: input.privacySettings ?? empty.privacySettings,
-      auditSequence: Math.max(input.auditSequence ?? 0, 0, ...auditLogs.map((record) => record.exportSequence)),
-      auditLogs,
-      auditOutbox: input.auditOutbox ?? empty.auditOutbox,
-      botOperationReceipts: input.botOperationReceipts ?? empty.botOperationReceipts,
-      supervisionPolicy: input.supervisionPolicy ?? empty.supervisionPolicy,
-      supervisionEvents: input.supervisionEvents ?? empty.supervisionEvents,
-      agentIdentities: input.agentIdentities ?? empty.agentIdentities,
-      agentConversationBindings: input.agentConversationBindings ?? empty.agentConversationBindings,
-      incomingWebhooks: input.incomingWebhooks ?? empty.incomingWebhooks,
-      metrics: input.metrics ?? empty.metrics
-    };
-  }
-
   private async persist(state: StoreState = this.state): Promise<void> {
     await this.prisma.$executeRawUnsafe('INSERT INTO "RuntimeState" ("key", "value", "update_at") VALUES ($1, $2::jsonb, $3) ON CONFLICT ("key") DO UPDATE SET "value" = EXCLUDED."value", "update_at" = EXCLUDED."update_at"', 'default', JSON.stringify(state), nowMs());
   }
+}
+
+/** Fills collections that older persisted documents lack; both stores read the same document shape. */
+function hydrateState(input: Partial<StoreState>): StoreState {
+  const empty = createEmptyState();
+  const auditLogs = hydrateAuditLogs(input.auditLogs ?? empty.auditLogs);
+  return {
+    ...empty,
+    ...input,
+    users: input.users ?? empty.users,
+    profileImages: input.profileImages ?? empty.profileImages,
+    sessions: input.sessions ?? empty.sessions,
+    personalAccessTokens: input.personalAccessTokens ?? empty.personalAccessTokens,
+    inviteCodes: input.inviteCodes ?? empty.inviteCodes,
+    teams: input.teams ?? empty.teams,
+    teamMembers: input.teamMembers ?? empty.teamMembers,
+    channels: input.channels ?? empty.channels,
+    channelMembers: input.channelMembers ?? empty.channelMembers,
+    posts: input.posts ?? empty.posts,
+    postEditHistory: input.postEditHistory ?? empty.postEditHistory,
+    reactions: input.reactions ?? empty.reactions,
+    customEmoji: input.customEmoji ?? empty.customEmoji,
+    files: input.files ?? empty.files,
+    preferences: input.preferences ?? empty.preferences,
+    statuses: input.statuses ?? empty.statuses,
+    bots: input.bots ?? empty.bots,
+    slashCommands: input.slashCommands ?? empty.slashCommands,
+    serverConfig: input.serverConfig ?? empty.serverConfig,
+    privacySettings: input.privacySettings ?? empty.privacySettings,
+    auditSequence: Math.max(input.auditSequence ?? 0, 0, ...auditLogs.map((record) => record.exportSequence)),
+    auditLogs,
+    auditOutbox: input.auditOutbox ?? empty.auditOutbox,
+    botOperationReceipts: input.botOperationReceipts ?? empty.botOperationReceipts,
+    supervisionPolicy: input.supervisionPolicy ?? empty.supervisionPolicy,
+    supervisionEvents: input.supervisionEvents ?? empty.supervisionEvents,
+    agentIdentities: input.agentIdentities ?? empty.agentIdentities,
+    agentConversationBindings: input.agentConversationBindings ?? empty.agentConversationBindings,
+    incomingWebhooks: input.incomingWebhooks ?? empty.incomingWebhooks,
+    metrics: input.metrics ?? empty.metrics
+  };
 }
 
 function hydrateAuditLogs(records: AuditLogRecord[]): AuditLogRecord[] {
