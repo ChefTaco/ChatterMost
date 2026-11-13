@@ -15,6 +15,11 @@ publish a new version only for an intentional distribution change. Client and
 Hermes instructions live in the [client guide](clients.md),
 [Hermes guide](hermes-compatibility.md) and [agent runbook](../AGENTS.md#installation-runbook-for-agents).
 
+## Changes in 0.5.2
+
+- Update `@hono/node-server` to 2.1.8 for GHSA-qv5m-9pm6-hqp3 and GHSA-jpvv-r467-5p4w.
+- No database migration was added. 0.5.1 is an additional reviewed upgrade source.
+
 ## Changes in 0.5.1
 
 - Verify Oathweave tokens with the suite's shared verifier from `@hivemagnus/hive-common`, keeping ChatterMost's existing rules: user tokens only, RS256, exact `chattermost` audience, no clock tolerance, a required `roles` array, an exact `chattermost:session` permission and an online userinfo check on every validation. Refusals remain Mattermost-shaped 401 responses.
@@ -60,8 +65,8 @@ database migration was added. Publication does not alter an installed release.
 
 | Artifact | Meaning |
 | --- | --- |
-| `ghcr.io/cheftaco/chattermost:0.5.1` | Multi-architecture application image |
-| `ghcr.io/cheftaco/chattermost-migrator:0.5.1` | Matching one-off migrator |
+| `ghcr.io/cheftaco/chattermost:0.5.2` | Multi-architecture application image |
+| `ghcr.io/cheftaco/chattermost-migrator:0.5.2` | Matching one-off migrator |
 | `VERSION-amd64`, `VERSION-arm64` image tags | Native build outputs; may exist before all release checks finish |
 | `chattermost-VERSION.tar.gz` | Allowlisted bundle: manager, Compose, manifest, installation README, Apache license and notice |
 | `release.json` | Exact app/migrator/infrastructure digests, source revision, schema/lineage, platforms and permitted upgrade sources |
@@ -69,8 +74,8 @@ database migration was added. Publication does not alter an installed release.
 | `scan-*.json`, `lifecycle-proof-*.json` | Filtered vulnerability findings and sanitized native lifecycle evidence |
 
 Install a completed [GitHub release](https://github.com/ChefTaco/ChatterMost/releases),
-not a candidate architecture tag. The latest lifecycle release is 0.5.1;
-0.3.2, 0.3.3, 0.4.1, 0.4.2, 0.4.4 and 0.4.5 are its tested upgrade sources. The application has one writer
+not a candidate architecture tag. The latest lifecycle release is 0.5.2;
+0.3.2, 0.3.3, 0.4.1, 0.4.2, 0.4.4, 0.4.5 and 0.5.1 are its tested upgrade sources. The application has one writer
 and local WebSocket fanout. Both supported Linux architectures execute on native
 CI runners; there is no claim of emulated execution as native proof.
 
@@ -157,7 +162,7 @@ A successful push is not installation proof. Dispatch the public verification
 workflow for the exact completed release:
 
 ```bash
-gh workflow run verify-public-release.yml --ref main -f version=0.5.1
+gh workflow run verify-public-release.yml --ref main -f version=0.5.2
 ```
 
 Substitute the newly published version. Check both native fresh-install jobs,
@@ -174,7 +179,7 @@ Review the public manifest/digests and per-architecture SBOM/provenance, verify
 all downloaded checksums, and verify the archive and checksum publisher identities:
 
 ```bash
-gh attestation verify chattermost-0.5.1.tar.gz --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
+gh attestation verify chattermost-0.5.2.tar.gz --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
 gh attestation verify SHA256SUMS --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
 ```
 
