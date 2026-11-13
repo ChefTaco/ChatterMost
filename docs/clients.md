@@ -31,7 +31,7 @@ web interface are ChatterMost's own, as described in the [admin guide](admin-gui
   `--server-url`; an existing install keeps its protected runtime configuration.
 - `ALLOW_VERSION_ADVERTISEMENT=true` exposes the configured compatibility version
   `11.8.0` / profile `mattermost-v11.8`. Compose setup enables it. This is the API
-  compatibility profile; the ChatterMost distribution version is separately `0.5.2`.
+  compatibility profile; the ChatterMost distribution version is separately `0.6.0`.
 - Proxy HTTP and WebSocket to the same backend. Pass `Upgrade`/`Connection` headers,
   preserve `Origin`/`Referer`, and use long WebSocket timeouts. See the
   [proxy requirements](containers.md#existing-https-reverse-proxy).

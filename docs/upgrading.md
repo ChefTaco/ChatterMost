@@ -11,16 +11,16 @@ Keep credentials, backup paths, diagnostics and recovery evidence private.
 | --- | --- | --- |
 | Published Compose 0.2.3 | Published Compose 0.3.2 | Run the verified **0.3.2 manager** against the existing directory with `upgrade 0.3.2` |
 | Published Compose 0.3.2 | Published Compose 0.3.3 | Run the verified **0.3.3 manager** with `upgrade 0.3.3` |
-| Published Compose 0.3.2, 0.3.3, 0.4.1, 0.4.2, 0.4.4, 0.4.5 or 0.5.1 | Published Compose 0.5.2 | Run the verified **0.5.2 manager** with `upgrade 0.5.2` |
-| Compose 0.5.2 | Same version | No upgrade required; `start` checks/starts the selected release |
-| Compose 0.5.2 | A future release | Only when that published target explicitly lists `0.5.2` in `release.json` → `upgrade_from` and the path has release-test coverage |
+| Published Compose 0.3.2, 0.3.3, 0.4.1, 0.4.2, 0.4.4, 0.4.5, 0.5.1 or 0.5.2 | Published Compose 0.6.0 | Run the verified **0.6.0 manager** with `upgrade 0.6.0` |
+| Compose 0.6.0 | Same version | No upgrade required; `start` checks/starts the selected release |
+| Compose 0.6.0 | A future release | Only when that published target explicitly lists `0.6.0` in `release.json` → `upgrade_from` and the path has release-test coverage |
 | Compose with a recorded previous release | That previous release | `rollback`, only when generation, lineage and actual schema checks permit it |
 | Native SSH/systemd | Compatible newer native release | Verified backup, then the native staged migration/preflight/activation transaction |
 | Native SSH/systemd or JSON store | Compose | Separate authorized migration; not an ordinary version upgrade or a cross-installation `restore` |
 
-The current published release is **0.5.2**. Its reviewed `upgrade_from` list contains
-**0.3.2, 0.3.3, 0.4.1, 0.4.2, 0.4.4, 0.4.5 and 0.5.1**. An older 0.2.3 installation must first upgrade to the historical
-0.3.2 release using its verified manager; a direct 0.2.3 → 0.5.2 path is unsupported.
+The current published release is **0.6.0**. Its reviewed `upgrade_from` list contains
+**0.3.2, 0.3.3, 0.4.1, 0.4.2, 0.4.4, 0.4.5, 0.5.1 and 0.5.2**. An older 0.2.3 installation must first upgrade to the historical
+0.3.2 release using its verified manager; a direct 0.2.3 → 0.6.0 path is unsupported.
 The `v0.4.0` tag was never published as a release and is not an upgrade target.
 Do not infer a path from version ordering, source tags or the presence
 of an architecture-specific image. Failed candidate versions are not installations.
@@ -49,11 +49,11 @@ editing the mounted file alone does not reload the running process.
 2. Review the target's `upgrade_from`, infrastructure image digests and schema
    contract. Verify the current `status`, and take a backup with the new manager.
    Plan a brief interruption: backup drains the app and resumes it afterward if
-   it was running. In this example, both commands use the downloaded 0.5.2 tool:
+   it was running. In this example, both commands use the downloaded 0.6.0 tool:
 
    ```bash
-   ./chattermost-0.5.2/chattermost --directory /srv/chattermost status
-   ./chattermost-0.5.2/chattermost --directory /srv/chattermost backup
+   ./chattermost-0.6.0/chattermost --directory /srv/chattermost status
+   ./chattermost-0.6.0/chattermost --directory /srv/chattermost backup
    ```
 
    Save the printed backup path privately, copy the complete backup off-host and
@@ -64,11 +64,11 @@ editing the mounted file alone does not reload the running process.
 3. Request the exact version:
 
    ```bash
-   ./chattermost-0.5.2/chattermost --directory /srv/chattermost upgrade 0.5.2
+   ./chattermost-0.6.0/chattermost --directory /srv/chattermost upgrade 0.6.0
    /srv/chattermost/chattermost --directory /srv/chattermost status
    ```
 
-   The example assumes the download directory contains `chattermost-0.5.2/`;
+   The example assumes the download directory contains `chattermost-0.6.0/`;
    do not run it from inside that extracted directory with the same relative path.
    After a successful upgrade, the manager is installed at the installation root.
 4. Check public HTTPS ping/client configuration against the selected manifest's
