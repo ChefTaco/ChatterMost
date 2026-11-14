@@ -15,7 +15,7 @@ publish a new version only for an intentional distribution change. Client and
 Hermes instructions live in the [client guide](clients.md),
 [Hermes guide](hermes-compatibility.md) and [agent runbook](../AGENTS.md#installation-runbook-for-agents).
 
-## Changes in 0.6.0
+## Changes in 0.6.1
 
 - A WebSocket connection no longer outlives its credential. Each connection is re-checked before every delivery and client action, and is closed on sign-out, session revocation or expiry, account deactivation and bot token rotation. A socket that has not authenticated within 30 seconds is closed.
 - Direct and group channels can only be created through the direct message endpoints, and team channels require an existing team, so a conversation cannot be joined in advance.
@@ -25,6 +25,12 @@ Hermes instructions live in the [client guide](clients.md),
 - Team details and rosters require team membership or a system admin.
 - Expired and revoked sessions are dropped when a new session is created.
 - No database migration was added. 0.5.2 is an additional reviewed upgrade source.
+
+The `v0.6.0` tag exists but 0.6.0 was never published: its release run hit the
+anonymous GitHub API rate limit during an upgrade-path proof on the AMD64 runner,
+before any multi-platform image, bundle or GitHub release was published. Its
+candidate architecture tags are not a release. It is not an installation or upgrade
+source. Release 0.6.1 contains the same application changes.
 
 ## Changes in 0.5.2
 
@@ -76,8 +82,8 @@ database migration was added. Publication does not alter an installed release.
 
 | Artifact | Meaning |
 | --- | --- |
-| `ghcr.io/cheftaco/chattermost:0.6.0` | Multi-architecture application image |
-| `ghcr.io/cheftaco/chattermost-migrator:0.6.0` | Matching one-off migrator |
+| `ghcr.io/cheftaco/chattermost:0.6.1` | Multi-architecture application image |
+| `ghcr.io/cheftaco/chattermost-migrator:0.6.1` | Matching one-off migrator |
 | `VERSION-amd64`, `VERSION-arm64` image tags | Native build outputs; may exist before all release checks finish |
 | `chattermost-VERSION.tar.gz` | Allowlisted bundle: manager, Compose, manifest, installation README, Apache license and notice |
 | `release.json` | Exact app/migrator/infrastructure digests, source revision, schema/lineage, platforms and permitted upgrade sources |
@@ -85,7 +91,7 @@ database migration was added. Publication does not alter an installed release.
 | `scan-*.json`, `lifecycle-proof-*.json` | Filtered vulnerability findings and sanitized native lifecycle evidence |
 
 Install a completed [GitHub release](https://github.com/ChefTaco/ChatterMost/releases),
-not a candidate architecture tag. The latest lifecycle release is 0.6.0;
+not a candidate architecture tag. The latest lifecycle release is 0.6.1;
 0.3.2, 0.3.3, 0.4.1, 0.4.2, 0.4.4, 0.4.5, 0.5.1 and 0.5.2 are its tested upgrade sources. The application has one writer
 and local WebSocket fanout. Both supported Linux architectures execute on native
 CI runners; there is no claim of emulated execution as native proof.
@@ -173,7 +179,7 @@ A successful push is not installation proof. Dispatch the public verification
 workflow for the exact completed release:
 
 ```bash
-gh workflow run verify-public-release.yml --ref main -f version=0.6.0
+gh workflow run verify-public-release.yml --ref main -f version=0.6.1
 ```
 
 Substitute the newly published version. Check both native fresh-install jobs,
@@ -190,7 +196,7 @@ Review the public manifest/digests and per-architecture SBOM/provenance, verify
 all downloaded checksums, and verify the archive and checksum publisher identities:
 
 ```bash
-gh attestation verify chattermost-0.6.0.tar.gz --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
+gh attestation verify chattermost-0.6.1.tar.gz --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
 gh attestation verify SHA256SUMS --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
 ```
 
