@@ -10,8 +10,25 @@ concurrency:
 jobs:
   gates:
     uses: ./.github/workflows/ci.yml
-  native:
+  preflight:
     needs: gates
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - name: Validate every declared upgrade source before building or publishing
+        run: python3 tests/container/lifecycle.py "${GITHUB_REF_NAME#v}" --plan
+      - name: Refuse overwriting published version
+        # Read-only job token: this check needs no package or release write access.
+        env: {GH_TOKEN: '${{ github.token }}'}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo 'Release already exists; select a new version.' >&2; exit 1
+          fi
+  native:
+    needs: preflight
     strategy:
       fail-fast: false
       matrix:
@@ -26,6 +43,7 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@v4
+        with: {persist-credentials: false}
       - uses: actions/setup-node@v4
         with: {node-version: 24.22.3, cache: npm}
       - run: npm ci
@@ -36,18 +54,10 @@ jobs:
         run: |
           echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
           echo "CREATED=$(git log -1 --format=%cI)" >> "$GITHUB_ENV"
-      - name: Validate every declared upgrade source before building or publishing
-        run: python3 tests/container/lifecycle.py "$VERSION" --plan
       - name: Refuse reuse of a native image version
         env:
           ARCH: ${{ matrix.arch }}
         run: python3 distribution/check-image-version.py "$VERSION-$ARCH"
-      - name: Refuse overwriting published version
-        env: {GH_TOKEN: '${{ github.token }}'}
-        run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            echo 'Release already exists; select a new version.' >&2; exit 1
-          fi
       - name: Build application
         uses: docker/build-push-action@v7
         with:
@@ -127,6 +137,87 @@ jobs:
             VERSION=${{ env.VERSION }}
             REVISION=${{ github.sha }}
             CREATED=${{ env.CREATED }}
+      - name: Record the native candidate digests
+        env:
+          ARCH: ${{ matrix.arch }}
+          APP_DIGEST: ${{ steps.publish_app.outputs.digest }}
+          MIGRATOR_DIGEST: ${{ steps.publish_migrator.outputs.digest }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re
+          record = {'version': os.environ['VERSION'], 'arch': os.environ['ARCH'], 'app_digest': os.environ['APP_DIGEST'], 'migrator_digest': os.environ['MIGRATOR_DIGEST']}
+          assert all(re.fullmatch(r'sha256:[a-f0-9]{64}', record[k]) for k in ('app_digest', 'migrator_digest')), 'Missing candidate digest'
+          with open(f"candidate-{record['arch']}.json", 'w') as file:
+              json.dump(record, file)
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: candidate-${{ matrix.arch }}
+          path: candidate-${{ matrix.arch }}.json
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scans-${{ matrix.arch }}
+          path: scan-*.json
+  lifecycle:
+    # Separate from the publishing job: no registry login and a read-only token.
+    needs: native
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with: {persist-credentials: false}
+      - uses: actions/setup-node@v4
+        with: {node-version: 24.22.3, cache: npm}
+      - run: npm ci
+      - name: Native execution identity
+        run: uname -m
+      - name: Set immutable version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@v4
+        with:
+          name: candidate-${{ matrix.arch }}
+      - name: Confirm the published candidate tags are the recorded digests
+        id: candidate
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          version, arch = os.environ['VERSION'], os.environ['ARCH']
+          record = json.load(open(f'candidate-{arch}.json'))
+          assert (record['version'], record['arch']) == (version, arch), 'Candidate record is for another build'
+          outputs = []
+          for name, key in (('chattermost', 'app_digest'), ('chattermost-migrator', 'migrator_digest')):
+              # Anonymous: the image packages are public.
+              digest = subprocess.run(['docker', 'buildx', 'imagetools', 'inspect', f'ghcr.io/cheftaco/{name}:{version}-{arch}', '--format', '{{.Manifest.Digest}}'], check=True, stdout=subprocess.PIPE, text=True).stdout.strip()
+              assert digest == record[key], f'{name}:{version}-{arch} does not resolve to the digest the native job pushed'
+              outputs.append(f'{key}={digest}\n')
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as file:
+              file.writelines(outputs)
+          PY
+      - name: Provide release metadata for every declared upgrade source
+        if: ${{ !startsWith(env.VERSION, '0.2.') }}
+        # The only step with a token, the job's read-only one. The test step below
+        # gets the responses as files and runs without any credential.
+        env: {GH_TOKEN: '${{ github.token }}'}
+        run: |
+          METADATA="$RUNNER_TEMP/release-metadata"
+          mkdir -m 700 "$METADATA"
+          SOURCES="$(python3 tests/container/lifecycle.py "$VERSION" --plan)"
+          for SOURCE in $(python3 -c 'import json, sys; print(" ".join(json.loads(sys.argv[1])))' "$SOURCES"); do
+            gh api "repos/ChefTaco/ChatterMost/releases/tags/v$SOURCE" > "$METADATA/v$SOURCE.json"
+          done
+          echo "CHATTERMOST_GITHUB_RELEASE_METADATA=$METADATA" >> "$GITHUB_ENV"
       - name: Install native browser for lifecycle proof
         if: ${{ !startsWith(env.VERSION, '0.2.') }}
         run: npx playwright install --with-deps chromium
@@ -135,19 +226,17 @@ jobs:
         env:
           CHATTERMOST_LIFECYCLE_BROWSER: 'true'
           CHATTERMOST_LIFECYCLE_REPORT: lifecycle-proof-${{ matrix.arch }}.json
-          # Authenticated metadata reads keep many upgrade paths within the GitHub API budget.
-          CHATTERMOST_GITHUB_API_TOKEN: ${{ github.token }}
-          APP_DIGEST: ${{ steps.publish_app.outputs.digest }}
-          MIGRATOR_DIGEST: ${{ steps.publish_migrator.outputs.digest }}
+          APP_DIGEST: ${{ steps.candidate.outputs.app_digest }}
+          MIGRATOR_DIGEST: ${{ steps.candidate.outputs.migrator_digest }}
         run: python3 tests/container/lifecycle.py "$VERSION" "$APP_DIGEST" "$MIGRATOR_DIGEST"
       - uses: actions/upload-artifact@v4
+        if: ${{ !startsWith(env.VERSION, '0.2.') }}
         with:
-          name: scans-${{ matrix.arch }}
-          path: |
-            scan-*.json
-            lifecycle-proof-*.json
+          name: scans-lifecycle-${{ matrix.arch }}
+          path: lifecycle-proof-${{ matrix.arch }}.json
+          if-no-files-found: error
   publish:
-    needs: native
+    needs: [native, lifecycle]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -156,6 +245,7 @@ jobs:
       attestations: write
     steps:
       - uses: actions/checkout@v4
+        with: {persist-credentials: false}
       - uses: actions/setup-node@v4
         with: {node-version: 24.22.3, cache: npm}
       - run: npm ci

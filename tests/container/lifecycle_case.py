@@ -37,8 +37,9 @@ os.umask(0o077)
 github_api.install()
 try:
     subprocess.run(['python3', 'tests/container/published.py', baseline, '--keep', str(work), '--port', port], check=True)
-    # Build jobs already use authenticated GHCR pushes, while the baseline
-    # installation above deliberately clears Docker credentials in its subprocess.
+    # The lifecycle job has no registry login: candidate digests are pulled
+    # anonymously from the public packages, and the baseline installation above
+    # additionally clears Docker credentials in its subprocess.
     if app_digest:
         subprocess.run(['python3', 'distribution/package.py', version, app_digest, migrator_digest, str(work / 'candidate')], check=True)
         tool = work / 'candidate' / f'chattermost-{version}' / 'chattermost'
