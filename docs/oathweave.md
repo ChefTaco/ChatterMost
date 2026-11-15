@@ -41,7 +41,7 @@ backups. Revoke all bound sessions before downgrading to a runtime that predates
 this integration: older binaries do not enforce the new identity binding. The
 suite migration and downgrade adapters must prove this boundary before release.
 
-Set `OATHWEAVE_BROWSER_ORIGINS_JSON` to an explicit array of HTTPS console origins
+Set `OATHWEAVE_BROWSER_ORIGINS_JSON` to an explicit array of HTTPS UI origins
 when HiveXUI has a different origin from the existing `SERVER_URL`. The same
 allowlist protects session exchange, cookie mutations and WebSocket upgrades.
 Native Mattermost URLs and clients retain their existing `SERVER_URL`; unlisted
