@@ -26,6 +26,30 @@ describe('Security Fusion audit export', () => {
     expect(body.events.at(-1)?.metadata).toEqual({ outcome: 'failure' });
   });
 
+  it('accepts exactly the credential whose SHA-256 digest is configured, as before', async () => {
+    const token = 'security-fusion-test-credential';
+    const digest = createHash('sha256').update(token).digest('hex');
+    const server = await createTestServer({ SECURITY_FUSION_SERVICE_TOKEN_HASH: digest });
+    const status = async (authorization?: string) =>
+      (await server.app.request('/api/v4/security/events?limit=1', authorization === undefined ? {} : { headers: { authorization } })).status;
+    expect(await status(`Bearer ${token}`)).toBe(200);
+    expect(await status(`bearer ${token}`)).toBe(200);
+    // A header without the scheme has always been read as the credential itself.
+    expect(await status(token)).toBe(200);
+    expect(await status(`Bearer ${token}x`)).toBe(401);
+    expect(await status(`Bearer ${digest}`)).toBe(401);
+    expect(await status('Bearer ')).toBe(401);
+    expect(await status('')).toBe(401);
+    expect(await status()).toBe(401);
+  });
+
+  it('opens to no credential when no digest is configured', async () => {
+    const server = await createTestServer();
+    for (const authorization of ['Bearer ', '', 'Bearer e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855']) {
+      expect((await server.app.request('/api/v4/security/events', { headers: { authorization } })).status).toBe(401);
+    }
+  });
+
   it('paginates with an opaque cursor', async () => {
     const token = 'security-fusion-test-credential';
     const server = await createTestServer({

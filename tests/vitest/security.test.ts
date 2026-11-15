@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { TrustedProxySet } from '../../src/server/rate-limit.js';
-import { hashSessionToken, hashToken, isSameWebSocketOrigin } from '../../src/server/security.js';
+import { hashSessionToken, hashToken, isSameWebSocketOrigin, safeEqualText } from '../../src/server/security.js';
 
 describe('trusted proxy configuration', () => {
   it('supports IPv4 and IPv6 CIDRs', () => {
@@ -24,6 +24,20 @@ describe('token key separation', () => {
     const after = { ...before, COOKIE_SECRET: 'new-cookie-secret-with-enough-entropy' };
     expect(hashSessionToken('session-token', after)).not.toBe(hashSessionToken('session-token', before));
     expect(hashToken('bot-token', after)).toBe(hashToken('bot-token', before));
+  });
+});
+
+describe('safeEqualText', () => {
+  it('is equal only for the same bytes and unequal for any other byte length', () => {
+    expect(safeEqualText('webhook-secret-hash', 'webhook-secret-hash')).toBe(true);
+    expect(safeEqualText('webhook-secret-hash', 'webhook-secret-hasH')).toBe(false);
+    expect(safeEqualText('webhook-secret-hash', 'webhook-secret-hash-longer')).toBe(false);
+    expect(safeEqualText('webhook-secret-hash', 'webhook-secret-has')).toBe(false);
+    expect(safeEqualText('', '')).toBe(true);
+    expect(safeEqualText('', 'x')).toBe(false);
+    // Byte length, not string length: 'é' is two bytes in UTF-8.
+    expect(safeEqualText('é', 'e')).toBe(false);
+    expect(safeEqualText('é', 'é')).toBe(true);
   });
 });
 

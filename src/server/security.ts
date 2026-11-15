@@ -1,4 +1,5 @@
-import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
+import { timingSafeEqualString } from '@hivemagnus/hive-common/secrets';
 
 import bcrypt from 'bcryptjs';
 
@@ -26,13 +27,9 @@ export function hashSessionToken(token: string, env: Pick<AppEnv, 'COOKIE_SECRET
   return hashWithSecret(token, env.COOKIE_SECRET);
 }
 
+/** Constant-time string equality (the suite's shared helper); different byte lengths are unequal. */
 export function safeEqualText(left: string, right: string): boolean {
-  const leftBuffer = Buffer.from(left);
-  const rightBuffer = Buffer.from(right);
-  if (leftBuffer.byteLength !== rightBuffer.byteLength) {
-    return false;
-  }
-  return timingSafeEqual(leftBuffer, rightBuffer);
+  return timingSafeEqualString(left, right);
 }
 
 export function sanitizeFilename(name: string): string {

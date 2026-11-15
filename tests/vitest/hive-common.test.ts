@@ -1,4 +1,5 @@
 import { runOathweaveConformance, loadOathweaveVectors } from '@hivemagnus/hive-common/oathweave/conformance';
+import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { describe, expect, it } from 'vitest';
 
 import { createChatVerifier } from '../../src/server/oathweave.js';
@@ -24,6 +25,37 @@ describe('Oathweave conformance', () => {
     });
     expect(report.failed).toBe(0);
     expect(report.passed).toBe(userVectors.length);
+  });
+
+  it('refuses a token without a roles array before the online session check', async () => {
+    const keys = await generateKeyPair('RS256');
+    const jwk = { ...(await exportJWK(keys.publicKey)), kid: 'test', alg: 'RS256', use: 'sig' };
+    let userinfoCalls = 0;
+    const verify = createChatVerifier({
+      issuer: 'https://identity.example.test',
+      jwksUrl: 'https://identity.example.test/jwks',
+      userinfoUrl: 'https://identity.example.test/userinfo',
+      fetch: async (input) => {
+        if (String(input instanceof Request ? input.url : input).endsWith('/jwks')) return Response.json({ keys: [jwk] });
+        userinfoCalls += 1;
+        return Response.json({ sub: 'fake-subject' });
+      }
+    });
+    const sign = (claims: Record<string, unknown>) =>
+      new SignJWT({ actorType: 'USER', sessionId: 'fake-session', clientId: 'hivexui-chattermost', permissions: ['chattermost:session'], ...claims })
+        .setProtectedHeader({ alg: 'RS256', kid: 'test' })
+        .setSubject('fake-subject')
+        .setIssuer('https://identity.example.test')
+        .setAudience('chattermost')
+        .setJti('fake-jti')
+        .setIssuedAt()
+        .setExpirationTime('5m')
+        .sign(keys.privateKey);
+    await expect(verify(await sign({}))).rejects.toMatchObject({ reason: 'invalid_claims', status: 401 });
+    await expect(verify(await sign({ roles: 'SUPER_ADMIN' }))).rejects.toMatchObject({ reason: 'invalid_claims', status: 401 });
+    expect(userinfoCalls).toBe(0);
+    await expect(verify(await sign({ roles: [] }))).resolves.toMatchObject({ kind: 'user', roles: [] });
+    expect(userinfoCalls).toBe(1);
   });
 
   it('refuses service principals, since chat sessions belong to people', async () => {
@@ -59,6 +91,34 @@ describe('Suite health and request context', () => {
       'websocket_status',
       'compatibility_profile'
     ]);
+    await server.abuseControl.close();
+    await server.store.close();
+  });
+
+  it('sends the same security headers on every response, health probes included', async () => {
+    const server = await createTestServer();
+    const expected = {
+      'x-content-type-options': 'nosniff',
+      'x-frame-options': 'DENY',
+      'referrer-policy': 'strict-origin-when-cross-origin',
+      'permissions-policy': 'camera=(), microphone=(), geolocation=()',
+      'content-security-policy':
+        "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'",
+      'x-version-id': '0.0.0-compatible',
+      'x-mattermost-version': '0.0.0-compatible',
+      'mattermost-server-version': '0.0.0-compatible'
+    };
+    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
+    for (const path of ['/api/v4/system/ping', '/api/v4/users/me', '/no-such-route', '/health/live', '/health/ready']) {
+      const response = await server.app.request(path);
+      const headers: Record<string, string> = {};
+      response.headers.forEach((value, name) => {
+        headers[name] = value;
+      });
+      expect(headers, path).toMatchObject(expected);
+      // The request ID set before the handler also reaches the suite health probes.
+      expect(response.headers.get('x-request-id'), path).toMatch(uuid);
+    }
     await server.abuseControl.close();
     await server.store.close();
   });
