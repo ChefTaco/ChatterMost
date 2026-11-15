@@ -1,13 +1,18 @@
 """Optional authentication for GitHub release metadata reads in release tests.
 
 Every upgrade path reads release metadata from api.github.com several times.
-Anonymous reads share a small hourly budget per runner address, so a release
-with many declared upgrade sources can exhaust it part-way through. When
-CHATTERMOST_GITHUB_API_TOKEN is set, these tests send it to api.github.com
-only. Asset downloads, registry pulls and the installation manager itself stay
-anonymous, and the public verification workflow does not set the token.
+Anonymous reads share a small hourly budget per runner address, and hosted
+runners share addresses, so a release run can find that budget already spent.
+When CHATTERMOST_GITHUB_API_TOKEN is set, these tests send it to api.github.com
+only, including from manager commands the tests start (see manager_command()).
+Asset downloads and registry pulls stay anonymous, the manager code is
+unchanged, and the public verification workflow does not set the token, so it
+still proves the anonymous installation path.
 """
 import os
+from pathlib import Path
+import runpy
+import sys
 import urllib.request
 
 TOKEN_ENV = 'CHATTERMOST_GITHUB_API_TOKEN'
@@ -33,3 +38,21 @@ def install(environ=None):
         return False
     urllib.request.install_opener(urllib.request.build_opener(GitHubApiAuth(token)))
     return True
+
+
+def manager_command(tool, environ=None):
+    """The argv prefix that runs a manager CLI, with authenticated API reads when a token is set."""
+    token = (os.environ if environ is None else environ).get(TOKEN_ENV, '').strip()
+    if not token:
+        return [str(tool)]
+    return [sys.executable, str(Path(__file__).resolve()), str(tool)]
+
+
+if __name__ == '__main__':
+    # python3 github_api.py MANAGER ARGS...: run MANAGER as a program in this process.
+    install()
+    tool = sys.argv[1]
+    sys.argv = sys.argv[1:]
+    # As if MANAGER were run directly: its own directory first on the import path, not this one.
+    sys.path[0] = str(Path(tool).resolve().parent)
+    runpy.run_path(tool, run_name='__main__')

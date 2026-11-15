@@ -89,7 +89,7 @@ try:
     secret_hashes = module['hashes'](root / 'secrets')
     namespace['fetch_release'](root, baseline)
     assert baseline in module['metadata'](tool.parent)['upgrade_from']
-    baseline_backup = Path(actual_run([str(tool), '--directory', str(root), 'backup'], check=True, stdout=subprocess.PIPE, text=True).stdout.strip())
+    baseline_backup = Path(actual_run([*github_api.manager_command(tool), '--directory', str(root), 'backup'], check=True, stdout=subprocess.PIPE, text=True).stdout.strip())
     assert module['verify_backup'](root, baseline_backup)[0]['recoverable']
     if app_digest:
         # Stage the unpublished candidate only after the source CLI backup.
