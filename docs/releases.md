@@ -15,18 +15,21 @@ publish a new version only for an intentional distribution change. Client and
 Hermes instructions live in the [client guide](clients.md),
 [Hermes guide](hermes-compatibility.md) and [agent runbook](../AGENTS.md#installation-runbook-for-agents).
 
-## Changes in 0.6.3
+## Changes in 0.6.4
 
 - Update `@hivemagnus/hive-common` to 0.5.0. Oathweave tokens are verified with the same rules; a token without a `roles` array is now refused before the online session check, so it no longer costs a userinfo request.
 - `GET /health/live` and `GET /health/ready` now carry `X-Request-Id`, like every other response.
 - The response security headers and the Security Fusion service credential check use the shared helpers; their values and results are unchanged.
 - No database migration was added. 0.6.1 is an additional reviewed upgrade source.
+- Release lifecycle tests also authenticate the GitHub release metadata reads of the manager commands they start, with the workflow token. The manager code is unchanged; asset downloads and registry pulls remain anonymous, and the public verification workflow still runs the manager without a token.
 
-The `v0.6.2` tag exists but 0.6.2 was never published: its release run hit the
-anonymous GitHub API rate limit during an upgrade-path proof on the AMD64 runner,
-before any multi-platform image, bundle or GitHub release was published. Its
-candidate architecture tags are not a release. It is not an installation or upgrade
-source. Release 0.6.3 contains the same application changes.
+The `v0.6.2` and `v0.6.3` tags exist but neither version was published: each
+release run hit the anonymous GitHub API rate limit during an upgrade-path proof
+on the AMD64 runner (the candidate manager's backup step), before any
+multi-platform image, bundle or GitHub release was published. ARM64 passed every
+declared source for 0.6.2. Their candidate architecture tags are not releases, and
+neither version is an installation or upgrade source. Release 0.6.4 contains the
+same application changes.
 
 ## Changes in 0.6.1
 
@@ -95,8 +98,8 @@ database migration was added. Publication does not alter an installed release.
 
 | Artifact | Meaning |
 | --- | --- |
-| `ghcr.io/cheftaco/chattermost:0.6.3` | Multi-architecture application image |
-| `ghcr.io/cheftaco/chattermost-migrator:0.6.3` | Matching one-off migrator |
+| `ghcr.io/cheftaco/chattermost:0.6.4` | Multi-architecture application image |
+| `ghcr.io/cheftaco/chattermost-migrator:0.6.4` | Matching one-off migrator |
 | `VERSION-amd64`, `VERSION-arm64` image tags | Native build outputs; may exist before all release checks finish |
 | `chattermost-VERSION.tar.gz` | Allowlisted bundle: manager, Compose, manifest, installation README, Apache license and notice |
 | `release.json` | Exact app/migrator/infrastructure digests, source revision, schema/lineage, platforms and permitted upgrade sources |
@@ -104,7 +107,7 @@ database migration was added. Publication does not alter an installed release.
 | `scan-*.json`, `lifecycle-proof-*.json` | Filtered vulnerability findings and sanitized native lifecycle evidence |
 
 Install a completed [GitHub release](https://github.com/ChefTaco/ChatterMost/releases),
-not a candidate architecture tag. The latest lifecycle release is 0.6.3;
+not a candidate architecture tag. The latest lifecycle release is 0.6.4;
 0.3.2, 0.3.3, 0.4.1, 0.4.2, 0.4.4, 0.4.5, 0.5.1, 0.5.2 and 0.6.1 are its tested upgrade sources. The application has one writer
 and local WebSocket fanout. Both supported Linux architectures execute on native
 CI runners; there is no claim of emulated execution as native proof.
@@ -192,7 +195,7 @@ A successful push is not installation proof. Dispatch the public verification
 workflow for the exact completed release:
 
 ```bash
-gh workflow run verify-public-release.yml --ref main -f version=0.6.3
+gh workflow run verify-public-release.yml --ref main -f version=0.6.4
 ```
 
 Substitute the newly published version. Check both native fresh-install jobs,
@@ -209,7 +212,7 @@ Review the public manifest/digests and per-architecture SBOM/provenance, verify
 all downloaded checksums, and verify the archive and checksum publisher identities:
 
 ```bash
-gh attestation verify chattermost-0.6.3.tar.gz --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
+gh attestation verify chattermost-0.6.4.tar.gz --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
 gh attestation verify SHA256SUMS --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
 ```
 
