@@ -16,6 +16,7 @@ jobs:
       has_paths: ${{ steps.plan.outputs.has_paths }}
     steps:
       - uses: actions/checkout@v4
+        with: {persist-credentials: false}
       - name: Read the integrity-checked public release policy anonymously
         id: plan
         env:
@@ -35,6 +36,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+        with: {persist-credentials: false}
       - uses: actions/setup-node@v4
         with: {node-version: 24.22.3, cache: npm}
       - run: npm ci
@@ -67,6 +69,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
+        with: {persist-credentials: false}
       - uses: actions/setup-node@v4
         with: {node-version: 24.22.3, cache: npm}
       - run: npm ci
@@ -97,6 +100,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with: {persist-credentials: false}
       - uses: actions/download-artifact@v4
         with:
           pattern: public-*

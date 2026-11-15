@@ -15,6 +15,12 @@ publish a new version only for an intentional distribution change. Client and
 Hermes instructions live in the [client guide](clients.md),
 [Hermes guide](hermes-compatibility.md) and [agent runbook](../AGENTS.md#installation-runbook-for-agents).
 
+## Unreleased
+
+- Release workflow only; the application, images and manager are unchanged. The upgrade-lifecycle proof now runs in its own `lifecycle` job per architecture, with a read-only token (`contents: read`) and no registry login. It pulls the candidate images anonymously from the public packages, after checking that each `VERSION-ARCH` tag still resolves to the digest the `native` job pushed. Publishing waits for both lifecycle jobs.
+- The lifecycle tests no longer receive a GitHub token. A separate step fetches the release metadata of each declared upgrade source once, with the job's read-only token, and the tests answer the manager's release metadata reads from those files; any other GitHub API read fails the run instead of spending the anonymous budget. The tests also remove GitHub credentials from their environment before starting docker, Compose, the application or the browser. Asset downloads and registry pulls stay anonymous, and the public verification workflow is unchanged.
+- The published-version check runs in a read-only `preflight` job instead of the package-writing `native` job, and no workflow keeps its checkout token in the Git configuration.
+
 ## Changes in 0.6.4
 
 - Update `@hivemagnus/hive-common` to 0.5.0. Oathweave tokens are verified with the same rules; a token without a `roles` array is now refused before the online session check, so it no longer costs a userinfo request.
@@ -114,9 +120,10 @@ CI runners; there is no claim of emulated execution as native proof.
 
 Public GHCR pulls need no login. Package visibility is configured separately from
 repository visibility, and newly created packages can default to private. Confirm
-both image packages are public and associated with this repository. Actions uses
-`GITHUB_TOKEN` with package-write permission; avoid adding a personal token to
-installation instructions. See [GitHub's registry documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
+both image packages are public and associated with this repository: the release
+lifecycle job pulls the candidate images without logging in. Actions uses
+`GITHUB_TOKEN` with package-write permission only in the jobs that push images or
+publish the release; avoid adding a personal token to installation instructions. See [GitHub's registry documentation](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry).
 
 Version tags are guarded against reuse by the workflow; installed images are
 pinned by digest. This is distinct from GitHub release immutability. Keep immutable
@@ -165,12 +172,16 @@ ones retroactively. See [GitHub's immutability documentation](https://docs.githu
 
 ## What automation proves
 
-The release workflow first runs the reusable repository CI gates. Native AMD64
-and ARM64 jobs validate the upgrade policy before building or pushing, build/load
+The release workflow first runs the reusable repository CI gates, then a read-only
+preflight job validates the upgrade policy and refuses an already published version
+before anything is built or pushed. Native AMD64 and ARM64 jobs build/load
 and exercise the app/migrator, scan fixable HIGH/CRITICAL
 findings, then push native images with SBOM and maximum provenance. For lifecycle
-releases it tests every declared published source against the pushed candidate digests,
-including a native browser. Only after both native jobs pass does the publishing
+releases, separate native lifecycle jobs with a read-only token and no registry login
+test every declared published source against the pushed candidate digests,
+including a native browser. Their tests get no token: the release metadata of each
+declared source is fetched once in an earlier step and served to the manager from
+files. Only after both native and both lifecycle jobs pass does the publishing
 job create the combined versioned image indexes, package the explicit bundle,
 bind public files with checksums, attest the archive/checksum manifest, and publish
 the GitHub release. Earlier failed jobs may leave architecture-specific candidate
