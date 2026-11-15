@@ -6,7 +6,8 @@ import { mkdir } from 'node:fs/promises';
 
 import { createRequestContext, runWithRequestContext } from '@hivemagnus/hive-common/context';
 import { HEALTH_PATHS } from '@hivemagnus/hive-common/health';
-import { registerHealthRoutes } from '@hivemagnus/hive-common/hono';
+import { registerHealthRoutes, securityHeaders } from '@hivemagnus/hive-common/hono';
+import { matchesSha256Digest } from '@hivemagnus/hive-common/secrets';
 import { Hono } from 'hono';
 import type { Context, MiddlewareHandler } from 'hono';
 import { bodyLimit as honoBodyLimit } from 'hono/body-limit';
@@ -336,9 +337,8 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
   app.get('/api/v4/config/client', (c) => c.json(services.config.clientConfig()));
   app.get('/api/v4/security/events', (c) => {
     const bearer = c.req.header('authorization')?.replace(/^Bearer\s+/iu, '') ?? '';
-    const configuredHash = env.SECURITY_FUSION_SERVICE_TOKEN_HASH;
-    const presentedHash = createHash('sha256').update(bearer).digest('hex');
-    if (!configuredHash || !bearer || !safeEqualText(presentedHash, configuredHash)) {
+    // False for an empty token or an unset digest; the digest is compared in constant time.
+    if (!matchesSha256Digest(bearer, env.SECURITY_FUSION_SERVICE_TOKEN_HASH)) {
       throw unauthorized('Invalid Security Fusion service credential');
     }
     const limit = Math.min(Math.max(Number(c.req.query('limit') ?? 200), 1), 500);
@@ -2033,19 +2033,24 @@ function originOf(value: string): string | null {
   }
 }
 
+// Set once the handler is done (`apply: 'after'`), replacing anything a handler set, as before.
 function secureHeaders(env: AppEnv): MiddlewareHandler {
-  return async (c, next) => {
-    await next();
-    const serverVersion = env.ALLOW_VERSION_ADVERTISEMENT ? env.COMPATIBILITY_SERVER_VERSION : '0.0.0-compatible';
-    c.header('X-Version-Id', serverVersion);
-    c.header('X-Mattermost-Version', serverVersion);
-    c.header('Mattermost-Server-Version', serverVersion);
-    c.header('X-Content-Type-Options', 'nosniff');
-    c.header('X-Frame-Options', 'DENY');
-    c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
-    c.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-    c.header('Content-Security-Policy', "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'");
-  };
+  return securityHeaders({
+    apply: 'after',
+    contentTypeOptions: 'nosniff',
+    frameOptions: 'DENY',
+    referrerPolicy: 'strict-origin-when-cross-origin',
+    headers: () => {
+      const serverVersion = env.ALLOW_VERSION_ADVERTISEMENT ? env.COMPATIBILITY_SERVER_VERSION : '0.0.0-compatible';
+      return {
+        'X-Version-Id': serverVersion,
+        'X-Mattermost-Version': serverVersion,
+        'Mattermost-Server-Version': serverVersion,
+        'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+        'Content-Security-Policy': "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'"
+      };
+    }
+  });
 }
 
 function requestBodyLimit(): MiddlewareHandler {

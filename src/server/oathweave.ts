@@ -1,7 +1,6 @@
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import {
-  OathweaveError,
   createOathweaveVerifier,
   requireIdentityLink,
   requirePermissions,
@@ -41,13 +40,11 @@ export function createChatVerifier(options: ChatVerifierOptions) {
     audience: options.audience ?? CHAT_AUDIENCE,
     accept: 'user',
     clockToleranceSec: 0,
-    sessionCacheTtlMs: 0
+    sessionCacheTtlMs: 0,
+    // A token without a `roles` array is refused (`invalid_claims`) before the session check.
+    requireRoles: true
   });
-  return async (token: string): Promise<OathweaveUserPrincipal> => {
-    const principal = await verifier.verifyUser(token);
-    if (!Array.isArray(principal.claims.roles)) throw new OathweaveError('invalid_claims');
-    return principal;
-  };
+  return async (token: string): Promise<OathweaveUserPrincipal> => verifier.verifyUser(token);
 }
 
 export function createChatIdentity(env: AppEnv) {
