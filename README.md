@@ -15,15 +15,15 @@ Mattermost-compatible REST and WebSocket interfaces; it is not a fork of the
 upstream server. See [client setup and current limits](docs/clients.md) for the
 supported experience and verification coverage.
 
-## Browser console
+## Browser UI
 
 In the Hive:Magnus suite, the chat module of [HiveXUI](https://github.com/ChefTaco/HiveXUI)
-is the browser console, deployed by the [Hive installer](https://github.com/ChefTaco/hive).
+is the browser UI, deployed by the [Hive installer](https://github.com/ChefTaco/hive).
 ChatterMost keeps its own independent API and still runs on its own. Its native web
 client remains for standalone installs and native sign-in.
 
 Invite redemption works in HiveXUI at `/signup` and creates a native chat account.
-Using chat in the console also needs an Oathweave account and an explicit link to
+Using chat in HiveXUI also needs an Oathweave account and an explicit link to
 that chat account: see [the Oathweave integration guide](docs/oathweave.md).
 
 ## Use the official apps
