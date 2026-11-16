@@ -26,6 +26,12 @@ Invite redemption works in HiveXUI at `/signup` and creates a native chat accoun
 Using chat in HiveXUI also needs an Oathweave account and an explicit link to
 that chat account: see [the Oathweave integration guide](docs/oathweave.md).
 
+That optional Oathweave bridge lets HiveXUI exchange an explicitly linked,
+resource-scoped identity for a short native browser session. Existing user IDs,
+roles, memberships, Mattermost sessions and agent credentials remain product-owned.
+This opt-in suite bridge is separate from generic upstream OAuth/discovery support
+advertised to native clients.
+
 ## Use the official apps
 
 1. Install an [official mobile or desktop app](https://mattermost.com/apps/).
@@ -142,9 +148,3 @@ Inc. ChatterMost is independently developed and is not affiliated with, endorsed
 by, or sponsored by Mattermost, Inc. Compatibility describes the implemented
 interfaces, not complete feature parity or certification. Protocol names and
 identifiers are retained where required for interoperability.
-
-An optional Oathweave bridge lets HiveXUI exchange an explicitly linked,
-resource-scoped identity for a short native browser session. Existing user IDs,
-roles, memberships, Mattermost sessions and agent credentials remain product-owned.
-See [the Oathweave integration guide](docs/oathweave.md). This opt-in suite bridge
-is separate from generic upstream OAuth/discovery support advertised to native clients.

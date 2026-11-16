@@ -1,9 +1,8 @@
 # ChatterMost Agent Guide
 
-Optional Oathweave suite sign-in is documented in `docs/oathweave.md`. Preserve
-explicit account links, native client compatibility, encrypted session contexts
-and online revocation checks. Never downgrade bound sessions into ordinary native
-sessions or expose their identity credentials through APIs, logs or WebSocket URLs.
+ChatterMost is the Mattermost-compatible team chat product of the Hive:Magnus suite: a
+backend for the official Mattermost apps and Hermes Agent. In the suite, HiveXUI's chat
+module is the browser UI; ChatterMost also runs on its own as a Compose distribution.
 
 Use this file as the operating skill for future coding work in this repo. Keep changes grounded in the actual checkout and verify with the real commands below.
 
@@ -70,7 +69,7 @@ updates on `main` do not change the installed 0.7.0 image or bundle.
 
 ## Project Shape
 
-ChatterMost is a strictly typed TypeScript/Hono Mattermost-compatible backend for official clients, supervised chat and Hermes Agent communication. It exposes Mattermost-compatible REST under `/api/v4`, WebSocket at `/api/v4/websocket`, and a lightweight web UI from `src/web/assets.ts`.
+ChatterMost is a strictly typed TypeScript/Hono Mattermost-compatible backend for official clients, supervised chat and Hermes Agent communication. It exposes Mattermost-compatible REST under `/api/v4`, WebSocket at `/api/v4/websocket`, and a native web client from `src/web/assets.ts`. The native web client stays because the official desktop app loads it and standalone installs and native sign-in need it; new suite UI work belongs in HiveXUI's chat module.
 
 Important paths:
 
@@ -96,16 +95,22 @@ Do not bypass the service layer to write application records directly. The curre
 
 ## Non-Negotiable Gates
 
-Before finishing code changes, run:
+Before finishing code changes, run the same gates as CI (`.github/workflows/ci.yml`):
 
 ```bash
+npm audit --audit-level=moderate
 npm run privacy:check
+npm run privacy:test
+npm run container:test
 npm run typecheck
 npm run lint
 npm run test:unit
 npm run build
+npx playwright install chromium
 npx playwright test
 ```
+
+CI also validates the Prisma schema against `prisma/migrations` with a shadow database.
 
 For UI-affecting changes, also capture and inspect screenshots with Playwright. Existing final screenshot examples live under `output/playwright/visual/`.
 
@@ -274,7 +279,13 @@ rollback, retained credentials/data and writes made after upgrading. Historical
 
 For isolated authenticated restore verification, follow the guarded mode in `docs/containers.md`. `AUTHENTICATED_REHEARSAL` requires `HIVE_REHEARSAL`, uses volatile authentication only and never authorizes activation or password resets. Preserve durable state and verify exact peer TLS endpoints.
 
-## Hive account maintenance
+## Oathweave sign-in and Hive account maintenance
+
+Optional Oathweave suite sign-in is documented in `docs/oathweave.md`. Preserve
+explicit account links, native client compatibility, encrypted session contexts
+and online revocation checks. Never downgrade bound sessions into ordinary native
+sessions or expose their identity credentials through APIs, logs or WebSocket URLs.
+
 
 Optional installation-owned account provisioning uses the running server's
 loopback-only TLS endpoint and separate `HIVE_ADMIN_PROVISIONING_SECRET`, disabled
