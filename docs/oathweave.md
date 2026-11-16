@@ -76,3 +76,53 @@ generated UUID in `X-Request-Id`. Because ChatterMost is internet-facing, inboun
 `x-request-id`, `x-hive-request-id`, `x-correlation-id` and `traceparent` headers
 are ignored, so callers cannot choose request IDs. The same ID appears in
 Mattermost error bodies (`request_id`) and request error logs.
+
+## Hive administrator provisioning
+
+The running server can create a new native administrator for an explicitly reviewed
+Oathweave identity. This is installation maintenance, separate from browser roles
+and installing the identity link. It never infers account ownership from an email,
+username or IAM administrator role.
+
+Set a separately generated 64-character lowercase hexadecimal
+`HIVE_ADMIN_PROVISIONING_SECRET` in the protected server environment. Never reuse a
+cookie, token, bot or native administrator credential. The routes are absent when
+it is unset. Native TLS must be configured. The installer calls verified HTTPS on
+localhost from inside the existing container, with the secret only in the
+`x-hive-admin-provisioning-secret` header. Only the actual loopback socket peer is
+accepted; forwarded addresses establish no authority. Origin, cookie and
+Authorization headers are refused. Keep this endpoint outside browser routing;
+never disable TLS verification or put the secret in arguments or transcripts.
+
+- `POST /internal/hive/admin-accounts/OPERATION_UUID` accepts exactly
+  `{version:1, issuer, subject, user_id, username, email}`. `issuer` must exactly
+  match the configured HTTPS Oathweave issuer; `subject` is the existing human ID
+  resolved and approved by the owning installer. `user_id` is a new preallocated
+  26-character lowercase alphanumeric native ID. Usernames are lowercase; email
+  addresses are normalized to lowercase. The role is fixed to
+  `system_admin system_user`, active and non-bot. The installer revalidates the
+  exact IAM identity immediately before calling the product.
+- `GET /internal/hive/admin-accounts/OPERATION_UUID` reads the retained result.
+  Both return `{schema:1,operation_id,user_id,issuer,subject,username,email,role,
+  status:"committed",request_sha256,created_at}` with no credentials. Current
+  account drift or deactivation is refused rather than repaired.
+
+The account, default supervised-team public memberships, audit outbox event and
+permanent receipt commit in one existing serialized store mutation. The native
+password is generated randomly, hashed and discarded; it is never returned or
+retained in recoverable form. No existing users, sessions or messages are replaced.
+
+Persist the operation UUID, account ID and exact request before the POST. An
+unchanged repeat returns the same account; different inputs, an existing account
+ID/username/email, a previously linked identity or another operation owning the
+identity are refused. On a lost reply, read or repeat only that exact operation.
+Never choose another ID, reset a password or reactivate an account. Receipts
+survive backup/restore and audit compaction; older stores load an empty receipt
+collection without a SQL migration.
+
+After creation, Hive separately installs the explicitly approved
+`{issuer,subject,localUserId}` entry in `OATHWEAVE_CHAT_IDENTITIES_JSON`, preserving
+all other links, and recreates the server with its protected environment. It never
+substitutes another person's account or signs in on their behalf. Use this running
+server boundary: opening a second writable RuntimeState store can lose concurrent
+messages. See also [deployment configuration](deployment.md#optional-hive-administrator-provisioning).

@@ -18,6 +18,7 @@ const EnvSchema = z.object({
   OATHWEAVE_USERINFO_URL: z.preprocess(value=>value===''?undefined:value,z.url().optional()),
   OATHWEAVE_BROWSER_ORIGINS_JSON: z.string().default('[]'),
   OATHWEAVE_CHAT_IDENTITIES_JSON: z.string().default('[]'),
+  HIVE_ADMIN_PROVISIONING_SECRET: z.preprocess(value => value === '' ? undefined : value, z.string().regex(/^[a-f0-9]{64}$/u).optional()),
   DATABASE_URL: z.string().min(1),
   SERVER_URL: z.url(),
   PORT: z.coerce.number().int().min(1).max(65_535).default(8065),
@@ -85,6 +86,9 @@ const EnvSchema = z.object({
       path: ['ENABLE_REDIS_FANOUT'],
       message: 'Redis WebSocket fanout is not implemented; ENABLE_REDIS_FANOUT must remain false'
     });
+  }
+  if (value.HIVE_ADMIN_PROVISIONING_SECRET && [value.COOKIE_SECRET, value.TOKEN_HASH_SECRET, value.ADMIN_PASSWORD, value.HERMES_BOT_TOKEN].includes(value.HIVE_ADMIN_PROVISIONING_SECRET)) {
+    context.addIssue({ code: 'custom', path: ['HIVE_ADMIN_PROVISIONING_SECRET'], message: 'Provisioning requires a separate purpose-specific secret' });
   }
   if (value.NODE_ENV !== 'production') return;
   if (value.ENABLE_DEV_DEFAULTS) {

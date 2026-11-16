@@ -25,7 +25,7 @@ For source development, use [docs/development.md](docs/development.md).
    ```bash
    set -eu
    umask 077
-   VERSION=0.6.4
+   VERSION=0.7.0
    INSTALL_DIR="$HOME/chattermost-installation"
    test ! -e "$INSTALL_DIR"
    DOWNLOAD_DIR="$(mktemp -d)"
@@ -66,7 +66,7 @@ For source development, use [docs/development.md](docs/development.md).
 
 Documentation work does not authorize installation, gateway reconfiguration,
 credential rotation or deployment. Published releases are immutable; documentation
-updates on `main` do not change the installed 0.6.4 image or bundle.
+updates on `main` do not change the installed 0.7.0 image or bundle.
 
 ## Project Shape
 
@@ -273,3 +273,12 @@ rollback, retained credentials/data and writes made after upgrading. Historical
 `docs/containers.md` is packaged as the distribution's root `README.md`.
 
 For isolated authenticated restore verification, follow the guarded mode in `docs/containers.md`. `AUTHENTICATED_REHEARSAL` requires `HIVE_REHEARSAL`, uses volatile authentication only and never authorizes activation or password resets. Preserve durable state and verify exact peer TLS endpoints.
+
+## Hive account maintenance
+
+Optional installation-owned account provisioning uses the running server's
+loopback-only TLS endpoint and separate `HIVE_ADMIN_PROVISIONING_SECRET`, disabled
+when absent. Read [the operation contract](docs/oathweave.md#hive-administrator-provisioning).
+Never open another writable RuntimeState process to create accounts. Preserve
+exact operation/issuer/subject/native-ID binding, permanent receipts and existing
+users, memberships, sessions and messages. IAM roles alone never establish links.

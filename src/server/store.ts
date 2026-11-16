@@ -1,8 +1,9 @@
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 
 import { PrismaClient } from '@prisma/client';
+import { validatedHiveAdminAccountReceipts } from './hive-admin-accounts.js';
 
 import { createId, nowMs } from '../shared/mattermost.js';
 import type { AuditLogRecord, MetricsRecord, StoreState } from './domain.js';
@@ -69,6 +70,7 @@ export function createEmptyState(): StoreState {
     auditLogs: [],
     auditOutbox: [],
     botOperationReceipts: [],
+    hiveAdminAccountReceipts: [],
     supervisionPolicy: {
       id: createId(),
       mode: 'audit_only',
@@ -92,6 +94,7 @@ export class JsonStore {
   private state: StoreState = createEmptyState();
   private readonly filePath: string | null;
   private writeQueue: Promise<void> = Promise.resolve();
+  private persistenceHeld = false;
 
   public constructor(filePath: string | null, private readonly readOnly = false) {
     this.filePath = filePath;
@@ -118,6 +121,7 @@ export class JsonStore {
   }
 
   public read<T>(reader: (state: Readonly<StoreState>) => T): T {
+    if (this.persistenceHeld) throw new Error('Runtime persistence is uncertain; preserve retained storage and restart after review');
     return reader(this.state);
   }
 
@@ -128,11 +132,12 @@ export class JsonStore {
   public async write<T>(writer: (state: StoreState) => T): Promise<T> {
     if (this.readOnly) throw new Error('Writes are disabled in preflight mode');
     const operation = this.writeQueue.then(async () => {
+      if (this.persistenceHeld) throw new Error('Runtime persistence is uncertain; no subsequent writes are permitted');
       const current = this.state;
       const baselineMetrics = { ...current.metrics };
       const draft = structuredClone(current);
       const result = writer(draft);
-      await this.persist(draft);
+      try { await this.persist(draft); } catch (error) { this.persistenceHeld = true; throw error; }
       mergeConcurrentMetricIncrements(draft, current.metrics, baselineMetrics);
       this.state = draft;
       return result;
@@ -146,7 +151,7 @@ export class JsonStore {
 
   public async close(): Promise<void> {
     await this.writeQueue;
-    if (!this.readOnly) await this.persist(this.state);
+    if (!this.readOnly && !this.persistenceHeld) await this.persist(this.state);
   }
 
   private async persist(state: StoreState = this.state): Promise<void> {
@@ -158,7 +163,11 @@ export class JsonStore {
     const tempPath = `${this.filePath}.${randomUUID()}.tmp`;
     try {
       await writeFile(tempPath, JSON.stringify(state, null, 2), { flag: 'wx', mode: 0o600 });
+      const staged = await open(tempPath, 'r+');
+      try { await staged.sync(); } finally { await staged.close(); }
       await rename(tempPath, this.filePath);
+      const directory = await open(path.dirname(this.filePath), 'r');
+      try { await directory.sync(); } finally { await directory.close(); }
     } finally {
       await rm(tempPath, { force: true });
     }
@@ -173,6 +182,7 @@ export class PostgresStore {
   private state: StoreState = createEmptyState();
   private readonly prisma: PrismaClient;
   private writeQueue: Promise<void> = Promise.resolve();
+  private persistenceHeld = false;
 
   public constructor(databaseUrl: string, private readonly readOnly = false) {
     this.prisma = new PrismaClient({
@@ -196,6 +206,7 @@ export class PostgresStore {
   }
 
   public read<T>(reader: (state: Readonly<StoreState>) => T): T {
+    if (this.persistenceHeld) throw new Error('Runtime persistence is uncertain; preserve retained storage and restart after review');
     return reader(this.state);
   }
 
@@ -206,11 +217,12 @@ export class PostgresStore {
   public async write<T>(writer: (state: StoreState) => T): Promise<T> {
     if (this.readOnly) throw new Error('Writes are disabled in preflight mode');
     const operation = this.writeQueue.then(async () => {
+      if (this.persistenceHeld) throw new Error('Runtime persistence is uncertain; no subsequent writes are permitted');
       const current = this.state;
       const baselineMetrics = { ...current.metrics };
       const draft = structuredClone(current);
       const result = writer(draft);
-      await this.persist(draft);
+      try { await this.persist(draft); } catch (error) { this.persistenceHeld = true; throw error; }
       mergeConcurrentMetricIncrements(draft, current.metrics, baselineMetrics);
       this.state = draft;
       return result;
@@ -224,7 +236,7 @@ export class PostgresStore {
 
   public async close(): Promise<void> {
     await this.writeQueue;
-    if (!this.readOnly) await this.persist(this.state);
+    if (!this.readOnly && !this.persistenceHeld) await this.persist(this.state);
     await this.prisma.$disconnect();
   }
 
@@ -264,6 +276,7 @@ function hydrateState(input: Partial<StoreState>): StoreState {
     auditLogs,
     auditOutbox: input.auditOutbox ?? empty.auditOutbox,
     botOperationReceipts: input.botOperationReceipts ?? empty.botOperationReceipts,
+    hiveAdminAccountReceipts: validatedHiveAdminAccountReceipts(input.hiveAdminAccountReceipts ?? empty.hiveAdminAccountReceipts),
     supervisionPolicy: input.supervisionPolicy ?? empty.supervisionPolicy,
     supervisionEvents: input.supervisionEvents ?? empty.supervisionEvents,
     agentIdentities: input.agentIdentities ?? empty.agentIdentities,

@@ -35,7 +35,7 @@ describe('JsonStore resilience', () => {
     expect(store.read((state) => state.metrics.errors)).toBe(0);
   });
 
-  it('rolls back the in-memory draft when persistence fails', async () => {
+  it('holds uncertain persistence and refuses stale reads, writes and shutdown replacement', async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), 'chattermost-store-failure-'));
     const storePath = path.join(root, 'state.json');
     const store = new JsonStore(storePath);
@@ -48,7 +48,9 @@ describe('JsonStore resilience', () => {
         state.metrics.errors += 1;
       })
     ).rejects.toThrow();
-    expect(store.read((state) => state.metrics.errors)).toBe(0);
+    expect(() => store.read((state) => state.metrics.errors)).toThrow('persistence is uncertain');
+    await expect(store.write((state) => { state.metrics.errors += 1; })).rejects.toThrow('persistence is uncertain');
+    await store.close();
 
     await rm(root, { force: true });
   });

@@ -297,3 +297,13 @@ clients retain their current authentication. Bound identity sessions require the
 documented revocation step before a downgrade to an older runtime.
 
 For explicit authenticated checks against a disposable restore, see [authenticated isolated restore checks](containers.md#authenticated-isolated-restore-checks). This nested mode does not change normal preflight behavior.
+
+## Optional Hive administrator provisioning
+
+For the Hive installer only, optional `HIVE_ADMIN_PROVISIONING_SECRET` enables
+loopback-only account creation on the existing TLS listener. Keep its separate
+random value in the protected environment and preserve it through upgrades and
+backups. Recreate the server to load configuration changes. This is disabled by
+default; ordinary deployments and native clients require no change. Follow the
+[operation contract](oathweave.md#hive-administrator-provisioning). Never start an
+independent writable store process for maintenance.

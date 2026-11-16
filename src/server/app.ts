@@ -25,6 +25,7 @@ import { JsonStore, PostgresStore, type StateStore } from './store.js';
 import { toMattermostChannel, toMattermostChannelMember, toMattermostCommand, toMattermostFileInfo, toMattermostPost, toMattermostPostList, toMattermostPreference, toMattermostReaction, toMattermostTeam, toMattermostTeamMember, toMattermostUser } from './mappers.js';
 import { AbuseControl, rateLimit } from './rate-limit.js';
 import { hashToken, safeEqualText } from './security.js';
+import { HiveAdminAccounts, registerHiveAdminAccountRoutes } from './hive-admin-accounts.js';
 
 export type AppBindings = {
   incoming?: {
@@ -246,6 +247,7 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
   app.use('*', rateLimit(env, abuseControl));
   app.use('*', csrfProtection(env));
   app.use('*', requestBodyLimit());
+  registerHiveAdminAccountRoutes(app, env, new HiveAdminAccounts(store, env, services.auditLog));
 
   app.onError((error, c) => {
     const requestId = c.get('requestId') ?? 'unknown';

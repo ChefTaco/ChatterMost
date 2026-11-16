@@ -274,6 +274,17 @@ export type AuditLogRecord = {
   metadata: JsonRecord;
 };
 
+export type HiveAdminAccountReceipt = {
+  operationId: string;
+  userId: string;
+  issuer: string;
+  subject: string;
+  username: string;
+  email: string;
+  requestSHA256: string;
+  createAt: number;
+};
+
 export type BotOperationReceipt = {
   operationId: string;
   actorUserId: string;
@@ -390,6 +401,7 @@ export type StoreState = {
   auditLogs: AuditLogRecord[];
   auditOutbox: AuditOutboxRecord[];
   botOperationReceipts: BotOperationReceipt[];
+  hiveAdminAccountReceipts: HiveAdminAccountReceipt[];
   supervisionPolicy: SupervisionPolicyRecord;
   supervisionEvents: SupervisionEventRecord[];
   agentIdentities: AgentIdentityRecord[];

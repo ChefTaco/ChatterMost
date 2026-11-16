@@ -15,9 +15,11 @@ publish a new version only for an intentional distribution change. Client and
 Hermes instructions live in the [client guide](clients.md),
 [Hermes guide](hermes-compatibility.md) and [agent runbook](../AGENTS.md#installation-runbook-for-agents).
 
-## Unreleased
+## Changes in 0.7.0
 
-- Release workflow only; the application, images and manager are unchanged. The upgrade-lifecycle proof now runs in its own `lifecycle` job per architecture, with a read-only token (`contents: read`) and no registry login. It pulls the candidate images anonymously from the public packages, after checking that each `VERSION-ARCH` tag still resolves to the digest the `native` job pushed. Publishing waits for both lifecycle jobs.
+- Add optional loopback-only Hive administrator provisioning on the running TLS server, using a separate purpose secret. Exact identity/native ID binding and permanent receipts make account creation atomic and unchanged retries safe. Existing accounts, messages and sessions are preserved; no Oathweave link is inferred. No SQL migration is needed. JSON stores flush the staged file and parent directory before acknowledging writes. Provisioning acknowledges only after its audit outbox has been published; a publication failure keeps the original account and receipt for an exact retry. A persistence error holds subsequent reads/writes and shutdown flushing until retained storage is reviewed, preventing stale state from overwriting an uncertain commit. The reviewed upgrade sources retain every prior path and add 0.6.4.
+
+- The upgrade-lifecycle proof now runs in its own `lifecycle` job per architecture, with a read-only token (`contents: read`) and no registry login. It pulls the candidate images anonymously from the public packages, after checking that each `VERSION-ARCH` tag still resolves to the digest the `native` job pushed. Publishing waits for both lifecycle jobs.
 - The lifecycle tests no longer receive a GitHub token. A separate step fetches the release metadata of each declared upgrade source once, with the job's read-only token, and the tests answer the manager's release metadata reads from those files; any other GitHub API read fails the run instead of spending the anonymous budget. The tests also remove GitHub credentials from their environment before starting docker, Compose, the application or the browser. Asset downloads and registry pulls stay anonymous, and the public verification workflow is unchanged.
 - The published-version check runs in a read-only `preflight` job instead of the package-writing `native` job, and no workflow keeps its checkout token in the Git configuration.
 
