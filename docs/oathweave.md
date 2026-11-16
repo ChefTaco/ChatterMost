@@ -108,7 +108,7 @@ never disable TLS verification or put the secret in arguments or transcripts.
   account drift or deactivation is refused rather than repaired.
 
 The account, default supervised-team public memberships, audit outbox event and
-permanent receipt commit in one existing serialized store mutation. The native
+permanent receipt commit in one existing serialized store mutation. POST returns success only after that durable audit outbox event is published. GET is observational: it can return the committed account receipt even when a prior POST failed only during audit publication; that proves account ownership and durable audit intent, not external audit delivery. Repeating the exact POST publishes any retained audit event without creating another account or duplicate audit event. The native
 password is generated randomly, hashed and discarded; it is never returned or
 retained in recoverable form. No existing users, sessions or messages are replaced.
 
