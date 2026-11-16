@@ -41,7 +41,8 @@ describe('Hive installation admin provisioning', () => {
     expect((await request(disabled.app)).status).toBe(404);
     const app = (await server()).app;
     for (const headers of [{ 'x-hive-admin-provisioning-secret': '' }, { 'x-hive-admin-provisioning-secret': 'b'.repeat(64) },
-      { origin: 'https://chat.example.test' }, { cookie: 'MMSID=synthetic' }, { authorization: 'Bearer synthetic' }]) {
+      { origin: 'https://chat.example.test' }, { referer: 'https://chat.example.test/' },
+      { forwarded: 'for=127.0.0.1' }, { 'x-forwarded-for': '127.0.0.1' }, { 'x-real-ip': '127.0.0.1' }, { cookie: 'MMSID=synthetic' }, { authorization: 'Bearer synthetic' }]) {
       expect((await request(app, input, operation, headers)).status).toBe(403);
     }
     for (const address of ['192.0.2.5', '::ffff:192.0.2.5', '']) expect((await request(app, input, operation, {}, address)).status).toBe(403);
@@ -79,6 +80,22 @@ describe('Hive installation admin provisioning', () => {
     expect(state.channelMembers.some(value => value.userId === input.user_id)).toBe(true);
     expect((await current.app.request('/api/v4/users/login', { method: 'POST', headers: current.baseHeaders,
       body: JSON.stringify({ login_id: input.username, password: 'ObviouslyFakePassword123!' }) })).status).toBe(400);
+  });
+
+  it('preserves authoritative leading underscore/hyphen usernames and refuses receipts after issuer drift', async () => {
+    const current = await server();
+    for (const [index, username] of ['_native_admin', '-native-admin'].entries()) {
+      const id = index === 0 ? operation : otherOperation;
+      const body = { ...input, subject: 'subject-' + String(index), user_id: (index === 0 ? 'x' : 'y').repeat(26),
+        username, email: 'admin' + String(index) + '@example.test' };
+      const reply = await request(current.app, body, id);
+      expect(reply.status).toBe(200);
+      expect(await reply.json()).toMatchObject({ username, user_id: body.user_id, subject: body.subject });
+      expect(current.store.read(state => state.users.find(user => user.id === body.user_id)?.username)).toBe(username);
+      const drifted = new HiveAdminAccounts(current.store,
+        { OATHWEAVE_ISSUER: 'https://other-identity.example.test', OATHWEAVE_CHAT_IDENTITIES_JSON: '[]' }, current.services.auditLog);
+      expect(() => drifted.read(id)).toThrow('different configured issuer');
+    }
   });
 
   it('binds operation/identity/native ID without adopting collisions or changing established accounts', async () => {

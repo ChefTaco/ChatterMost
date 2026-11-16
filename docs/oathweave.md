@@ -90,7 +90,7 @@ cookie, token, bot or native administrator credential. The routes are absent whe
 it is unset. Native TLS must be configured. The installer calls verified HTTPS on
 localhost from inside the existing container, with the secret only in the
 `x-hive-admin-provisioning-secret` header. Only the actual loopback socket peer is
-accepted; forwarded addresses establish no authority. Origin, cookie and
+accepted; forwarded addresses establish no authority. Origin, Referer, forwarding, cookie and
 Authorization headers are refused. Keep this endpoint outside browser routing;
 never disable TLS verification or put the secret in arguments or transcripts.
 
@@ -98,7 +98,7 @@ never disable TLS verification or put the secret in arguments or transcripts.
   `{version:1, issuer, subject, user_id, username, email}`. `issuer` must exactly
   match the configured HTTPS Oathweave issuer; `subject` is the existing human ID
   resolved and approved by the owning installer. `user_id` is a new preallocated
-  26-character lowercase alphanumeric native ID. Usernames are lowercase; email
+  26-character lowercase alphanumeric native ID. Usernames retain their exact lowercase value, including leading `_` or `-`; email
   addresses are normalized to lowercase. The role is fixed to
   `system_admin system_user`, active and non-bot. The installer revalidates the
   exact IAM identity immediately before calling the product.

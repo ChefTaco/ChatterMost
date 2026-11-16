@@ -19,7 +19,7 @@ export const hiveAdminAccountRequestSchema = z.object({
   }),
   subject: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u),
   user_id: z.string().regex(/^[a-z0-9]{26}$/u),
-  username: z.string().min(2).max(64).regex(/^[a-z0-9][a-z0-9._-]*$/u),
+  username: z.string().min(2).max(64).regex(/^[a-z0-9._-]{2,64}$/u),
   email: z.email().max(320).transform(value => value.toLowerCase())
 }).strict();
 type Request = z.infer<typeof hiveAdminAccountRequestSchema>;
@@ -66,6 +66,7 @@ export class HiveAdminAccounts {
     return this.store.read(state => {
       const receipt = state.hiveAdminAccountReceipts.find(item => item.operationId === operationId);
       if (!receipt) throw notFound('Provisioning operation');
+      if (receipt.issuer !== this.env.OATHWEAVE_ISSUER) throw conflict('Provisioning receipt belongs to a different configured issuer');
       if (!accountMatches(state.users.find(user => user.id === receipt.userId), receipt))
         throw conflict('Provisioned account changed; review the retained operation without reactivating or replacing it');
       return response(receipt);
@@ -132,7 +133,7 @@ export function registerHiveAdminAccountRoutes(app: Hono<AppHonoEnv>, env: AppEn
     if (!env.HIVE_ADMIN_PROVISIONING_SECRET) throw notFound('Route');
     const address = c.env?.incoming?.socket.remoteAddress;
     if (!address || !['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(address)
-      || c.req.header('origin') !== undefined || c.req.header('cookie') !== undefined
+      || ['origin', 'referer', 'forwarded', 'x-forwarded-for', 'x-real-ip', 'cookie'].some(header => c.req.header(header) !== undefined)
       || c.req.header('authorization') !== undefined || !env.TLS_CERT_PATH || !env.TLS_KEY_PATH
       || !safeEqualText(c.req.header('x-hive-admin-provisioning-secret') ?? '', env.HIVE_ADMIN_PROVISIONING_SECRET))
       throw forbidden('Installation provisioning authority required');
