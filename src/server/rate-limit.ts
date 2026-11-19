@@ -32,7 +32,6 @@ const GENERAL_SOURCE_LIMIT = 240;
 const CREDENTIAL_ROUTES = new Set([
   'POST /api/v4/users/login',
   'POST /api/v4/users',
-  'POST /api/v4/auth/oathweave/session',
   'PUT /api/v4/users/:user_id/password',
   'POST /admin/users/:id/reset-password'
 ]);
