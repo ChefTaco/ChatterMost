@@ -15,14 +15,14 @@ jobs:
       matrix: ${{ steps.plan.outputs.matrix }}
       has_paths: ${{ steps.plan.outputs.has_paths }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {persist-credentials: false}
       - name: Read the integrity-checked public release policy anonymously
         id: plan
         env:
           VERSION: ${{ inputs.version }}
         run: python3 tests/container/public_matrix.py plan "$VERSION" --output /tmp/public-release-plan.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: public-release-plan
           path: /tmp/public-release-plan.json
@@ -35,9 +35,9 @@ jobs:
         runner: [ubuntu-24.04, ubuntu-24.04-arm]
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {persist-credentials: false}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: {node-version: 24.22.3, cache: npm}
       - run: npm ci
       - name: Anonymous release and registry install, real persistence and WebSocket proof
@@ -45,7 +45,7 @@ jobs:
           VERSION: ${{ inputs.version }}
         run: python3 tests/container/published.py "$VERSION" --keep /tmp/chattermost-public-proof
       - name: Upload sanitized synthetic evidence
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: public-proof-${{ matrix.runner }}
           path: /tmp/chattermost-public-proof/public-verification.json
@@ -68,9 +68,9 @@ jobs:
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     runs-on: ${{ matrix.runner }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {persist-credentials: false}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: {node-version: 24.22.3, cache: npm}
       - run: npm ci
       - run: npx playwright install --with-deps chromium
@@ -89,7 +89,7 @@ jobs:
             ln -s "$HOME/.docker/cli-plugins" "$DOCKER_CONFIG/cli-plugins"
           fi
           python3 tests/container/lifecycle_case.py "$VERSION" --baseline "$BASELINE"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: public-lifecycle-${{ matrix.runner }}-${{ matrix.baseline }}
           path: /tmp/chattermost-public-proof/lifecycle-path.json
@@ -99,9 +99,9 @@ jobs:
     if: always()
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {persist-credentials: false}
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: public-*
           path: /tmp/chattermost-public-evidence
@@ -113,7 +113,7 @@ jobs:
             --plan /tmp/chattermost-public-evidence/public-release-plan/public-release-plan.json \
             --proofs /tmp/chattermost-public-evidence \
             --output /tmp/chattermost-public-aggregate.json
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: public-verification-complete
           path: /tmp/chattermost-public-aggregate.json

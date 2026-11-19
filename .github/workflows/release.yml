@@ -16,7 +16,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {persist-credentials: false}
       - name: Validate every declared upgrade source before building or publishing
         run: python3 tests/container/lifecycle.py "${GITHUB_REF_NAME#v}" --plan
@@ -42,12 +42,12 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {persist-credentials: false}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: {node-version: 24.22.3, cache: npm}
       - run: npm ci
-      - uses: docker/setup-buildx-action@v4
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
       - name: Native execution identity
         run: uname -m
       - name: Set immutable version
@@ -59,7 +59,7 @@ jobs:
           ARCH: ${{ matrix.arch }}
         run: python3 distribution/check-image-version.py "$VERSION-$ARCH"
       - name: Build application
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
           file: deploy/Dockerfile
@@ -71,7 +71,7 @@ jobs:
             REVISION=${{ github.sha }}
             CREATED=${{ env.CREATED }}
       - name: Build migration image
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
           file: deploy/Dockerfile
@@ -83,7 +83,7 @@ jobs:
             REVISION=${{ github.sha }}
             CREATED=${{ env.CREATED }}
       - name: Scan application
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: chattermost-local:release
           format: json
@@ -92,7 +92,7 @@ jobs:
           ignore-unfixed: true
           exit-code: '1'
       - name: Scan migrator
-        uses: aquasecurity/trivy-action@v0.36.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: chattermost-migrator-local:release
           format: json
@@ -102,14 +102,14 @@ jobs:
           exit-code: '1'
       - name: Exercise native installation before publishing
         run: python3 tests/container/native.py "$VERSION"
-      - uses: docker/login-action@v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Publish native application with SBOM and provenance
         id: publish_app
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
           file: deploy/Dockerfile
@@ -124,7 +124,7 @@ jobs:
             CREATED=${{ env.CREATED }}
       - name: Publish native migrator with SBOM and provenance
         id: publish_migrator
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
           file: deploy/Dockerfile
@@ -150,12 +150,12 @@ jobs:
           with open(f"candidate-{record['arch']}.json", 'w') as file:
               json.dump(record, file)
           PY
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: candidate-${{ matrix.arch }}
           path: candidate-${{ matrix.arch }}.json
           if-no-files-found: error
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: scans-${{ matrix.arch }}
           path: scan-*.json
@@ -174,16 +174,16 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {persist-credentials: false}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: {node-version: 24.22.3, cache: npm}
       - run: npm ci
       - name: Native execution identity
         run: uname -m
       - name: Set immutable version
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: candidate-${{ matrix.arch }}
       - name: Confirm the published candidate tags are the recorded digests
@@ -229,7 +229,7 @@ jobs:
           APP_DIGEST: ${{ steps.candidate.outputs.app_digest }}
           MIGRATOR_DIGEST: ${{ steps.candidate.outputs.migrator_digest }}
         run: python3 tests/container/lifecycle.py "$VERSION" "$APP_DIGEST" "$MIGRATOR_DIGEST"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: ${{ !startsWith(env.VERSION, '0.2.') }}
         with:
           name: scans-lifecycle-${{ matrix.arch }}
@@ -244,13 +244,13 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {persist-credentials: false}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: {node-version: 24.22.3, cache: npm}
       - run: npm ci
-      - uses: docker/setup-buildx-action@v4
-      - uses: docker/login-action@v3
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -269,7 +269,7 @@ jobs:
           APP_DIGEST="$(docker buildx imagetools inspect "ghcr.io/cheftaco/chattermost:$VERSION" --format '{{.Manifest.Digest}}')"
           MIGRATOR_DIGEST="$(docker buildx imagetools inspect "ghcr.io/cheftaco/chattermost-migrator:$VERSION" --format '{{.Manifest.Digest}}')"
           python3 distribution/package.py "$VERSION" "$APP_DIGEST" "$MIGRATOR_DIGEST" public-release
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: scans-*
           path: public-release/scans
@@ -284,7 +284,7 @@ jobs:
           (root / 'SHA256SUMS').write_text(''.join(f'{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n' for p in sorted(files)))
           PY
       - name: Attest release archive
-        uses: actions/attest-build-provenance@v4
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           subject-path: |
             public-release/*.tar.gz

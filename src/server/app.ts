@@ -39,6 +39,8 @@ export type AppVariables = {
   requestId: string;
   env: AppEnv;
   rateLimitAccount: (account: string) => Promise<void>;
+  /** Per-account budget for an expensive action, independent of the caller's address. */
+  rateLimitActor: (action: string, actorId: string, limit: number) => Promise<void>;
 };
 
 export type AppHonoEnv = {
@@ -59,33 +61,41 @@ const LoginSchema = z.object({
   password: z.string().min(1).max(1024),
   device_id: z.string().max(512).optional().default('')
 });
+// System roles a request may name. Anything else would be stored verbatim on the account.
+const SystemRolesSchema = z
+  .string()
+  .max(64)
+  .refine((value) => value.split(/\s+/u).filter(Boolean).every((role) => role === 'system_user' || role === 'system_admin'), 'Unknown system role');
 const SignupSchema = z.object({
-  invite_code: z.string().min(1),
+  invite_code: z.string().min(1).max(256),
   username: z
     .string()
     .min(2)
+    .max(64)
     .regex(/^[a-z0-9][a-z0-9._-]*$/u, 'Username must be lowercase and may contain only letters, numbers, dots, dashes, and underscores'),
-  email: z.email(),
-  password: z.string().min(10)
+  email: z.email().max(320),
+  password: z.string().min(10).max(1024)
 });
 const AdminUserCreateSchema = z.object({
   username: z
     .string()
     .min(2)
+    .max(64)
     .regex(/^[a-z0-9][a-z0-9._-]*$/u, 'Username must be lowercase and may contain only letters, numbers, dots, dashes, and underscores'),
-  email: z.email(),
-  password: z.string().min(10),
-  role: z.string().optional().default('system_user'),
-  first_name: z.string().optional().default(''),
-  last_name: z.string().optional().default(''),
-  nickname: z.string().optional().default(''),
-  position: z.string().optional().default('')
+  email: z.email().max(320),
+  password: z.string().min(10).max(1024),
+  role: SystemRolesSchema.optional().default('system_user'),
+  first_name: z.string().max(64).optional().default(''),
+  last_name: z.string().max(64).optional().default(''),
+  nickname: z.string().max(64).optional().default(''),
+  position: z.string().max(128).optional().default('')
 });
 const AdminBotCreateSchema = z.object({
   username: z
     .string()
     .regex(/^[a-z0-9][a-z0-9._-]*$/u)
-    .min(2),
+    .min(2)
+    .max(64),
   display_name: z.string().min(1).max(128),
   operation_id: z.string().regex(/^[a-z0-9]{26}$/u).optional(),
   create_only: z.boolean().optional()
@@ -93,8 +103,8 @@ const AdminBotCreateSchema = z.object({
 const AdminBotUpdateSchema = AdminBotCreateSchema;
 const UserSearchSchema = z.object({ term: z.string().max(512).optional().default('') });
 const ChannelSearchSchema = z.object({
-  term: z.string().optional().default(''),
-  team_ids: z.array(z.string()).optional().default([])
+  term: z.string().max(512).optional().default(''),
+  team_ids: z.array(z.string().max(64)).max(100).optional().default([])
 });
 const NativeDarkTheme = JSON.stringify({
   type: 'Onyx',
@@ -124,11 +134,11 @@ const NativeDarkTheme = JSON.stringify({
   codeTheme: 'monokai'
 });
 
-const PasswordSchema = z.object({ new_password: z.string().min(10), current_password: z.string().optional() });
+const PasswordSchema = z.object({ new_password: z.string().min(10).max(1024), current_password: z.string().max(1024).optional() });
 const InviteSchema = z.object({
-  max_uses: z.number().int().positive().optional().default(1),
-  expires_in_hours: z.number().int().positive().optional().default(72),
-  role: z.string().optional()
+  max_uses: z.number().int().positive().max(10_000).optional().default(1),
+  expires_in_hours: z.number().int().positive().max(8760).optional().default(72),
+  role: SystemRolesSchema.optional()
 });
 
 
@@ -141,8 +151,17 @@ const CustomEmojiSchema = z.object({
   name: z.string().min(2).max(32),
   emoji: z.string().min(1).max(16)
 });
-const PreferenceSchema = z.array(z.object({ category: z.string(), name: z.string(), value: z.string() }));
-const DeletePreferenceSchema = z.array(z.object({ category: z.string(), name: z.string() }));
+const PreferenceSchema = z.array(z.object({ category: z.string().max(64), name: z.string().max(128), value: z.string().max(20_000) })).max(200);
+const DeletePreferenceSchema = z.array(z.object({ category: z.string().max(64), name: z.string().max(128) })).max(200);
+/** ID lists that fan out into per-item lookups are capped like the upstream API. */
+const IdListSchema = z.array(z.string().max(64)).max(1000);
+/** Free-form JSON a member may attach (post props, notification settings) stays small. */
+const MEMBER_JSON_LIMIT_BYTES = 64 * 1024;
+function boundedMemberJson<T>(value: T, label: string): T {
+  if (Buffer.byteLength(JSON.stringify(value)) > MEMBER_JSON_LIMIT_BYTES) throw badRequest(`${label} is too large`);
+  return value;
+}
+const UPLOADS_PER_MINUTE = 60;
 const StatusSchema = z.object({
   status: z.enum(['online', 'away', 'offline', 'dnd']),
   manual: z.boolean().optional().default(true)
@@ -594,7 +613,7 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
   });
   app.put('/api/v4/users/sessions/device', async (c) => {
     const auth = await requireAuth(c, services);
-    const body = await readJson(c, z.object({ device_id: z.string().default('') }).loose());
+    const body = await readJson(c, z.object({ device_id: z.string().max(512).default('') }).loose());
     await services.sessions.updateDevice(auth.sessionId, body.device_id);
     return c.json(ok());
   });
@@ -616,6 +635,7 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
   });
   app.post('/api/v4/users/:user_id/image', async (c) => {
     const auth = await requireAuth(c, services);
+    await c.get('rateLimitActor')('upload', auth.user.id, UPLOADS_PER_MINUTE);
     const body = await c.req.parseBody();
     const image = body.image;
     if (!(image instanceof File)) {
@@ -945,7 +965,7 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
     const auth = await requireAuth(c, services);
     const userId = c.req.param('user_id') === 'me' ? auth.user.id : c.req.param('user_id');
     const body = await readJson(c, z.record(z.string(), z.unknown()));
-    const notifyProps = Object.fromEntries(Object.entries(body).filter(([key]) => key !== 'channel_id' && key !== 'user_id'));
+    const notifyProps = boundedMemberJson(Object.fromEntries(Object.entries(body).filter(([key]) => key !== 'channel_id' && key !== 'user_id')), 'Notification settings');
     return c.json(toMattermostChannelMember(await services.channels.updateMemberNotifyProps(c.req.param('channel_id'), userId, asJsonRecord(notifyProps), auth.user)));
   });
   app.post('/api/v4/channels/:channel_id/members', async (c) => {
@@ -1006,7 +1026,7 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
       rootId: body.root_id,
       fileIds: body.file_ids,
       pendingPostId: body.pending_post_id,
-      props: withoutWebhookIdentity(asJsonRecord(body.props))
+      props: boundedMemberJson(withoutWebhookIdentity(asJsonRecord(body.props)), 'Post props')
     });
     return c.json(toMattermostPost(post), 201);
   });
@@ -1076,7 +1096,7 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
   });
   app.post('/api/v4/posts/ids', async (c) => {
     const auth = await requireAuth(c, services);
-    const ids = await readJson(c, z.array(z.string()));
+    const ids = await readJson(c, IdListSchema);
     return c.json(
       toMattermostPostList(
         ids.map((id) => services.posts.getVisiblePost(id, auth.user))
@@ -1147,7 +1167,7 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
   });
   app.post('/api/v4/posts/ids/reactions', async (c) => {
     const auth = await requireAuth(c, services);
-    const ids = await readJson(c, z.array(z.string()));
+    const ids = await readJson(c, IdListSchema);
     return c.json(Object.fromEntries(Object.entries(services.reactions.reactionsForPosts(ids, auth.user)).map(([postId, reactions]) => [postId, reactions.map(toMattermostReaction)])));
   });
   app.get('/api/v4/emoji', async (c) => {
@@ -1166,6 +1186,7 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
 
   app.post('/api/v4/files', async (c) => {
     const auth = await requireAuth(c, services);
+    await c.get('rateLimitActor')('upload', auth.user.id, UPLOADS_PER_MINUTE);
     const body = await c.req.parseBody({ all: true });
     const channelId = pickFirstString(body.channel_id) ?? c.req.query('channel_id');
     if (channelId === undefined) {
@@ -1253,12 +1274,12 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
   });
   app.post('/api/v4/users/status/ids', async (c) => {
     await requireAuth(c, services);
-    const ids = await readJson(c, z.array(z.string()));
+    const ids = await readJson(c, IdListSchema);
     return c.json(services.statuses.byIds(ids));
   });
   app.post('/api/v4/users/:user_id/typing', async (c) => {
     const auth = await requireAuth(c, services);
-    const body = await readJson(c, z.object({ channel_id: z.string(), parent_id: z.string().optional().default('') }));
+    const body = await readJson(c, z.object({ channel_id: z.string().max(64), parent_id: z.string().max(64).optional().default('') }));
     const typingUserId = c.req.param('user_id');
     if (typingUserId !== auth.user.id) {
       throw forbidden();
@@ -1446,7 +1467,7 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
   });
   app.post('/api/v4/commands/execute', async (c) => {
     const auth = await requireAuth(c, services);
-    const body = await readJson(c, z.object({ command: z.string(), channel_id: z.string(), root_id: z.string().optional() }));
+    const body = await readJson(c, z.object({ command: z.string().max(16_383), channel_id: z.string().max(64), root_id: z.string().max(64).optional() }));
     return c.json(await services.slashCommands.execute(body.command, body.channel_id, auth.user, body.root_id));
   });
   app.get('/api/v4/teams/:team_id/commands/autocomplete', async (c) => {
@@ -1767,7 +1788,7 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
   });
   app.post('/api/v4/webhooks/incoming', async (c) => {
     const auth = await requireAuth(c, services);
-    const body = await readJson(c, z.object({ channel_id: z.string(), label: z.string().default('External agent') }));
+    const body = await readJson(c, z.object({ channel_id: z.string().max(64), label: z.string().max(128).default('External agent') }));
     const { record, secret } = await createIncomingWebhook(store, env, auth.user, body.channel_id, body.label);
     return c.json(
       {
@@ -1790,7 +1811,7 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
     if (webhook === null || !webhook.enabled || !safeEqualText(hashToken(c.req.param('secret'), env), webhook.secretHash)) {
       throw notFound('Webhook');
     }
-    const body = await readJson(c, z.object({ text: z.string().default(''), username: z.string().default('') }));
+    const body = await readJson(c, z.object({ text: z.string().max(16_383).default(''), username: z.string().max(64).default('') }));
     // The webhook posts as its creator (an admin at creation time), never as a
     // caller-selected account. Display overrides cannot match administrator,
     // bot, or reserved system identities and immutable origin metadata lets
@@ -2037,6 +2058,22 @@ function originOf(value: string): string | null {
 
 // Set once the handler is done (`apply: 'after'`), replacing anything a handler set, as before.
 function secureHeaders(env: AppEnv): MiddlewareHandler {
+  // The page may only talk to this server: its own HTTP origin and the matching WebSocket
+  // origin (spelled out because older engines do not treat ws/wss as 'self'). No inline
+  // script or style, no plugins, no <base> rewriting, and forms post only to this origin.
+  const serverUrl = new URL(env.SERVER_URL);
+  const socketOrigin = `${serverUrl.protocol === 'https:' ? 'wss' : 'ws'}://${serverUrl.host}`;
+  const contentSecurityPolicy = [
+    "default-src 'self'",
+    "img-src 'self' data: blob:",
+    "style-src 'self'",
+    "script-src 'self'",
+    `connect-src 'self' ${socketOrigin}`,
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'self'",
+    "frame-ancestors 'none'"
+  ].join('; ');
   return securityHeaders({
     apply: 'after',
     contentTypeOptions: 'nosniff',
@@ -2049,7 +2086,7 @@ function secureHeaders(env: AppEnv): MiddlewareHandler {
         'X-Mattermost-Version': serverVersion,
         'Mattermost-Server-Version': serverVersion,
         'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
-        'Content-Security-Policy': "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'"
+        'Content-Security-Policy': contentSecurityPolicy
       };
     }
   });

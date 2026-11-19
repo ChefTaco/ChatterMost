@@ -3810,7 +3810,7 @@ function renderGallery(channel) {
   }
   box.append(el('div', { class: 'gallery-grid' }, images.map((item) => {
     const user = state.users.find((candidate) => candidate.id === item.post.user_id);
-    return el('a', { class: 'gallery-item', href: '/api/v4/files/' + item.fileId, target: '_blank' }, [
+    return el('a', { class: 'gallery-item', href: '/api/v4/files/' + item.fileId, target: '_blank', rel: 'noopener noreferrer' }, [
       el('span', { class: 'gallery-thumb' }, [
         el('img', { src: '/api/v4/files/' + item.fileId + '/preview', alt: item.post.message || 'Channel image' })
       ]),
@@ -4042,7 +4042,7 @@ function renderPost(post, grouped) {
     return el('a', {
       class: 'file-preview-link',
       href: '/api/v4/files/' + id,
-      target: '_blank',
+      target: '_blank', rel: 'noopener noreferrer',
       title: 'Open attachment',
       'aria-label': isImage ? 'Open attachment preview' : 'Attachment ' + fileName
     }, isImage ? [
@@ -4745,7 +4745,7 @@ function renderChannelFiles() {
   }
   for (const attachment of attachments.reverse()) {
     const user = state.users.find((item) => item.id === attachment.post.user_id);
-    box.append(el('a', { class: 'file-row', href: '/api/v4/files/' + attachment.fileId, target: '_blank' }, [
+    box.append(el('a', { class: 'file-row', href: '/api/v4/files/' + attachment.fileId, target: '_blank', rel: 'noopener noreferrer' }, [
       el('span', { class: 'file-row-icon', text: '📎' }),
       el('span', {}, [
         el('span', { class: 'file-row-title', text: 'Attachment ' + attachment.fileId.slice(0, 8) }),
@@ -5808,7 +5808,7 @@ async function addReaction(postId, emoji) {
 
 async function removeReaction(postId, emoji) {
   try {
-    await api('/api/v4/users/' + state.me.id + '/posts/' + postId + '/reactions/' + emoji, { method: 'DELETE' });
+    await api('/api/v4/users/' + state.me.id + '/posts/' + encodeURIComponent(postId) + '/reactions/' + encodeURIComponent(emoji), { method: 'DELETE' });
     state.composerError = '';
     await loadPosts();
     renderApp();

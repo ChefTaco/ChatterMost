@@ -73,6 +73,7 @@ export type UploadInput = {
 
 const allowedUploadMimeTypes = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'text/plain']);
 const auditOutboxRetention = 2000;
+const MAX_PREFERENCES_PER_USER = 2000;
 
 export const HERMES_GATEWAY_COMMANDS = [
   { trigger: 'help', description: 'Show available Hermes commands', hint: '' },
@@ -1006,10 +1007,17 @@ export class InviteService {
     const hash = hashToken(input.inviteCode, this.env);
     const normalizedUsername = input.username.toLowerCase();
     const normalizedEmail = input.email.toLowerCase();
+    const usable = (candidate: InviteCodeRecord | undefined): candidate is InviteCodeRecord =>
+      candidate !== undefined && candidate.disabledAt === 0 && candidate.expiresAt > nowMs() && candidate.uses < candidate.maxUses;
+    // Check the code before the slow password hash: an anonymous caller without a valid
+    // invite must not be able to make the server do that work. The write re-checks it.
+    if (!usable(this.store.read((state) => state.inviteCodes.find((entry) => entry.codeHash === hash)))) {
+      throw badRequest('Invite code is invalid or expired');
+    }
     const passwordHash = await hashPassword(input.password);
     const enrolled = await this.store.write((state) => {
       const candidate = state.inviteCodes.find((entry) => entry.codeHash === hash);
-      if (candidate === undefined || candidate.disabledAt > 0 || candidate.expiresAt <= nowMs() || candidate.uses >= candidate.maxUses) {
+      if (!usable(candidate)) {
         throw badRequest('Invite code is invalid or expired');
       }
       if (state.users.some((existing) => existing.username === normalizedUsername)) {
@@ -1965,6 +1973,7 @@ export class PostService {
               }) ?? []
             )
           );
+    const heldState = patch.message === undefined ? 'approved' : this.supervision.initialLifecycleState(patch.message);
     const updated = await this.store.write((state) => {
       const post = state.posts.find((candidate) => candidate.id === postId);
       if (post === undefined) {
@@ -1981,6 +1990,9 @@ export class PostService {
         post.message = patch.message;
         post.hashtags = extractHashtags(patch.message).join(' ');
         post.metadata = { ...post.metadata, mentions: extractMentions(patch.message) };
+        // An edit is screened like a new post, so approved text cannot be swapped for held text.
+        // An edit never releases a post that is already held: only a moderator does that.
+        if (post.lifecycleState === 'approved' && heldState !== 'approved') post.lifecycleState = heldState;
       }
       if (patch.isPinned !== undefined) {
         post.isPinned = patch.isPinned;
@@ -2523,6 +2535,9 @@ export class PreferenceService {
     const now = nowMs();
     const updated = await this.store.write((state) => {
       const result: PreferenceRecord[] = [];
+      const known = new Set(state.preferences.filter((candidate) => candidate.userId === userId).map((candidate) => `${candidate.category}\u0000${candidate.name}`));
+      for (const preference of preferences) known.add(`${preference.category}\u0000${preference.name}`);
+      if (known.size > MAX_PREFERENCES_PER_USER) throw badRequest('Too many stored preferences');
       for (const preference of preferences) {
         const existing = state.preferences.find((candidate) => candidate.userId === userId && candidate.category === preference.category && candidate.name === preference.name);
         if (existing === undefined) {

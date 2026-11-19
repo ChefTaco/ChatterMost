@@ -69,6 +69,8 @@ const EnvSchema = z.object({
   RATE_LIMIT_MAX_KEYS: z.coerce.number().int().min(100).max(100_000).default(10_000),
   RATE_LIMIT_LOGIN_SOURCE_MAX: z.coerce.number().int().min(1).max(10_000).default(20),
   RATE_LIMIT_LOGIN_ACCOUNT_MAX: z.coerce.number().int().min(1).max(10_000).default(20),
+  WEBSOCKET_MAX_CONNECTIONS: z.coerce.number().int().min(1).max(100_000).default(2000),
+  WEBSOCKET_MAX_CONNECTIONS_PER_SOURCE: z.coerce.number().int().min(1).max(100_000).default(200),
   PREFLIGHT_MODE: Boolish.default(false),
   HIVE_REHEARSAL: Boolish.default(false),
   AUTHENTICATED_REHEARSAL: Boolish.default(false),

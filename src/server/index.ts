@@ -11,6 +11,8 @@ import { createServer } from 'node:https';
 import { createServerApp } from './app.js';
 import { loadEnv } from './env.js';
 import { listenerTls } from './listener.js';
+import { resolveClientIdentity, TrustedProxySet, WEBSOCKET_UPGRADE_SOURCE_LIMIT } from './rate-limit.js';
+import { SocketAdmission, SocketMessageBudget } from './socket-limits.js';
 
 const env = loadEnv({ envFile: process.env.CHATTERMOST_ENV_FILE ?? '.env' });
 const tls = listenerTls(env);
@@ -29,6 +31,11 @@ const authorizationSweep = setInterval(() => {
   services.hub.closeUnauthorized();
 }, WEBSOCKET_AUTHORIZATION_SWEEP_MS);
 authorizationSweep.unref();
+const trustedProxies = new TrustedProxySet(env.TRUSTED_PROXIES);
+const socketAdmission = new SocketAdmission({
+  maximum: env.WEBSOCKET_MAX_CONNECTIONS,
+  maximumPerSource: env.WEBSOCKET_MAX_CONNECTIONS_PER_SOURCE
+});
 const knownWebSocketActions = new Set(['authentication_challenge', 'ping', 'user_typing', 'get_statuses', 'get_statuses_by_ids']);
 
 const server: ServerType = serve(
@@ -76,10 +83,26 @@ async function handleUpgradeRequest(request: IncomingMessage, socket: Duplex, he
     return;
   }
 
+  // Upgrades bypass the HTTP middleware, so they are budgeted here: a handshake rate per
+  // address, then ceilings on open sockets overall, per address, and not yet signed in.
+  const forwardedFor = request.headers['x-forwarded-for'];
+  const source = resolveClientIdentity(request.socket.remoteAddress, Array.isArray(forwardedFor) ? forwardedFor.join(',') : forwardedFor, trustedProxies).address;
+  if (!(await abuseControl.allow('source', `UPGRADE:/api/v4/websocket:${source}`, WEBSOCKET_UPGRADE_SOURCE_LIMIT, Date.now()))) {
+    refuseUpgrade(socket, 429, 'Too Many Requests');
+    return;
+  }
   let auth: Awaited<ReturnType<typeof authenticateUpgrade>>;
   try {auth=await authenticateUpgrade(request);} catch {socket.destroy();return;}
   if(shuttingDown){socket.destroy();return;}
+  const admission = socketAdmission.admit(source, auth !== null);
+  if (admission === null) {
+    refuseUpgrade(socket, 503, 'Service Unavailable');
+    return;
+  }
+  // Covers a handshake that fails before a WebSocket exists, as well as a normal close.
+  socket.once('close', () => admission.release());
   websocketServer.handleUpgrade(request, socket, head, (websocket) => {
+    const messageBudget = new SocketMessageBudget();
     const bound=Boolean(auth?.sessionId && services.sessions.requiresOnlineValidation(auth.sessionId));
     const validate=async()=>{
       const current=await authenticateUpgrade(request);
@@ -111,6 +134,7 @@ async function handleUpgradeRequest(request: IncomingMessage, socket: Duplex, he
     };
     const connection = services.hub.attach(tracedSocket, auth?.user.id ?? null, attachOptions);
     connectionId = connection.id;
+    admission.signedIn = () => connection.userId !== null;
     const authenticationDeadline = setTimeout(() => {
       if (connection.userId === null) websocket.close(1008, 'Authentication required');
     }, WEBSOCKET_AUTHENTICATION_DEADLINE_MS);
@@ -126,6 +150,10 @@ async function handleUpgradeRequest(request: IncomingMessage, socket: Duplex, he
     };
     process.stdout.write(JSON.stringify({ level: 'info', message: 'websocket_opened', ...socketContext }) + '\n');
     websocket.on('message', (data) => {
+      if (!messageBudget.accept(connection.userId !== null, Date.now())) {
+        websocket.close(1008, 'Message rate exceeded');
+        return;
+      }
       if (traceActions) {
         const message = parseWebSocketMessageMetadata(rawDataToString(data));
         process.stdout.write(
@@ -155,6 +183,7 @@ async function handleUpgradeRequest(request: IncomingMessage, socket: Duplex, he
         });
     });
     websocket.on('close', (code) => {
+      admission.release();
       clearTimeout(authenticationDeadline);
       process.stdout.write(
         JSON.stringify({
@@ -177,6 +206,11 @@ async function handleUpgradeRequest(request: IncomingMessage, socket: Duplex, he
       );
     });
   });
+}
+
+function refuseUpgrade(socket: Duplex, status: number, reason: string): void {
+  socket.end(`HTTP/1.1 ${status} ${reason}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
+  socket.destroy();
 }
 
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {

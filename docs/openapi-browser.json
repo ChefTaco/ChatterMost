@@ -654,19 +654,24 @@
                 "type": "object",
                 "properties": {
                   "nickname": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 64
                   },
                   "first_name": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 64
                   },
                   "last_name": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 64
                   },
                   "position": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 128
                   },
                   "locale": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 16
                   }
                 }
               }
@@ -1000,15 +1005,18 @@
                 "properties": {
                   "team_id": {
                     "default": "",
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 64
                   },
                   "name": {
                     "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "maxLength": 64
                   },
                   "display_name": {
                     "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "maxLength": 64
                   },
                   "type": {
                     "default": "O",
@@ -1022,11 +1030,13 @@
                   },
                   "header": {
                     "default": "",
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 1024
                   },
                   "purpose": {
                     "default": "",
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 250
                   }
                 },
                 "required": [
@@ -1144,10 +1154,12 @@
               "schema": {
                 "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "minItems": 1,
+                "maxItems": 8,
                 "type": "array",
                 "items": {
                   "type": "string",
-                  "minLength": 1
+                  "minLength": 1,
+                  "maxLength": 64
                 }
               }
             }
@@ -1260,10 +1272,12 @@
               "schema": {
                 "$schema": "https://json-schema.org/draft/2020-12/schema",
                 "minItems": 1,
+                "maxItems": 8,
                 "type": "array",
                 "items": {
                   "type": "string",
-                  "minLength": 1
+                  "minLength": 1,
+                  "maxLength": 64
                 }
               }
             }
@@ -1378,20 +1392,23 @@
                 "type": "object",
                 "properties": {
                   "display_name": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 64
                   },
                   "header": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 1024
                   },
                   "purpose": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 250
                   },
                   "retention_days": {
                     "anyOf": [
                       {
                         "type": "integer",
                         "exclusiveMinimum": 0,
-                        "maximum": 9007199254740991
+                        "maximum": 36500
                       },
                       {
                         "type": "null"
@@ -2944,7 +2961,8 @@
                 "properties": {
                   "terms": {
                     "default": "",
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 512
                   }
                 }
               }
@@ -3243,7 +3261,8 @@
                 "properties": {
                   "channel_id": {
                     "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "maxLength": 64
                   },
                   "message": {
                     "anyOf": [
@@ -3257,9 +3276,14 @@
                     ]
                   },
                   "root_id": {
-                    "type": [
-                      "string",
-                      "null"
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 64
+                      },
+                      {
+                        "type": "null"
+                      }
                     ]
                   },
                   "file_ids": {
@@ -3268,7 +3292,9 @@
                         "maxItems": 10,
                         "type": "array",
                         "items": {
-                          "type": "string"
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 64
                         }
                       },
                       {
@@ -3277,9 +3303,14 @@
                     ]
                   },
                   "pending_post_id": {
-                    "type": [
-                      "string",
-                      "null"
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "maxLength": 128
+                      },
+                      {
+                        "type": "null"
+                      }
                     ]
                   },
                   "props": {
@@ -3572,9 +3603,12 @@
                     "type": "boolean"
                   },
                   "file_ids": {
+                    "maxItems": 10,
                     "type": "array",
                     "items": {
-                      "type": "string"
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
                     }
                   }
                 }
@@ -4600,11 +4634,14 @@
                 "properties": {
                   "post_id": {
                     "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "maxLength": 64
                   },
                   "emoji_name": {
                     "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "maxLength": 64,
+                    "pattern": "^[^\\s/\\\\?#%.:;<>\"'&\\p{Cc}]+$"
                   }
                 },
                 "required": [

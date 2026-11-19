@@ -27,6 +27,7 @@ else
   tar -czf "$BACKUP_DIR/files.tar.gz" --files-from /dev/null
 fi
 cp "$ENV_FILE" "$BACKUP_DIR/env.redacted"
-sed -i -E 's/^([A-Za-z_][A-Za-z0-9_]*(PASSWORD|SECRET|TOKEN)[A-Za-z0-9_]*)=.*/\1=<redacted>/g' "$BACKUP_DIR/env.redacted"
+sed -i -E -e 's/^([A-Za-z_][A-Za-z0-9_]*(PASSWORD|SECRET|TOKEN)[A-Za-z0-9_]*)=.*/\1=<redacted>/g' \
+  -e 's#(://[^:/@[:space:]]*):[^@[:space:]]*@#\1:<redacted>@#g' "$BACKUP_DIR/env.redacted"
 chmod 600 "$BACKUP_DIR"/*
 echo "Backup written to $BACKUP_DIR"

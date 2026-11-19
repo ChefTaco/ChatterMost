@@ -3,16 +3,53 @@ import { timingSafeEqualString } from '@hivemagnus/hive-common/secrets';
 
 import bcrypt from 'bcryptjs';
 
+import { HttpAppError } from '../shared/mattermost.js';
 import type { AppEnv } from './env.js';
 
 const BCRYPT_COST = 12;
 
+/**
+ * Password hashing is deliberately slow and runs on the server's one thread. Without a bound, a
+ * burst of sign-in attempts would queue seconds of hashing in front of every other request.
+ * A few run at a time, a short line may wait, and anything beyond that is refused at once.
+ */
+export class PasswordWorkGate {
+  private active = 0;
+  private readonly waiting: (() => void)[] = [];
+
+  public constructor(
+    private readonly maximumActive = 2,
+    private readonly maximumWaiting = 24
+  ) {}
+
+  public async run<T>(work: () => Promise<T>): Promise<T> {
+    if (this.active >= this.maximumActive) {
+      if (this.waiting.length >= this.maximumWaiting) {
+        throw new HttpAppError('api.context.rate_limit.app_error', 'Too many requests', 429);
+      }
+      await new Promise<void>((resolve) => this.waiting.push(resolve));
+    } else {
+      this.active += 1;
+    }
+    try {
+      return await work();
+    } finally {
+      // Hand the slot straight to the next waiter, so the active count never overshoots.
+      const next = this.waiting.shift();
+      if (next === undefined) this.active -= 1;
+      else next();
+    }
+  }
+}
+
+const passwordWork = new PasswordWorkGate();
+
 export async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, BCRYPT_COST);
+  return passwordWork.run(() => bcrypt.hash(password, BCRYPT_COST));
 }
 
 export async function verifyPassword(password: string, hash: string): Promise<boolean> {
-  return bcrypt.compare(password, hash);
+  return passwordWork.run(() => bcrypt.compare(password, hash));
 }
 
 export function createSecretToken(bytes = 32): string {

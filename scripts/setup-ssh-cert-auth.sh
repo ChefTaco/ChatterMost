@@ -31,7 +31,7 @@ if [[ ! -f "$KEY_PATH" ]]; then
 fi
 
 if command -v sshpass >/dev/null 2>&1 && [[ -n "${CHAT_SERVER_DEPLOY_PASSWORD:-}" ]]; then
-  sshpass -p "$CHAT_SERVER_DEPLOY_PASSWORD" ssh-copy-id -i "$KEY_PATH.pub" -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$KNOWN_HOSTS_FILE" -o HostKeyAlgorithms=ssh-ed25519 "$REMOTE"
+  SSHPASS="$CHAT_SERVER_DEPLOY_PASSWORD" sshpass -e ssh-copy-id -i "$KEY_PATH.pub" -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$KNOWN_HOSTS_FILE" -o HostKeyAlgorithms=ssh-ed25519 "$REMOTE"
 else
   echo "sshpass or CHAT_SERVER_DEPLOY_PASSWORD missing; run this copy manually if key auth is not set:" >&2
   echo "ssh-copy-id -i '$KEY_PATH.pub' '$REMOTE'" >&2

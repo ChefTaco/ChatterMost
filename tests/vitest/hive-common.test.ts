@@ -103,7 +103,7 @@ describe('Suite health and request context', () => {
       'referrer-policy': 'strict-origin-when-cross-origin',
       'permissions-policy': 'camera=(), microphone=(), geolocation=()',
       'content-security-policy':
-        "default-src 'self'; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self' ws: wss:; frame-ancestors 'none'",
+        "default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; connect-src 'self' ws://localhost:8065; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
       'x-version-id': '0.0.0-compatible',
       'x-mattermost-version': '0.0.0-compatible',
       'mattermost-server-version': '0.0.0-compatible'

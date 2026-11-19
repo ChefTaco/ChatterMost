@@ -15,6 +15,20 @@ publish a new version only for an intentional distribution change. Client and
 Hermes instructions live in the [client guide](clients.md),
 [Hermes guide](hermes-compatibility.md) and [agent runbook](../AGENTS.md#installation-runbook-for-agents).
 
+## Changes in 0.7.1
+
+Security hardening for installations reachable from the Internet. No database
+migration was added. 0.7.0 is an additional reviewed upgrade source.
+
+- Reaction names are validated. A name containing path or query characters could make the native web client send a different `DELETE` request than the one shown when another member clicked the reaction. The client also encodes the name and post ID in that request path.
+- Sign-up checks the invite before hashing the password, and sign-up, password change and password reset share the per-address sign-in budget (`RATE_LIMIT_LOGIN_SOURCE_MAX`). Password hashing runs a few at a time with a short queue; beyond that the request gets `429` instead of delaying every other request.
+- WebSocket upgrades are budgeted: 120 handshakes per minute per address, `WEBSOCKET_MAX_CONNECTIONS` (2000) open sockets, `WEBSOCKET_MAX_CONNECTIONS_PER_SOURCE` (200) per address, and at most 20 sockets per address (500 overall) that have not signed in. A socket is closed after 200 frames in 10 seconds, or 10 frames before signing in. Addresses come from the same trusted-proxy resolution as HTTP requests, so a proxy in front of the WebSocket path must set `X-Forwarded-For`.
+- Every member-writable stored field has a size limit (profile fields, channel name, header and purpose, preferences, post props, notification settings, device ID, search terms), ID lists are capped at 1000 and direct conversations at 8 people. An account stores at most 2000 preferences and uploads at most 60 files a minute. Invite and account roles accept only `system_user` and `system_admin`.
+- Editing an approved post is screened like a new post, so an edit cannot introduce held text.
+- The Content Security Policy no longer allows inline styles or connections to other hosts, and adds `object-src 'none'`, `base-uri 'none'` and `form-action 'self'`. File links open with `rel="noopener noreferrer"`.
+- Native deployment binds the application to `127.0.0.1` (override with `CHAT_SERVER_BIND_HOST`). The nginx template forwards the client address on the WebSocket path, hides its version, and limits one address to 200 concurrent requests. `scripts/backup.sh` redacts credentials inside URLs, and the SSH bootstrap no longer passes a password as a command argument.
+- Release and CI workflows pin every third-party action to a commit.
+
 ## Changes in 0.7.0
 
 - Add optional loopback-only Hive administrator provisioning on the running TLS server, using a separate purpose secret. Exact identity/native ID binding and permanent receipts make account creation atomic and unchanged retries safe. Existing accounts, messages and sessions are preserved; no Oathweave link is inferred. Authoritative lowercase usernames retain leading underscores and hyphens; receipt reads also bind the currently configured issuer, and forwarding/browser headers cannot confer maintenance authority. No SQL migration is needed. JSON stores flush the staged file and parent directory before acknowledging writes. POST acknowledges only after its audit outbox has been published; GET proves durable account ownership/audit intent without claiming publication; a publication failure keeps the original account and receipt for an exact retry. A persistence error holds subsequent reads/writes and shutdown flushing until retained storage is reviewed, preventing stale state from overwriting an uncertain commit. The reviewed upgrade sources retain every prior path and add 0.6.4.
@@ -106,8 +120,8 @@ database migration was added. Publication does not alter an installed release.
 
 | Artifact | Meaning |
 | --- | --- |
-| `ghcr.io/cheftaco/chattermost:0.6.4` | Multi-architecture application image |
-| `ghcr.io/cheftaco/chattermost-migrator:0.6.4` | Matching one-off migrator |
+| `ghcr.io/cheftaco/chattermost:0.7.1` | Multi-architecture application image |
+| `ghcr.io/cheftaco/chattermost-migrator:0.7.1` | Matching one-off migrator |
 | `VERSION-amd64`, `VERSION-arm64` image tags | Native build outputs; may exist before all release checks finish |
 | `chattermost-VERSION.tar.gz` | Allowlisted bundle: manager, Compose, manifest, installation README, Apache license and notice |
 | `release.json` | Exact app/migrator/infrastructure digests, source revision, schema/lineage, platforms and permitted upgrade sources |
@@ -115,8 +129,8 @@ database migration was added. Publication does not alter an installed release.
 | `scan-*.json`, `lifecycle-proof-*.json` | Filtered vulnerability findings and sanitized native lifecycle evidence |
 
 Install a completed [GitHub release](https://github.com/ChefTaco/ChatterMost/releases),
-not a candidate architecture tag. The latest lifecycle release is 0.6.4;
-0.3.2, 0.3.3, 0.4.1, 0.4.2, 0.4.4, 0.4.5, 0.5.1, 0.5.2 and 0.6.1 are its tested upgrade sources. The application has one writer
+not a candidate architecture tag. The latest lifecycle release is 0.7.1;
+0.3.2, 0.3.3, 0.4.1, 0.4.2, 0.4.4, 0.4.5, 0.5.1, 0.5.2, 0.6.1, 0.6.4 and 0.7.0 are its tested upgrade sources. The application has one writer
 and local WebSocket fanout. Both supported Linux architectures execute on native
 CI runners; there is no claim of emulated execution as native proof.
 
@@ -208,7 +222,7 @@ A successful push is not installation proof. Dispatch the public verification
 workflow for the exact completed release:
 
 ```bash
-gh workflow run verify-public-release.yml --ref main -f version=0.6.4
+gh workflow run verify-public-release.yml --ref main -f version=0.7.1
 ```
 
 Substitute the newly published version. Check both native fresh-install jobs,
@@ -225,7 +239,7 @@ Review the public manifest/digests and per-architecture SBOM/provenance, verify
 all downloaded checksums, and verify the archive and checksum publisher identities:
 
 ```bash
-gh attestation verify chattermost-0.6.4.tar.gz --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
+gh attestation verify chattermost-0.7.1.tar.gz --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
 gh attestation verify SHA256SUMS --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
 ```
 
