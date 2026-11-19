@@ -55,6 +55,8 @@ function runtimeValues() {
   const values = {
     NODE_ENV: 'production',
     PORT: process.env.DEPLOY_RUNTIME_PORT,
+    // nginx on the same host is the only caller; never serve plaintext on other interfaces.
+    BIND_HOST: process.env.CHAT_SERVER_BIND_HOST ?? '127.0.0.1',
     SERVER_URL: process.env.CHAT_SERVER_URL,
     DATABASE_URL: `postgresql://chattermost_app:${process.env.DEPLOY_POSTGRES_PASSWORD}@127.0.0.1:55432/chattermost?schema=public`,
     POSTGRES_PASSWORD: process.env.DEPLOY_POSTGRES_PASSWORD,

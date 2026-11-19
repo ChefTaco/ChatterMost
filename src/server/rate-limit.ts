@@ -28,6 +28,16 @@ export type AbuseControlTelemetry = {
 
 const WINDOW_MS = 60_000;
 const GENERAL_SOURCE_LIMIT = 240;
+// Routes that spend password-hashing work or test a secret share the stricter login budget.
+const CREDENTIAL_ROUTES = new Set([
+  'POST /api/v4/users/login',
+  'POST /api/v4/users',
+  'POST /api/v4/auth/oathweave/session',
+  'PUT /api/v4/users/:user_id/password',
+  'POST /admin/users/:id/reset-password'
+]);
+/** New WebSocket handshakes one address may start per minute. */
+export const WEBSOCKET_UPGRADE_SOURCE_LIMIT = 120;
 const MAX_FORWARDED_HOPS = 32;
 const REDIS_INCREMENT_SCRIPT = `
 local count = redis.call('INCR', KEYS[1])
@@ -68,6 +78,16 @@ export class AbuseControl {
     this.incrementTelemetry(`${kind}_throttles`);
     c.header('Retry-After', String(Math.max(1, Math.ceil((bucket.resetAt - now) / 1000))));
     throw new HttpAppError('api.context.rate_limit.app_error', 'Too many requests', 429);
+  }
+
+  /** Counts one event against a budget without an HTTP context; false once it is spent. */
+  public async allow(kind: CounterKind, key: string, limit: number, now: number): Promise<boolean> {
+    this.incrementTelemetry(`${kind}_checks`);
+    const bucket = await this.increment(kind, key, now);
+    if (bucket.evicted) this.incrementTelemetry('local_evictions');
+    if (bucket.count <= limit) return true;
+    this.incrementTelemetry(`${kind}_throttles`);
+    return false;
   }
 
   public recordProxyDecision(decision: ProxyDecision): void {
@@ -132,19 +152,23 @@ export function rateLimit(env: AppEnv, abuseControl: AbuseControl): MiddlewareHa
   return async (c, next) => {
     const now = Date.now();
     const scope = routePath(c, -1) || '*';
-    const loginRequest = c.req.method === 'POST' && scope === '/api/v4/users/login';
-    const identity = resolveClientIdentity(c, trustedProxies);
+    const loginRequest = CREDENTIAL_ROUTES.has(`${c.req.method} ${scope}`);
+    const identity = resolveClientIdentity(c.env?.incoming?.socket.remoteAddress, c.req.header('x-forwarded-for'), trustedProxies);
     abuseControl.recordProxyDecision(identity.decision);
     await abuseControl.enforce(c, 'source', `${c.req.method}:${scope}:${identity.address}`, loginRequest ? env.RATE_LIMIT_LOGIN_SOURCE_MAX : GENERAL_SOURCE_LIMIT, now);
     c.set('rateLimitAccount', async (account) => abuseControl.enforce(c, 'account', normalizeAccount(account), env.RATE_LIMIT_LOGIN_ACCOUNT_MAX, Date.now()));
+    c.set('rateLimitActor', async (action, actorId, limit) => abuseControl.enforce(c, 'account', `${action}\u0000${actorId}`, limit, Date.now()));
     await next();
   };
 }
 
-function resolveClientIdentity(c: Context<AppHonoEnv>, trustedProxies: TrustedProxySet): { address: string; decision: ProxyDecision } {
-  const peerAddress = normalizeAddress(c.env?.incoming?.socket.remoteAddress) ?? 'local';
+/**
+ * The address a request is attributed to: the socket peer, or, when that peer is a trusted
+ * proxy, the nearest untrusted hop it reported. Shared by HTTP requests and WebSocket upgrades.
+ */
+export function resolveClientIdentity(remoteAddress: string | null | undefined, forwardedHeader: string | undefined, trustedProxies: TrustedProxySet): { address: string; decision: ProxyDecision } {
+  const peerAddress = normalizeAddress(remoteAddress) ?? 'local';
   if (!trustedProxies.has(peerAddress)) return { address: peerAddress, decision: 'direct_untrusted' };
-  const forwardedHeader = c.req.header('x-forwarded-for');
   if (forwardedHeader === undefined) return { address: peerAddress, decision: 'trusted_without_forwarding' };
   const forwarded = forwardedHeader.split(',').map((value) => normalizeAddress(value.trim()));
   if (forwarded.length === 0 || forwarded.length > MAX_FORWARDED_HOPS || forwarded.some((value) => value === null)) return { address: peerAddress, decision: 'trusted_invalid_forwarding' };
