@@ -15,6 +15,13 @@ publish a new version only for an intentional distribution change. Client and
 Hermes instructions live in the [client guide](clients.md),
 [Hermes guide](hermes-compatibility.md) and [agent runbook](../AGENTS.md#installation-runbook-for-agents).
 
+## Changes in 0.7.2
+
+Security update for the migrator image. No database migration was added. 0.7.1 is
+an additional reviewed upgrade source.
+
+- Force `effect` to 3.22.1 with an npm override, fixing CVE-2026-121707 (regular expression denial of service in `Schema.TemplateLiteral`). `prisma` 6.19.3 pins `effect` 3.21.0 through `@prisma/config`, and no Prisma 6 release raises it. Its only consumer is the Prisma CLI's configuration loader in the migrator image, which runs migrations from files shipped in that image and handles no requests. The application image did not contain the affected package; it is rebuilt as 0.7.2 with unchanged behavior.
+
 ## Changes in 0.7.1
 
 Security hardening for installations reachable from the Internet. No database
@@ -120,8 +127,8 @@ database migration was added. Publication does not alter an installed release.
 
 | Artifact | Meaning |
 | --- | --- |
-| `ghcr.io/cheftaco/chattermost:0.7.1` | Multi-architecture application image |
-| `ghcr.io/cheftaco/chattermost-migrator:0.7.1` | Matching one-off migrator |
+| `ghcr.io/cheftaco/chattermost:0.7.2` | Multi-architecture application image |
+| `ghcr.io/cheftaco/chattermost-migrator:0.7.2` | Matching one-off migrator |
 | `VERSION-amd64`, `VERSION-arm64` image tags | Native build outputs; may exist before all release checks finish |
 | `chattermost-VERSION.tar.gz` | Allowlisted bundle: manager, Compose, manifest, installation README, Apache license and notice |
 | `release.json` | Exact app/migrator/infrastructure digests, source revision, schema/lineage, platforms and permitted upgrade sources |
@@ -129,8 +136,8 @@ database migration was added. Publication does not alter an installed release.
 | `scan-*.json`, `lifecycle-proof-*.json` | Filtered vulnerability findings and sanitized native lifecycle evidence |
 
 Install a completed [GitHub release](https://github.com/ChefTaco/ChatterMost/releases),
-not a candidate architecture tag. The latest lifecycle release is 0.7.1;
-0.3.2, 0.3.3, 0.4.1, 0.4.2, 0.4.4, 0.4.5, 0.5.1, 0.5.2, 0.6.1, 0.6.4 and 0.7.0 are its tested upgrade sources. The application has one writer
+not a candidate architecture tag. The latest lifecycle release is 0.7.2;
+0.3.2, 0.3.3, 0.4.1, 0.4.2, 0.4.4, 0.4.5, 0.5.1, 0.5.2, 0.6.1, 0.6.4, 0.7.0 and 0.7.1 are its tested upgrade sources. The application has one writer
 and local WebSocket fanout. Both supported Linux architectures execute on native
 CI runners; there is no claim of emulated execution as native proof.
 
@@ -222,7 +229,7 @@ A successful push is not installation proof. Dispatch the public verification
 workflow for the exact completed release:
 
 ```bash
-gh workflow run verify-public-release.yml --ref main -f version=0.7.1
+gh workflow run verify-public-release.yml --ref main -f version=0.7.2
 ```
 
 Substitute the newly published version. Check both native fresh-install jobs,
@@ -239,7 +246,7 @@ Review the public manifest/digests and per-architecture SBOM/provenance, verify
 all downloaded checksums, and verify the archive and checksum publisher identities:
 
 ```bash
-gh attestation verify chattermost-0.7.1.tar.gz --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
+gh attestation verify chattermost-0.7.2.tar.gz --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
 gh attestation verify SHA256SUMS --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
 ```
 
