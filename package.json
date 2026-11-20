@@ -1,6 +1,6 @@
 {
   "name": "chattermost",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "private": true,
   "type": "module",
   "description": "Mattermost-compatible supervised chat facade for Hermes Agent and web users.",
@@ -62,6 +62,7 @@
   "overrides": {
     "brace-expansion": "^5.0.9",
     "deepmerge-ts": "^8.0.2",
+    "effect": "3.22.1",
     "postcss": "^8.5.18",
     "minimatch": "11.0.3"
   },
