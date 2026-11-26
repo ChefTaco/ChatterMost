@@ -15,9 +15,13 @@ publish a new version only for an intentional distribution change. Client and
 Hermes instructions live in the [client guide](clients.md),
 [Hermes guide](hermes-compatibility.md) and [agent runbook](../AGENTS.md#installation-runbook-for-agents).
 
-## Unreleased
+## Changes in 0.9.0
 
-Changes on `main` since 0.8.0. They ship in the next release.
+Released 2026-11-26. **Read the upgrade notes before upgrading:** the first
+sweep after the upgrade permanently removes attachment files of posts deleted
+earlier and old unattached uploads. 0.9.0 upgrades only from the 0.8.0 stepping
+stone; installations on 0.3.2 to 0.7.2 upgrade to 0.8.0 first. No database
+migration was added and the stored layout is unchanged.
 
 - **Mattermost import works on real bulk exports.** Posts keep their export
   author and timestamp, replies stay in their threads, reactions and direct
@@ -75,35 +79,46 @@ Changes on `main` since 0.8.0. They ship in the next release.
   and channel unless `PUSH_NOTIFICATION_CONTENTS=full`. See
   [mobile push](clients.md#mobile-push).
 
-### Upgrade notes (unreleased)
+### Upgrade notes for 0.9.0
 
-- The import helper no longer accepts `--token`. Set `CHATTERMOST_IMPORT_TOKEN`
-  or pass `--token-file PATH` (mode 600).
+> **Warning: the first sweep after upgrading (about a minute after startup)
+> permanently removes attachment files of posts deleted earlier, and uploads
+> older than a week that no post references.** Set `ORPHAN_UPLOAD_GRACE_HOURS=0`
+> before upgrading to keep both. Attachments of posts deleted after the upgrade
+> are removed at the next sweep whatever the setting; take a backup first if you
+> may need any of them. Rolling back does not bring removed files back.
+
+- **Upgrade from 0.8.0 only.** Installations on 0.3.2 to 0.7.2 upgrade to the
+  0.8.0 stepping stone first (read its upgrade notes below), then to 0.9.0. See
+  [upgrade paths](upgrading.md#supported-paths).
+- **Post `order` is newest first** in channel history, thread, search, pinned
+  and flagged responses. Integrations that read `order` as oldest first must
+  sort by `create_at` (the native web UI and HiveXUI already do). `before`/`after`
+  requests now honour `page` relative to the pivot.
+- **The container health check is now a readiness check.** It calls
+  `/health/ready`, so a container whose database stops answering, or whose
+  persistence is on hold, is reported unhealthy instead of healthy.
+  `/api/v4/system/ping` is unchanged.
+- **The import helper no longer accepts `--token`.** Set
+  `CHATTERMOST_IMPORT_TOKEN` or pass `--token-file PATH` (mode 600).
 - `POST /api/v4/import/mattermost` reuses an existing channel with the same name
   in the team instead of creating a second one, and accepts requests up to
   16 MiB. Its response keeps the earlier fields and adds per-batch counts.
 - `POST /api/v4/webhooks/incoming` now rejects a missing or archived channel and
   a channel the creating admin is not a member of. Existing webhooks keep working.
-- A container whose database stops answering is now reported unhealthy
-  instead of healthy. `/api/v4/system/ping` is unchanged.
-
-> **The first sweep after upgrading (about a minute after startup) permanently
-> removes attachment files of posts deleted earlier, and uploads older than a
-> week that no post references.** Set `ORPHAN_UPLOAD_GRACE_HOURS=0` before
-> upgrading to keep both. Attachments of posts deleted after the upgrade are
-> removed at the next sweep whatever the setting; take a backup first if you
-> may need any of them.
-
-- Check `channel.retention_purged` audit entries and channel limits on 0.8.0
+- Only system admins can set channel retention limits. Check
+  `channel.retention_purged` audit entries and channel limits on 0.8.0
   installations: a limit set by a non-admin through the patch API stays in
   place after the upgrade until a system admin changes it.
 - Threads with recent replies are now kept whole, so their older posts are
   purged later than in 0.8.0.
-- Integrations that read `order` as oldest first must sort by `create_at` (the
-  native web UI and HiveXUI already do). `before`/`after` requests now honour
-  `page` relative to the pivot.
-- Installations on 0.3.2 to 0.7.2 upgrade to 0.8.0 first, then to the next
-  release. See [upgrade paths](upgrading.md#supported-paths).
+
+**Migrations and rollback.** 0.9.0 adds no Prisma migration and does not change
+the stored layout, so the manager's `rollback` to 0.8.0 is a compatible
+rollback. Removed attachment files and purged posts are not restored by it. If
+you switch to `PASSWORD_HASHING=scrypt`, accounts whose hash was replaced cannot
+sign in with a password on 0.8.0 until it is reset; keep the bcrypt default
+until a rollback is no longer planned (see [deployment](deployment.md)).
 
 ## Changes in 0.8.0
 
@@ -269,8 +284,8 @@ database migration was added. Publication does not alter an installed release.
 
 | Artifact | Meaning |
 | --- | --- |
-| `ghcr.io/cheftaco/chattermost:0.8.0` | Multi-architecture application image |
-| `ghcr.io/cheftaco/chattermost-migrator:0.8.0` | Matching one-off migrator |
+| `ghcr.io/cheftaco/chattermost:0.9.0` | Multi-architecture application image |
+| `ghcr.io/cheftaco/chattermost-migrator:0.9.0` | Matching one-off migrator |
 | `VERSION-amd64`, `VERSION-arm64` image tags | Native build outputs; may exist before all release checks finish |
 | `chattermost-VERSION.tar.gz` | Allowlisted bundle: manager, Compose, manifest, installation README, Apache license and notice |
 | `release.json` | Exact app/migrator/infrastructure digests, source revision, schema/lineage, platforms and permitted upgrade sources |
@@ -278,8 +293,8 @@ database migration was added. Publication does not alter an installed release.
 | `scan-*.json`, `lifecycle-proof-*.json` | Filtered vulnerability findings and sanitized native lifecycle evidence |
 
 Install a completed [GitHub release](https://github.com/ChefTaco/ChatterMost/releases),
-not a candidate architecture tag. The latest lifecycle release is 0.8.0;
-0.3.2, 0.3.3, 0.4.1, 0.4.2, 0.4.4, 0.4.5, 0.5.1, 0.5.2, 0.6.1, 0.6.4, 0.7.0, 0.7.1 and 0.7.2 are its tested upgrade sources. The application has one writer
+not a candidate architecture tag. The latest lifecycle release is 0.9.0;
+0.8.0, the stepping stone, is its tested upgrade source. The application has one writer
 and local WebSocket fanout. Both supported Linux architectures execute on native
 CI runners; there is no claim of emulated execution as native proof.
 
@@ -375,7 +390,7 @@ A successful push is not installation proof. Dispatch the public verification
 workflow for the exact completed release:
 
 ```bash
-gh workflow run verify-public-release.yml --ref main -f version=0.8.0
+gh workflow run verify-public-release.yml --ref main -f version=0.9.0
 ```
 
 Substitute the newly published version. Check both native fresh-install jobs,
@@ -392,7 +407,7 @@ Review the public manifest/digests and per-architecture SBOM/provenance, verify
 all downloaded checksums, and verify the archive and checksum publisher identities:
 
 ```bash
-gh attestation verify chattermost-0.8.0.tar.gz --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
+gh attestation verify chattermost-0.9.0.tar.gz --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
 gh attestation verify SHA256SUMS --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
 ```
 

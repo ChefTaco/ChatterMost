@@ -11,13 +11,13 @@ is process-local. Redis is optional and provides distributed abuse counters only
 ## Install a release
 
 The current published lifecycle release is
-[0.8.0](https://github.com/ChefTaco/ChatterMost/releases/tag/v0.8.0). Choose the exact
+[0.9.0](https://github.com/ChefTaco/ChatterMost/releases/tag/v0.9.0). Choose the exact
 version you intend to install. In a fresh directory **outside a Git worktree**,
 download the bundle and checksum manifest from the same release:
 
 ```bash
 set -eu
-VERSION=0.8.0
+VERSION=0.9.0
 mkdir "chattermost-download-$VERSION"
 cd "chattermost-download-$VERSION"
 curl --fail --location --remote-name "https://github.com/ChefTaco/ChatterMost/releases/download/v$VERSION/chattermost-$VERSION.tar.gz"
@@ -112,8 +112,8 @@ Both public packages support `linux/amd64` and `linux/arm64`:
 Public pulls need no registry login. The version tags have no leading `v`:
 
 ```bash
-docker pull ghcr.io/cheftaco/chattermost:0.8.0
-docker pull ghcr.io/cheftaco/chattermost-migrator:0.8.0
+docker pull ghcr.io/cheftaco/chattermost:0.9.0
+docker pull ghcr.io/cheftaco/chattermost-migrator:0.9.0
 ```
 
 Pulling these tags alone is not an installation. The bundle pins their immutable
@@ -192,7 +192,7 @@ state, private history, logs or screenshots enter release bundles or build input
 Follow the complete
 [upgrade and recovery procedure](https://github.com/ChefTaco/ChatterMost/blob/main/docs/upgrading.md)
 for supported source versions, prechecks, failure decisions and point-in-time
-restoration semantics. The reviewed upgrades into 0.8.0 are from 0.3.2, 0.3.3, 0.4.1, 0.4.2, 0.4.4, 0.4.5, 0.5.1, 0.5.2, 0.6.1, 0.6.4, 0.7.0, 0.7.1 and 0.7.2.
+restoration semantics. The reviewed upgrade into 0.9.0 is from the 0.8.0 stepping stone; installations on 0.3.2 to 0.7.2 upgrade to 0.8.0 first.
 Native imports follow a separate
 [migration procedure](https://github.com/ChefTaco/ChatterMost/blob/main/docs/container-migration.md).
 
@@ -201,14 +201,25 @@ interface provides `start`, `status`, `upgrade VERSION`, `backup`,
 `restore BACKUP_DIRECTORY --confirm-database-replacement`, `rollback`, and
 `recover`. Setup remains a one-time operation; it refuses existing directories.
 
-For an upgrade from the published 0.3.2, 0.3.3, 0.4.1, 0.4.2, 0.4.4, 0.4.5, 0.5.1, 0.5.2, 0.6.1, 0.6.4, 0.7.0, 0.7.1 or 0.7.2 releases, download and verify the
-0.8.0 bundle as above, then run its manager against the existing installation:
+For an upgrade from the published 0.8.0 release, download and verify the
+0.9.0 bundle as above, then run its manager against the existing installation:
 
 ```bash
-./chattermost-0.8.0/chattermost --directory /srv/chattermost upgrade 0.8.0
+./chattermost-0.9.0/chattermost --directory /srv/chattermost upgrade 0.9.0
 ```
 
-**Before upgrading to 0.8.0:** 0.8.0 enforces channel retention limits, including
+**Before upgrading to 0.9.0:** about a minute after startup, the first sweep
+permanently removes attachment files of posts deleted earlier and uploads older
+than a week that no post references. Set `ORPHAN_UPLOAD_GRACE_HOURS=0` before
+upgrading to keep both, and take a backup first. Read the other
+[0.9.0 upgrade notes](https://github.com/ChefTaco/ChatterMost/blob/main/docs/releases.md#upgrade-notes-for-090)
+too: post `order` is newest first, the container health check is now readiness,
+and the import helper no longer takes `--token`.
+
+An installation on 0.3.2 to 0.7.2 first upgrades to 0.8.0 with the verified 0.8.0
+bundle and manager, then to 0.9.0.
+
+**When upgrading to the 0.8.0 stepping stone:** 0.8.0 enforces channel retention limits, including
 values saved through the channel Policy form by earlier releases that were never
 applied. About a minute after the upgrade it permanently deletes older posts and
 files in those channels. List and clear unwanted limits first, as described in the
@@ -217,8 +228,9 @@ files in those channels. List and clear unwanted limits first, as described in t
 After successful activation the new manager is installed in the installation
 root. Run `upgrade` from the directory containing the extracted bundle in that
 example. Keep the new manager when rolling the application back to 0.3.2 or 0.3.3.
-Release policy explicitly permits 0.3.2, 0.3.3, 0.4.1, 0.4.2, 0.4.4, 0.4.5, 0.5.1, 0.5.2, 0.6.1, 0.6.4, 0.7.0, 0.7.1 and 0.7.2 → 0.8.0. Older 0.2.3
-installations must first use the historical 0.3.2 release; a direct 0.2.3 → 0.8.0
+Release policy explicitly permits 0.8.0 → 0.9.0. Installations on 0.3.2 to 0.7.2
+must first upgrade to 0.8.0, and older 0.2.3 installations must first use the
+historical 0.3.2 release; a direct 0.2.3 → 0.9.0 or 0.7.2 → 0.9.0
 upgrade is unsupported. Unsupported paths, mutable version names,
 changed published versions, unexpected archive members, altered cached files,
 image/manifest schema mismatches and infrastructure image changes fail closed.
@@ -293,7 +305,7 @@ use the installed manager for startup/readiness and drain the app before stoppin
 Postgres. A deliberately stopped app needs an explicit `start` to resume.
 
 There is no `stop`, `restart`, `configure` or secret-rotation manager subcommand in
-0.8.0. `start` on an already-running container verifies it; it does not force an app
+0.9.0. `start` on an already-running container verifies it; it does not force an app
 recreation. Apply protected configuration changes through a planned operator
 restart/recreation, retaining project identity and the pinned images. Database
 password, signing-key and token-key rotation require coordinated procedures;
