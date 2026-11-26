@@ -115,6 +115,7 @@ export type ServiceBundle = {
   reactions: ReactionService;
   customEmoji: CustomEmojiService;
   files: FileService;
+  retention: RetentionService;
   profileImages: ProfileImageService;
   preferences: PreferenceService;
   statuses: StatusService;
@@ -1644,19 +1645,52 @@ export class ChannelService {
     return channel;
   }
 
+  /** The channel's agent policy as the admin UI edits it, including the enforced retention limit. */
+  public agentPolicy(channelId: string): JsonRecord {
+    const channel = this.getChannel(channelId);
+    return { ...channel.agentPolicy, retention_days: channel.retentionDays };
+  }
+
   public async setAgentPolicy(channelId: string, policy: JsonRecord, actor: UserRecord): Promise<ChannelRecord> {
     requireAdmin(actor);
+    // `retention_days` is the channel's enforced retention limit, not free-form agent policy:
+    // validate it and store it on the channel. Omitting it leaves the current limit unchanged.
+    const { retention_days: retentionInput, ...agentPolicy } = policy;
+    const hasRetention = Object.prototype.hasOwnProperty.call(policy, 'retention_days');
+    const retentionDays = retentionInput === null || retentionInput === undefined ? null : effectiveRetentionDays(retentionInput);
+    if (hasRetention && retentionInput !== null && retentionInput !== undefined && retentionDays === null) {
+      throw badRequest(`retention_days must be a whole number of days from 1 to ${MAX_RETENTION_DAYS}`);
+    }
     const updated = await this.store.write((state) => {
       const channel = state.channels.find((candidate) => candidate.id === channelId);
       if (channel === undefined) {
         throw notFound('Channel');
       }
-      channel.agentPolicy = policy;
+      channel.agentPolicy = agentPolicy;
+      if (hasRetention) channel.retentionDays = retentionDays;
       channel.updateAt = nowMs();
       return channel;
     });
     await this.hub.broadcast('channel_updated', { channel_id: channelId }, { channel_id: channelId });
     return updated;
+  }
+
+  /**
+   * Earlier releases saved the admin UI's "Retention days" inside the agent policy, where nothing
+   * read it. Move a valid value onto the channel, where it is enforced, unless a limit is already set.
+   */
+  public async migrateLegacyRetention(): Promise<void> {
+    const pending = this.store.read((state) => state.channels.some((channel) => Object.prototype.hasOwnProperty.call(channel.agentPolicy, 'retention_days')));
+    if (!pending) return;
+    await this.store.write((state) => {
+      for (const channel of state.channels) {
+        if (!Object.prototype.hasOwnProperty.call(channel.agentPolicy, 'retention_days')) continue;
+        const { retention_days: legacy, ...rest } = channel.agentPolicy;
+        const days = effectiveRetentionDays(legacy);
+        if (channel.retentionDays === null && days !== null) channel.retentionDays = days;
+        channel.agentPolicy = rest;
+      }
+    });
   }
 }
 
@@ -1838,6 +1872,22 @@ export class PostService {
   public listChannelPosts(channelId: string, actor: UserRecord): PostRecord[] {
     this.channels.assertMember(channelId, actor.id);
     return this.store.read((state) => state.posts.filter((post) => post.channelId === channelId && post.deleteAt === 0 && isLifecycleVisibleTo(post, actor)));
+  }
+
+  /**
+   * Every post in the channel created, edited or deleted after `since`, newest first and capped at
+   * `limit`. Deleted posts are included as redacted tombstones so a reconnecting client can drop them.
+   */
+  public channelChangesSince(channelId: string, actor: UserRecord, since: number, limit = 1000): PostRecord[] {
+    this.channels.assertMember(channelId, actor.id);
+    return this.store.read((state) =>
+      state.posts
+        .map((post, index) => ({ post, index }))
+        .filter(({ post }) => post.channelId === channelId && isLifecycleVisibleTo(post, actor) && (post.createAt > since || post.updateAt > since || post.deleteAt > since))
+        .sort((a, b) => b.post.createAt - a.post.createAt || b.index - a.index)
+        .slice(0, limit)
+        .map(({ post }) => (post.deleteAt > 0 ? redactDeletedPost(post) : post))
+    );
   }
 
   public thread(rootId: string, actor: UserRecord): PostRecord[] {
@@ -2057,6 +2107,7 @@ export class PostService {
         throw notFound('Post');
       }
       post.deleteAt = nowMs();
+      post.updateAt = post.deleteAt;
       post.deleteBy = actor.id;
       post.lifecycleState = 'deleted';
       return post;
@@ -2066,15 +2117,19 @@ export class PostService {
     return deleted;
   }
 
+  /** The newest 100 matching posts. */
   public search(teamId: string | null, terms: string, actor: UserRecord): PostRecord[] {
     const needle = terms.toLowerCase();
     const channelIds = new Set(this.channels.listForUser(actor.id, teamId ?? undefined).map((channel) => channel.id));
     return this.store.read((state) =>
       state.posts
-        .filter((post) => channelIds.has(post.channelId) && post.deleteAt === 0)
-        .filter((post) => isLifecycleVisibleTo(post, actor))
-        .filter((post) => post.message.toLowerCase().includes(needle))
+        .map((post, index) => ({ post, index }))
+        .filter(({ post }) => channelIds.has(post.channelId) && post.deleteAt === 0)
+        .filter(({ post }) => isLifecycleVisibleTo(post, actor))
+        .filter(({ post }) => post.message.toLowerCase().includes(needle))
+        .sort((a, b) => b.post.createAt - a.post.createAt || b.index - a.index)
         .slice(0, 100)
+        .map(({ post }) => post)
     );
   }
 
@@ -2370,6 +2425,131 @@ export class FileService {
     return {
       link: `/files/${file.id}/public?h=${encodeURIComponent(file.storageKey.slice(0, 12))}`
     };
+  }
+}
+
+const DAY_MS = 86_400_000;
+/** Upper bound accepted by the channel APIs (100 years). */
+export const MAX_RETENTION_DAYS = 36_500;
+
+export type RetentionSweepResult = {
+  channels: number;
+  posts: number;
+  files: number;
+};
+
+/** A retention limit only applies when it is a whole number of days within the accepted range. */
+export function effectiveRetentionDays(value: unknown): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= MAX_RETENTION_DAYS ? value : null;
+}
+
+/**
+ * Enforces channel `retention_days`. Posts older than the limit are removed together with their
+ * edit history, reactions and attachments; uploads in the channel that are older than the limit and
+ * not attached to a kept post are removed too. Channels without a limit keep everything. Each purge
+ * writes one audit entry per channel in the same state write, and file bytes are removed afterwards.
+ */
+export class RetentionService {
+  private running: Promise<RetentionSweepResult> | null = null;
+
+  public constructor(
+    private readonly store: StateStore,
+    private readonly env: AppEnv
+  ) {}
+
+  /** Runs one sweep; concurrent callers share the sweep already in progress. */
+  public sweep(now: number = nowMs()): Promise<RetentionSweepResult> {
+    if (this.running !== null) return this.running;
+    const running = this.purge(now).finally(() => {
+      this.running = null;
+    });
+    this.running = running;
+    return running;
+  }
+
+  /** Resolves once any sweep in progress has finished. */
+  public async idle(): Promise<void> {
+    await this.running?.catch(() => undefined);
+  }
+
+  private async purge(now: number): Promise<RetentionSweepResult> {
+    const empty: RetentionSweepResult = { channels: 0, posts: 0, files: 0 };
+    if (!this.store.read((state) => state.channels.some((channel) => effectiveRetentionDays(channel.retentionDays) !== null))) {
+      return empty;
+    }
+    const purged = await this.store.write((state) => {
+      const cutoffs = new Map<string, { cutoff: number; days: number }>();
+      for (const channel of state.channels) {
+        const days = effectiveRetentionDays(channel.retentionDays);
+        if (days !== null) cutoffs.set(channel.id, { cutoff: now - days * DAY_MS, days });
+      }
+      const expired = (record: { channelId: string; createAt: number }): boolean => {
+        const policy = cutoffs.get(record.channelId);
+        return policy !== undefined && record.createAt < policy.cutoff;
+      };
+      const expiredPostIds = new Set<string>();
+      const expiredAttachmentIds = new Set<string>();
+      const keptAttachmentIds = new Set<string>();
+      const purgedRepliesByRoot = new Map<string, number>();
+      for (const post of state.posts) {
+        if (expired(post)) {
+          expiredPostIds.add(post.id);
+          for (const fileId of post.fileIds) expiredAttachmentIds.add(fileId);
+          if (post.rootId !== '') purgedRepliesByRoot.set(post.rootId, (purgedRepliesByRoot.get(post.rootId) ?? 0) + 1);
+        } else {
+          for (const fileId of post.fileIds) keptAttachmentIds.add(fileId);
+        }
+      }
+      const expiredFiles = state.files.filter(
+        (file) => cutoffs.has(file.channelId) && !keptAttachmentIds.has(file.id) && (expiredAttachmentIds.has(file.id) || expired(file))
+      );
+      if (expiredPostIds.size === 0 && expiredFiles.length === 0) return { result: empty, storageKeys: [] as string[] };
+      const expiredFileIds = new Set(expiredFiles.map((file) => file.id));
+      const perChannel = new Map<string, { posts: number; files: number }>();
+      const count = (channelId: string, field: 'posts' | 'files'): void => {
+        const entry = perChannel.get(channelId) ?? { posts: 0, files: 0 };
+        entry[field] += 1;
+        perChannel.set(channelId, entry);
+      };
+      for (const post of state.posts) if (expiredPostIds.has(post.id)) count(post.channelId, 'posts');
+      for (const file of expiredFiles) count(file.channelId, 'files');
+      state.posts = state.posts.filter((post) => !expiredPostIds.has(post.id));
+      for (const post of state.posts) {
+        const removedReplies = purgedRepliesByRoot.get(post.id);
+        if (removedReplies !== undefined) post.replyCount = Math.max(0, post.replyCount - removedReplies);
+      }
+      state.postEditHistory = state.postEditHistory.filter((entry) => !expiredPostIds.has(entry.postId));
+      state.reactions = state.reactions.filter((reaction) => !expiredPostIds.has(reaction.postId));
+      state.files = state.files.filter((file) => !expiredFileIds.has(file.id));
+      for (const [channelId, counts] of perChannel) {
+        const policy = cutoffs.get(channelId);
+        appendAuditLog(state, {
+          actorUserId: null,
+          action: 'channel.retention_purged',
+          targetId: channelId,
+          metadata: { retention_days: policy?.days ?? null, cutoff: policy?.cutoff ?? null, posts: counts.posts, files: counts.files }
+        });
+      }
+      return {
+        result: { channels: perChannel.size, posts: expiredPostIds.size, files: expiredFiles.length },
+        storageKeys: expiredFiles.map((file) => file.storageKey)
+      };
+    });
+    const root = resolveDataPath(this.env.FILE_STORAGE_PATH);
+    let removalFailures = 0;
+    for (const storageKey of purged.storageKeys) {
+      // Storage keys are generated server-side; refuse anything that would leave the storage root.
+      if (storageKey.length === 0 || path.basename(storageKey) !== storageKey) continue;
+      try {
+        await rm(path.join(root, storageKey), { force: true });
+      } catch {
+        removalFailures += 1;
+      }
+    }
+    if (removalFailures > 0) {
+      process.stderr.write(JSON.stringify({ level: 'error', message: 'retention_file_removal_failed', count: removalFailures }) + '\n');
+    }
+    return purged.result;
   }
 }
 
@@ -3070,15 +3250,55 @@ export class AgentService {
     return binding;
   }
 
+  /**
+   * Reports what the enforced rules would do for an agent (or user) posting in a channel: the channel
+   * must exist and not be archived, and the poster must be a member. It also reports who would see
+   * the post, the supervision mode and the channel retention limit. Agent registry permissions,
+   * routing, memory flags and allowlists are recorded but not enforced, so they never change the result.
+   */
   public policySimulation(actor: UserRecord, input: JsonRecord): JsonRecord {
     requireAdmin(actor);
-    return {
-      allowed: true,
-      input,
-      explanation: 'Simulation uses current channel visibility, agent permissions, no-memory flags, retention policy, and user allowlists.',
-      affected_user_ids: [],
-      visible_channel_ids: []
-    };
+    const channelId = typeof input.channel_id === 'string' ? input.channel_id : '';
+    const agentRef = typeof input.agent_id === 'string' ? input.agent_id : '';
+    const userRef = typeof input.user_id === 'string' ? input.user_id : '';
+    return this.store.read((state) => {
+      const reasons: string[] = [];
+      const agent = agentRef === '' ? undefined : state.agentIdentities.find((candidate) => candidate.id === agentRef || candidate.username === agentRef);
+      if (agentRef !== '' && agent === undefined) reasons.push('Agent is not registered');
+      if (agent !== undefined && agent.userId === null) reasons.push('Agent has no linked account');
+      const posterId = agent?.userId ?? (userRef === '' ? null : userRef);
+      const poster = posterId === null ? undefined : state.users.find((user) => user.id === posterId);
+      if (posterId !== null && (poster === undefined || poster.deleteAt > 0)) reasons.push('Posting account is missing or deactivated');
+      const channel = channelId === '' ? undefined : state.channels.find((candidate) => candidate.id === channelId);
+      if (channelId === '') reasons.push('No channel selected');
+      else if (channel === undefined) reasons.push('Channel does not exist');
+      else if (channel.deleteAt > 0) reasons.push('Channel is archived');
+      const memberIds = channel === undefined ? [] : state.channelMembers.filter((member) => member.channelId === channel.id).map((member) => member.userId);
+      const activeMemberIds = memberIds.filter((userId) => state.users.some((user) => user.id === userId && user.deleteAt === 0));
+      if (channel !== undefined && posterId !== null && !memberIds.includes(posterId)) reasons.push('Posting account is not a channel member');
+      const visibleChannelIds =
+        channel !== undefined
+          ? [channel.id]
+          : posterId === null
+            ? []
+            : state.channelMembers.filter((member) => member.userId === posterId).map((member) => member.channelId).filter((id) => state.channels.some((candidate) => candidate.id === id && candidate.deleteAt === 0));
+      const supervisionMode = state.supervisionPolicy.mode;
+      const retentionDays = channel === undefined ? null : effectiveRetentionDays(channel.retentionDays);
+      return {
+        allowed: reasons.length === 0,
+        input,
+        reasons,
+        explanation:
+          'Checks the enforced rules: the channel exists and is not archived, and the posting account is an active channel member. ' +
+          `Supervision mode is ${supervisionMode}${supervisionMode === 'pre_moderation' ? ', so new posts wait for approval' : ''}. ` +
+          (retentionDays === null ? 'The channel keeps posts indefinitely. ' : `The channel removes posts after ${retentionDays} days. `) +
+          'Agent registry permissions, routing, memory flags and allowlists are recorded but not enforced, so they do not affect the result.',
+        affected_user_ids: activeMemberIds,
+        visible_channel_ids: visibleChannelIds,
+        supervision_mode: supervisionMode,
+        retention_days: retentionDays
+      };
+    });
   }
 }
 
@@ -3438,6 +3658,7 @@ export function createServices(store: StateStore, env: AppEnv): ServiceBundle {
   const reactions = new ReactionService(store, posts, channels, auditLog, hub);
   const customEmoji = new CustomEmojiService(store, auditLog);
   const files = new FileService(store, env, channels, auditLog);
+  const retention = new RetentionService(store, env);
   const profileImages = new ProfileImageService(store, env, users, auditLog, hub);
   const preferences = new PreferenceService(store, hub);
   const statuses = new StatusService(store, hub);
@@ -3460,6 +3681,7 @@ export function createServices(store: StateStore, env: AppEnv): ServiceBundle {
     reactions,
     customEmoji,
     files,
+    retention,
     profileImages,
     preferences,
     statuses,
@@ -3482,6 +3704,7 @@ export async function bootstrap(services: ServiceBundle): Promise<void> {
   await services.files.repairImageDimensions();
   await services.files.repairContentHashes();
   await services.posts.repairFileMetadata();
+  await services.channels.migrateLegacyRetention();
 }
 
 export function requireAdmin(user: UserRecord): void {
@@ -3497,6 +3720,11 @@ export function isAdmin(user: UserRecord): boolean {
 // Posts held by supervision (submitted/quarantined/rejected) must not leak to
 // other members while they are pending or blocked. The post author still sees
 // their own held post, and system admins see everything for moderation.
+/** A deleted post as reported to clients: identity and timestamps only, never its former content. */
+function redactDeletedPost(post: PostRecord): PostRecord {
+  return { ...post, message: '', props: {}, hashtags: '', fileIds: [], metadata: {} };
+}
+
 function isLifecycleVisibleTo(post: PostRecord, actor: UserRecord): boolean {
   if (post.lifecycleState === 'approved' || post.lifecycleState === 'deleted') {
     return true;

@@ -54,6 +54,17 @@ Admins can change privacy-related settings from the System panel:
 - Custom emoji.
 - Bot account creation.
 
+## Message retention
+
+Channels keep messages indefinitely unless an admin sets **Retention days** on the
+channel. With a limit, an hourly job permanently deletes posts older than the
+limit, together with their edit history, reactions and attachment files, and
+deletes old uploads in the channel that no kept post references. Each purge is
+recorded in the audit log (`channel.retention_purged`) with counts only.
+Deleted (not purged) posts keep their content in storage until retention or an
+operator removes them; clients only see a tombstone. Backups keep whatever
+existed at their recovery point.
+
 ## Container configuration, logs and recovery data
 
 Runtime privacy is separate from [contribution/publication privacy](../PRIVACY.md).
