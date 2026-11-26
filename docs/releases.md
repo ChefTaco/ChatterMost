@@ -15,6 +15,24 @@ publish a new version only for an intentional distribution change. Client and
 Hermes instructions live in the [client guide](clients.md),
 [Hermes guide](hermes-compatibility.md) and [agent runbook](../AGENTS.md#installation-runbook-for-agents).
 
+## Unreleased
+
+- **Deleting a thread's root deletes its replies**, as upstream does. When the
+  root's author or an admin deletes it, every reply in the thread is deleted too,
+  including replies by other people. Their attachments follow the usual
+  deleted-attachment flow, clients receive `post_deleted` for each reply, and
+  the `post.deleted` audit entry records `deleted_replies`. The native web UI
+  asks before deleting a root that has replies. `post_deleted` events now also
+  carry the deleted `post` (redacted), like retention purges.
+
+### Upgrade notes
+
+- Deleting a thread root now removes the whole thread. Before, replies stayed
+  visible under a deleted root. Replies deleted this way are kept as deletion
+  tombstones like any other deleted post, so their text is not lost to moderation
+  review until `DELETED_POST_PURGE_DAYS` clears it; threads deleted before the
+  upgrade are not changed.
+
 ## Changes in 0.9.0
 
 Released 2026-11-26. **Read the upgrade notes before upgrading:** the first

@@ -124,6 +124,96 @@ describe('attachment and deleted-content collection', () => {
   });
 });
 
+describe('thread deletion', () => {
+  type Event = { event: string; data: Record<string, unknown> };
+  function listen(server: TestServer, userId: string): Event[] {
+    const events: Event[] = [];
+    server.services.hub.attach({ send: (frame: string) => events.push(JSON.parse(frame) as Event), close: () => undefined } as never, userId);
+    return events;
+  }
+  const deletedIds = (events: Event[]) => events.filter((event) => event.event === 'post_deleted').map((event) => event.data.post_id as string).sort();
+
+  it('deletes the replies and their attachments when the root’s author deletes the root', async () => {
+    const server = await createTestServer();
+    try {
+      const adminToken = await login(server);
+      const channelId = await firstChannelId(server.app, adminToken);
+      const author = await member(server, channelId, 'thread-author');
+      const other = await member(server, channelId, 'thread-replier');
+      const posts = server.services.posts;
+      const root = await posts.createPost({ actor: author.user, channelId, message: 'root' });
+      const replyFile = await server.services.files.storeFile({ userId: other.user.id, channelId, name: 'reply.txt', mimeType: 'text/plain', bytes: text('reply attachment') });
+      const ownReply = await posts.createPost({ actor: author.user, channelId, message: 'own reply', rootId: root.id });
+      const otherReply = await posts.createPost({ actor: other.user, channelId, message: 'other reply', fileIds: [replyFile.id], rootId: root.id });
+      const heldReply = await posts.createPost({ actor: author.user, channelId, message: 'held reply', rootId: root.id });
+      await server.store.write((state) => {
+        const held = state.posts.find((post) => post.id === heldReply.id);
+        if (held !== undefined) held.lifecycleState = 'quarantined';
+      });
+      const otherThread = await posts.createPost({ actor: other.user, channelId, message: 'another root' });
+      const otherThreadReply = await posts.createPost({ actor: author.user, channelId, message: 'reply elsewhere', rootId: otherThread.id });
+      const events = listen(server, other.user.id);
+
+      expect((await server.app.request(`/api/v4/posts/${root.id}`, { method: 'DELETE', headers: bearer(author.token) })).status).toBe(200);
+
+      const state = server.store.read((current) => current);
+      for (const id of [root.id, ownReply.id, otherReply.id, heldReply.id]) {
+        expect(state.posts.find((post) => post.id === id)).toMatchObject({ deleteBy: author.user.id, lifecycleState: 'deleted' });
+        expect(state.posts.find((post) => post.id === id)?.deleteAt).toBeGreaterThan(0);
+      }
+      for (const id of [otherThread.id, otherThreadReply.id]) expect(state.posts.find((post) => post.id === id)?.deleteAt).toBe(0);
+      // A held reply's deletion is only announced to its author and admins.
+      expect(deletedIds(events)).toEqual([root.id, ownReply.id, otherReply.id].sort());
+      const replyEvent = events.find((event) => event.event === 'post_deleted' && event.data.post_id === otherReply.id);
+      expect(JSON.parse(replyEvent?.data.post as string)).toMatchObject({ id: otherReply.id, root_id: root.id, message: '' });
+      expect(state.auditLogs.find((entry) => entry.action === 'post.deleted' && entry.targetId === root.id)).toMatchObject({ actorUserId: author.user.id, metadata: { deleted_replies: 3 } });
+
+      expect((await server.app.request(`/api/v4/posts/${otherReply.id}`, { headers: bearer(other.token) })).status).toBe(404);
+      expect((await server.app.request(`/api/v4/posts/${root.id}/thread`, { headers: bearer(other.token) })).status).toBe(404);
+      expect((await server.app.request(`/api/v4/files/${replyFile.id}`, { headers: bearer(other.token) })).status).toBe(404);
+      expect(await server.services.retention.sweep()).toMatchObject({ unreferencedFiles: 1 });
+      expect(await fileExists(server, replyFile)).toBe(false);
+    } finally {
+      await server.store.close();
+    }
+  });
+
+  it('lets an admin delete a member’s thread, while a reply’s author removes only their reply', async () => {
+    const server = await createTestServer();
+    try {
+      const adminToken = await login(server);
+      const channelId = await firstChannelId(server.app, adminToken);
+      const author = await member(server, channelId, 'root-owner');
+      const replier = await member(server, channelId, 'reply-owner');
+      const posts = server.services.posts;
+      const root = await posts.createPost({ actor: author.user, channelId, message: 'root' });
+      const reply = await posts.createPost({ actor: replier.user, channelId, message: 'reply', rootId: root.id });
+      const sibling = await posts.createPost({ actor: author.user, channelId, message: 'sibling', rootId: root.id });
+
+      // A reply's author cannot remove someone else's thread.
+      expect((await server.app.request(`/api/v4/posts/${root.id}`, { method: 'DELETE', headers: bearer(replier.token) })).status).toBe(403);
+      // Deleting a reply leaves its root and the other replies alone.
+      expect((await server.app.request(`/api/v4/posts/${reply.id}`, { method: 'DELETE', headers: bearer(replier.token) })).status).toBe(200);
+      let state = server.store.read((current) => current);
+      expect(state.posts.find((post) => post.id === root.id)?.deleteAt).toBe(0);
+      expect(state.posts.find((post) => post.id === sibling.id)?.deleteAt).toBe(0);
+      expect(state.auditLogs.find((entry) => entry.action === 'post.deleted' && entry.targetId === reply.id)?.metadata).toEqual({});
+
+      const events = listen(server, author.user.id);
+      expect((await server.app.request(`/api/v4/posts/${root.id}`, { method: 'DELETE', headers: bearer(adminToken) })).status).toBe(200);
+      state = server.store.read((current) => current);
+      const admin = user(server, 'admin');
+      expect(state.posts.find((post) => post.id === sibling.id)).toMatchObject({ deleteBy: admin.id, lifecycleState: 'deleted' });
+      // The reply deleted earlier keeps its own deletion record.
+      expect(state.posts.find((post) => post.id === reply.id)?.deleteBy).toBe(replier.user.id);
+      expect(deletedIds(events)).toEqual([root.id, sibling.id].sort());
+      expect(state.auditLogs.find((entry) => entry.action === 'post.deleted' && entry.targetId === root.id)).toMatchObject({ actorUserId: admin.id, metadata: { deleted_replies: 1 } });
+    } finally {
+      await server.store.close();
+    }
+  });
+});
+
 describe('per-user export and erase', () => {
   it('exports everything stored about one account without credentials', async () => {
     const server = await createTestServer();

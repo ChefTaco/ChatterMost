@@ -4087,7 +4087,7 @@ function renderPost(post, grouped) {
       el('button', { text: threadLabel, onclick: () => openThread(threadRootId) }),
       el('button', { text: post.is_pinned ? 'Unpin' : 'Pin', onclick: () => togglePin(post) }),
       el('button', { text: 'Edit', onclick: () => editPost(post) }),
-      el('button', { class: 'warning-action', text: 'Delete', onclick: () => deletePost(post.id) })
+      el('button', { class: 'warning-action', text: 'Delete', onclick: () => deletePost(post) })
     ])
   ].filter(Boolean));
 }
@@ -5864,9 +5864,11 @@ function closeThread() {
   renderApp();
 }
 
-async function deletePost(postId) {
+async function deletePost(post) {
+  // Deleting a thread's root deletes every reply in it, including other people's.
+  if (!post.root_id && post.reply_count > 0 && !window.confirm('Delete this message and all replies in its thread?')) return;
   try {
-    await api('/api/v4/posts/' + postId, { method: 'DELETE' });
+    await api('/api/v4/posts/' + post.id, { method: 'DELETE' });
     state.composerError = '';
     await loadPosts();
     renderApp();

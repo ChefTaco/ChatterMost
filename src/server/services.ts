@@ -2156,32 +2156,52 @@ export class PostService {
     return updated;
   }
 
+  /**
+   * Deletes a post. Deleting a thread root deletes its replies too, as upstream does, whoever wrote
+   * them: the root's author or an admin may remove the whole thread. Attachments of every deleted
+   * post stop being served now and the next sweep removes their bytes.
+   */
   public async deletePost(postId: string, actor: UserRecord): Promise<PostRecord> {
     const existing = this.getVisiblePost(postId, actor);
     if (existing.userId !== actor.id && !isAdmin(actor)) {
       throw forbidden();
     }
-    const deleted = await this.store.write((state) => {
+    const { deleted, before } = await this.store.write((state) => {
       const post = state.posts.find((candidate) => candidate.id === postId);
       if (post === undefined) {
         throw notFound('Post');
       }
-      post.deleteAt = nowMs();
-      post.updateAt = post.deleteAt;
-      post.deleteBy = actor.id;
-      post.lifecycleState = 'deleted';
-      // Attachments go with the post: they stop being served now and the next sweep removes their bytes.
+      const now = nowMs();
+      const replies = post.rootId === '' ? state.posts.filter((candidate) => candidate.rootId === post.id && candidate.deleteAt === 0) : [];
+      // Copies taken before deletion decide who hears about each one, so a held post stays private.
+      const before = [post, ...replies].map((target) => ({ ...target }));
+      for (const target of [post, ...replies]) {
+        target.deleteAt = now;
+        target.updateAt = now;
+        target.deleteBy = actor.id;
+        target.lifecycleState = 'deleted';
+      }
+      const deletedFileIds = new Set(before.flatMap((target) => target.fileIds));
       const stillAttached = new Set(state.posts.filter((candidate) => candidate.deleteAt === 0).flatMap((candidate) => candidate.fileIds));
       for (const file of state.files) {
-        if (post.fileIds.includes(file.id) && file.deleteAt === 0 && !stillAttached.has(file.id)) {
-          file.deleteAt = post.deleteAt;
-          file.updateAt = post.deleteAt;
+        if (deletedFileIds.has(file.id) && file.deleteAt === 0 && !stillAttached.has(file.id)) {
+          file.deleteAt = now;
+          file.updateAt = now;
         }
       }
-      return post;
+      return { deleted: post, before };
     });
-    await this.auditLog.record({ actorUserId: actor.id, action: 'post.deleted', targetId: postId });
-    await this.hub.broadcast('post_deleted', { post_id: postId }, { channel_id: deleted.channelId });
+    const replyCount = before.length - 1;
+    await this.auditLog.record({
+      actorUserId: actor.id,
+      action: 'post.deleted',
+      targetId: postId,
+      ...(replyCount > 0 ? { metadata: { deleted_replies: replyCount } } : {})
+    });
+    for (const target of before) {
+      const tombstone = redactDeletedPost({ ...target, deleteAt: deleted.deleteAt, updateAt: deleted.deleteAt, deleteBy: actor.id, lifecycleState: 'deleted' });
+      await this.hub.broadcast('post_deleted', { post_id: target.id, post: JSON.stringify(toMattermostPost(tombstone)) }, this.audience(target));
+    }
     return deleted;
   }
 
