@@ -205,7 +205,7 @@ const MattermostImportSchema = z.object({
         type: z.enum(['O', 'P']).optional().default('O'),
         header: z.string().optional().default(''),
         purpose: z.string().optional().default(''),
-        retention_days: z.number().int().positive().nullable().optional()
+        retention_days: z.number().int().positive().max(36_500).nullable().optional()
       })
     )
     .optional()
@@ -1013,7 +1013,7 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
     if (!isAdmin(auth.user)) {
       services.channels.assertMember(c.req.param('channel_id'), auth.user.id);
     }
-    return c.json(services.channels.getChannel(c.req.param('channel_id')).agentPolicy);
+    return c.json(services.channels.agentPolicy(c.req.param('channel_id')));
   });
 
   app.post('/api/v4/posts', async (c) => {
@@ -1060,7 +1060,8 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
       const pivotIndex = allPosts.findIndex((post) => post.id === after);
       posts = pivotIndex < 0 ? [] : allPosts.slice(0, pivotIndex).reverse();
     } else if (since > 0) {
-      posts = allPosts.filter((post) => post.updateAt > since || post.createAt > since);
+      // Every change since the client's last sync, deletions included, not just one page.
+      return c.json(toMattermostPostList(services.posts.channelChangesSince(c.req.param('channel_id'), auth.user, since)));
     } else {
       posts = posts.slice(page * perPage);
     }

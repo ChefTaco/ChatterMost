@@ -31,6 +31,23 @@ const authorizationSweep = setInterval(() => {
   services.hub.closeUnauthorized();
 }, WEBSOCKET_AUTHORIZATION_SWEEP_MS);
 authorizationSweep.unref();
+// Channel retention limits are enforced by an hourly purge, first run shortly after startup.
+const RETENTION_SWEEP_MS = 60 * 60_000;
+const RETENTION_FIRST_SWEEP_MS = 60_000;
+function runRetentionSweep(): void {
+  if (shuttingDown) return;
+  services.retention.sweep().then((result) => {
+    if (result.posts > 0 || result.files > 0) {
+      process.stdout.write(JSON.stringify({ level: 'info', message: 'retention_purged', ...result }) + '\n');
+    }
+  }, (error: unknown) => {
+    process.stderr.write(
+      JSON.stringify({ level: 'error', message: 'retention_sweep_failed', error_type: error instanceof Error ? error.name : 'UnknownError' }) + '\n'
+    );
+  });
+}
+const retentionTimers = env.PREFLIGHT_MODE ? [] : [setTimeout(runRetentionSweep, RETENTION_FIRST_SWEEP_MS), setInterval(runRetentionSweep, RETENTION_SWEEP_MS)];
+for (const timer of retentionTimers) timer.unref();
 const trustedProxies = new TrustedProxySet(env.TRUSTED_PROXIES);
 const socketAdmission = new SocketAdmission({
   maximum: env.WEBSOCKET_MAX_CONNECTIONS,
@@ -233,6 +250,7 @@ async function shutdown(signal: 'SIGTERM' | 'SIGINT'): Promise<void> {
   if (shuttingDown) return;
   shuttingDown = true;
   clearInterval(authorizationSweep);
+  for (const timer of retentionTimers) clearTimeout(timer);
   process.stdout.write(JSON.stringify({ level: 'info', message: 'chattermost_server_stopping', signal }) + '\n');
   for (const websocket of websocketServer.clients) {
     websocket.close(1001, 'Server shutting down');
@@ -243,6 +261,7 @@ async function shutdown(signal: 'SIGTERM' | 'SIGINT'): Promise<void> {
       else reject(error);
     });
   });
+  await services.retention.idle();
   await store.close();
   await abuseControl.close();
   process.stdout.write(JSON.stringify({ level: 'info', message: 'chattermost_server_stopped', signal }) + '\n');

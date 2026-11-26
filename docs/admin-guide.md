@@ -69,7 +69,9 @@ Custom emoji can be added and removed from System when enabled. Users see active
 
 Use Supervision to switch between audit-only and pre-moderation from the current web UI. Backend policy support also includes disabled and post-moderation modes.
 
-Use Agents to register native AI agents, edit structured permissions/allowlists/memory policy, and run policy simulation.
+Use Agents to register native AI agents, edit structured permissions/allowlists/memory policy, and run policy simulation. The simulator checks the rules ChatterMost enforces: the channel exists and is not archived, and the posting account is a member. It also reports who would see the post, the supervision mode and the channel's retention limit. Agent registry permissions, routing, memory flags and allowlists are recorded for agents to read; ChatterMost does not enforce them, so they do not change the result.
+
+A channel's Policy panel sets **Retention days**. Leave it empty to keep messages indefinitely. With a limit, an hourly job (first run a minute after startup) permanently deletes posts older than the limit, with their edit history, reactions and attachments. It also deletes uploads in that channel that are older than the limit and not attached to a kept post. Each purge writes a `channel.retention_purged` audit entry with the counts. Purged posts cannot be recovered except from a backup. The same limit is available as `retention_days` on the channel patch API.
 
 Use Hermes to review bot-token configuration, bot accounts, WSS connection count, last bot post, recent agent events, and to rotate the bot token intentionally. A rotated token is shown only in the rotation response; update Hermes immediately.
 This panel reports backend bot state; it does not install or start a Hermes

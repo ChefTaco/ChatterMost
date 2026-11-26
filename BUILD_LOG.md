@@ -1,5 +1,18 @@
 # ChatterMost Build Log
 
+- Channel `retention_days` is now enforced. An hourly purge deletes posts older
+  than the limit, with their edit history, reactions and attachment files, plus
+  old unattached uploads. Each purge writes one `channel.retention_purged` audit
+  entry per channel. Channels without a limit keep everything. The admin Policy
+  form now saves the limit on the channel. Values saved by earlier releases were
+  stored in the agent policy and never applied; they move to the channel at
+  startup, so they take effect on upgrade.
+- `GET /channels/:id/posts?since=` returns every change since the timestamp
+  (up to 1,000), deletions included as redacted tombstones, instead of one page
+  of live posts. Deleting a post now also advances its `update_at`.
+- Post search returns the newest 100 matches instead of the oldest.
+- The agent policy simulator reports the enforced channel and membership rules,
+  with reasons, instead of always answering "allowed".
 - Product-owned immutable browser conversation schemas and OpenAPI snapshots
   now cover the native routes consumed by shared browser applications.
 

@@ -4787,7 +4787,7 @@ function renderChannelPolicy() {
     checkboxInput('mention_required', 'Require @mention', policy.mention_required === true),
     checkboxInput('direct_messages_enabled', 'Allow agent DMs', policy.direct_messages_enabled !== false),
     el('label', { text: 'Retention days' }, [
-      el('input', { name: 'retention_days', type: 'number', min: '0', placeholder: 'Workspace default', value: policy.retention_days === undefined || policy.retention_days === null ? '' : String(policy.retention_days) })
+      el('input', { name: 'retention_days', type: 'number', min: '1', max: '36500', step: '1', placeholder: 'Keep forever', value: policy.retention_days === undefined || policy.retention_days === null ? '' : String(policy.retention_days) })
     ]),
     el('label', { text: 'Allowed agent usernames' }, [
       el('input', { name: 'allowed_agents', placeholder: 'hermes, research-agent', value: Array.isArray(policy.allowed_agents) ? policy.allowed_agents.join(', ') : '' })
@@ -4818,11 +4818,12 @@ async function saveChannelPolicy(event) {
     direct_messages_enabled: data.get('direct_messages_enabled') === 'on',
     allowed_agents: allowedAgents
   };
-  if (retentionValue) policy.retention_days = Number(retentionValue);
+  policy.retention_days = retentionValue ? Number(retentionValue) : null;
   try {
     state.channelPolicyError = '';
     state.channelPolicyFeedback = '';
-    state.channelAgentPolicy = await api('/api/v4/channels/' + state.activeChannelId + '/agent-policy', { method: 'PUT', body: policy });
+    await api('/api/v4/channels/' + state.activeChannelId + '/agent-policy', { method: 'PUT', body: policy });
+    state.channelAgentPolicy = await api('/api/v4/channels/' + state.activeChannelId + '/agent-policy');
     state.channelPolicyFeedback = 'Policy saved.';
     state.panel = 'policy';
     renderApp();
@@ -5574,7 +5575,8 @@ async function simulateAgentPolicy() {
   clearPanelFeedback('agents');
   try {
     const result = await api('/api/v4/admin/policy-simulator', { method: 'POST', body: { channel_id: state.activeChannelId } });
-    setPanelFeedback('agents', result.allowed ? 'success' : 'error', result.allowed ? 'Simulation allowed.' : 'Simulation blocked.');
+    const reasons = Array.isArray(result.reasons) && result.reasons.length > 0 ? ' ' + result.reasons.join('; ') + '.' : '';
+    setPanelFeedback('agents', result.allowed ? 'success' : 'error', result.allowed ? 'Simulation allowed.' : 'Simulation blocked.' + reasons);
     renderApp();
   } catch (error) {
     setPanelFeedback('agents', 'error', error.message || String(error));
