@@ -17,6 +17,12 @@
   Admins can export one account's data (`GET /admin/users/:id/export`, with file
   downloads) and erase it (`POST /admin/users/:id/erase`, dry run by default,
   username confirmation), leaving an anonymous deactivated placeholder.
+- `@hivemagnus/hive-common` moves to 0.6.1. Bot posts with a valid
+  `x-hive-execution` header record it as `props.hive_execution` (clients cannot
+  set it), and Oathweave JWKS/userinfo GETs are retried up to three times on
+  network failures and 408/429/5xx with `/retry`. `PASSWORD_HASHING=scrypt`
+  hashes new passwords with scrypt on the threadpool and rehashes bcrypt at the
+  next successful sign-in; the default stays bcrypt so rollback keeps working.
 - The Mattermost import helper reads bulk exports with their authors,
   timestamps, threads (nested or by root ID), reactions and direct messages,
   reports what it cannot carry over, and sends batches that the server applies

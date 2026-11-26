@@ -33,8 +33,10 @@ Token verification uses the suite's shared verifier from
 `@hivemagnus/hive-common`, configured with ChatterMost's established rules: user
 tokens only, RS256, exact `chattermost` audience, no clock tolerance, a required
 `roles` array, an exact `chattermost:session` permission (no wildcards) and an
-online userinfo check on every validation, without a session cache. Any refusal,
-including an unreachable identity provider, remains a Mattermost-shaped 401.
+online userinfo check on every validation, without a session cache. The JWKS and
+userinfo reads are retried up to three times within about half a second after a
+network failure or a 408, 429 or 5xx response. Any refusal, including an
+identity provider that stays unreachable, remains a Mattermost-shaped 401.
 
 Keep the identity mappings, cookie secret and RuntimeState together in private
 backups. Revoke all bound sessions before downgrading to a runtime that predates

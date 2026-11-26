@@ -40,6 +40,15 @@ when every other setting is present, and refuses the repository's known
 development/example admin, cookie-signing, and token-hashing values. Local test
 helpers may enable the defaults only outside production.
 
+`PASSWORD_HASHING` selects the format for new password hashes. The default,
+`bcrypt`, is verified by every release but runs on the event loop. `scrypt`
+hashes on the threadpool, so a burst of sign-ins no longer delays chat, and
+replaces each bcrypt hash at that account's next successful sign-in. Both formats
+always verify. Releases before scrypt support cannot verify scrypt hashes: after
+rolling back to one, accounts whose hash was replaced cannot sign in with a
+password until it is reset (Oathweave sign-in is unaffected), so enable `scrypt`
+once a rollback past this release is no longer planned.
+
 `TOKEN_HASH_SECRET` independently keys API, bot, invite, and webhook token hashes. Existing installations are migrated by preserving the prior cookie secret as this token key, so a later cookie-secret rotation can invalidate browser sessions without silently breaking Hermes or personal access tokens.
 
 Native rotation scripts below operate the systemd/native database layout; they

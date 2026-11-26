@@ -30,7 +30,7 @@
     "check:openapi:browser": "tsx scripts/browser-openapi.ts"
   },
   "dependencies": {
-    "@hivemagnus/hive-common": "^0.5.0",
+    "@hivemagnus/hive-common": "^0.6.1",
     "@hono/node-server": "^2.1.8",
     "@prisma/client": "^6.11.1",
     "bcryptjs": "^3.0.2",
