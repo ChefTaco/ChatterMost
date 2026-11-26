@@ -4,7 +4,7 @@ import { configuredBrowserOrigins } from './oathweave.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 
-import { createRequestContext, runWithRequestContext } from '@hivemagnus/hive-common/context';
+import { createRequestContext, getRequestContext, runWithRequestContext } from '@hivemagnus/hive-common/context';
 import { HEALTH_PATHS } from '@hivemagnus/hive-common/health';
 import { registerHealthRoutes, securityHeaders } from '@hivemagnus/hive-common/hono';
 import { matchesSha256Digest } from '@hivemagnus/hive-common/secrets';
@@ -27,7 +27,7 @@ import { UserDataService } from './user-data.js';
 import { JsonStore, PostgresStore, type StateStore } from './store.js';
 import { toMattermostChannel, toMattermostChannelMember, toMattermostCommand, toMattermostFileInfo, toMattermostPost, toMattermostPostList, toMattermostPreference, toMattermostReaction, toMattermostTeam, toMattermostTeamMember, toMattermostUser } from './mappers.js';
 import { AbuseControl, rateLimit } from './rate-limit.js';
-import { hashToken, safeEqualText } from './security.js';
+import { configurePasswordHashing, hashToken, safeEqualText } from './security.js';
 import { HiveAdminAccounts, registerHiveAdminAccountRoutes } from './hive-admin-accounts.js';
 
 export type AppBindings = {
@@ -271,6 +271,7 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
       : new JsonStore(options.storePath === undefined ? resolveDataPath(env.STORE_PATH) : options.storePath, env.PREFLIGHT_MODE);
   const store: StateStore = env.AUTHENTICATED_REHEARSAL ? new AuthenticatedRehearsalStore(sourceStore) : sourceStore;
   await store.initialize();
+  configurePasswordHashing(env.PASSWORD_HASHING);
   const services = createServices(store, env);
   const webhooks = {
     incoming: new IncomingWebhookService(store, env, services.channels, services.auditLog),
@@ -1068,7 +1069,7 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
       rootId: body.root_id,
       fileIds: body.file_ids,
       pendingPostId: body.pending_post_id,
-      props: boundedMemberJson(withoutWebhookIdentity(asJsonRecord(body.props)), 'Post props')
+      props: withExecutionAttribution(boundedMemberJson(withoutWebhookIdentity(asJsonRecord(body.props)), 'Post props'), auth.user)
     });
     return c.json(toMattermostPost(post), 201);
   });
@@ -1939,7 +1940,18 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
 }
 
 /** Only the webhook route may set these. A client must not make its post look like a webhook's. */
-const WEBHOOK_IDENTITY_PROPS = ['from_webhook', 'webhook_id', 'webhook_label', 'webhook_owner_id', 'webhook_owner_username', 'override_username'];
+/** Post prop holding a bot post's execution context; only the server sets it. */
+const EXECUTION_PROP = 'hive_execution';
+const WEBHOOK_IDENTITY_PROPS = ['from_webhook', 'webhook_id', 'webhook_label', 'webhook_owner_id', 'webhook_owner_username', 'override_username', EXECUTION_PROP];
+
+/**
+ * Records the suite execution context (from a valid `x-hive-execution` header) on a post by a bot
+ * account, so a reply can be traced to the agent work that produced it. Attribution only.
+ */
+function withExecutionAttribution(props: JsonRecord, author: { isBot: boolean }): JsonRecord {
+  const execution = author.isBot ? getRequestContext()?.execution : undefined;
+  return execution === undefined ? props : { ...props, [EXECUTION_PROP]: execution as unknown as JsonRecord };
+}
 
 function withoutWebhookIdentity(props: JsonRecord): JsonRecord {
   return Object.fromEntries(Object.entries(props).filter(([key]) => !WEBHOOK_IDENTITY_PROPS.includes(key))) as JsonRecord;
@@ -2068,6 +2080,9 @@ function requestContext(store: StateStore, env: AppEnv): MiddlewareHandler<AppHo
     // is not continued either. Logs read the ID from `requestId`.
     const context = createRequestContext((name) => c.req.header(name), {
       trustInbound: false,
+      // A valid x-hive-execution header is attribution only (it grants nothing), so it is read
+      // here and recorded on posts by agent accounts.
+      trustInboundExecution: true,
       generateRequestId: randomUUID
     });
     c.set('requestId', context.requestId);

@@ -136,6 +136,15 @@ Hermes adapter notes:
 - `MATTERMOST_HOME_CHANNEL` selects the channel for proactive gateway delivery;
   the bot must be a member. ChatterMost does not run Hermes cron jobs itself.
 
+## Execution attribution
+
+An agent that sends the suite's `x-hive-execution` header with
+`POST /api/v4/posts` gets the validated execution context stored on the post as
+`props.hive_execution`, so a reply can be traced to the agent work that produced
+it. Only posts by bot accounts record it; an invalid header is ignored, and
+clients cannot set `hive_execution` themselves. It is attribution only and grants
+nothing.
+
 ## WebSocket Contract
 
 Hermes authenticates by opening `/api/v4/websocket` and sending:

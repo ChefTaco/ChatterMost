@@ -7,6 +7,7 @@ import {
   type OathweaveUserPrincipal,
   type OathweaveVerifierOptions
 } from '@hivemagnus/hive-common/oathweave';
+import { classifyRetry, retry, retryAfterFromHeaders, type RetryPolicy } from '@hivemagnus/hive-common/retry';
 import type { AppEnv } from './env.js';
 
 const linksSchema = z
@@ -37,6 +38,7 @@ export type ChatVerifierOptions = Pick<
 export function createChatVerifier(options: ChatVerifierOptions) {
   const verifier = createOathweaveVerifier({
     ...options,
+    fetch: retryingReadFetch(options.fetch ?? fetch),
     audience: options.audience ?? CHAT_AUDIENCE,
     accept: 'user',
     clockToleranceSec: 0,
@@ -45,6 +47,45 @@ export function createChatVerifier(options: ChatVerifierOptions) {
     requireRoles: true
   });
   return async (token: string): Promise<OathweaveUserPrincipal> => verifier.verifyUser(token);
+}
+
+/** Sign-in waits for Oathweave, so retries stay short: three attempts within about half a second. */
+export const OATHWEAVE_READ_RETRY: RetryPolicy = { maxAttempts: 3, baseMs: 100, maxMs: 400, maxRetryAfterMs: 1000 };
+
+class RetryableResponse extends Error {
+  public constructor(public readonly status: number, public readonly retryAfterMs: number | undefined) {
+    super(`HTTP ${status}`);
+  }
+}
+
+/**
+ * Retries the verifier's GET requests (JWKS and userinfo, both reads) after a network failure or a
+ * transient status (408, 429, 5xx). The final attempt's response is returned as received, so the
+ * verifier still reports the peer's own failure. Other methods pass through unchanged.
+ */
+export function retryingReadFetch(fetchImpl: typeof fetch, policy: RetryPolicy = OATHWEAVE_READ_RETRY): typeof fetch {
+  return async (input, init) => {
+    const method = (init?.method ?? (input instanceof Request ? input.method : 'GET')).toUpperCase();
+    if (method !== 'GET') return fetchImpl(input, init);
+    return retry(
+      async (attempt) => {
+        const response = await fetchImpl(input, init);
+        if (attempt < policy.maxAttempts && classifyRetry({ status: response.status, effect: 'none' }) === 'retryable') {
+          await response.body?.cancel().catch(() => undefined);
+          throw new RetryableResponse(response.status, retryAfterFromHeaders(response.headers));
+        }
+        return response;
+      },
+      {
+        policy,
+        ...(init?.signal ? { signal: init.signal } : {}),
+        classify: (error) =>
+          error instanceof RetryableResponse
+            ? { retry: true, retryAfterMs: error.retryAfterMs, reason: `status_${error.status}` }
+            : { retry: classifyRetry({ network: true, effect: 'none' }) === 'retryable', reason: 'network' }
+      }
+    );
+  };
 }
 
 export function createChatIdentity(env: AppEnv) {

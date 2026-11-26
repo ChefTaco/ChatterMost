@@ -37,7 +37,7 @@ import { applyImportBatch, type ImportBatch, type ImportReport } from './matterm
 import type { AppEnv } from './env.js';
 import { resolveDataPath } from './env.js';
 import { toMattermostFileInfo, toMattermostPost, toMattermostReaction } from './mappers.js';
-import { hashPassword, hashSessionToken, hashToken, sanitizeFilename, createSecretToken, verifyPassword } from './security.js';
+import { dummyPasswordHash, hashPassword, hashSessionToken, hashToken, passwordNeedsRehash, sanitizeFilename, createSecretToken, verifyPassword } from './security.js';
 import type { StateStore } from './store.js';
 
 export type AuthContext = {
@@ -624,6 +624,15 @@ export class UserService {
     return updated;
   }
 
+  /** Replaces a verified legacy hash with the current format, unless the password changed meanwhile. */
+  public async upgradePasswordHash(userId: string, verifiedHash: string, password: string): Promise<void> {
+    const upgraded = await hashPassword(password);
+    await this.store.write((state) => {
+      const user = state.users.find((candidate) => candidate.id === userId);
+      if (user !== undefined && user.passwordHash === verifiedHash) user.passwordHash = upgraded;
+    });
+  }
+
   public async changePassword(userId: string, newPassword: string, actor: UserRecord, currentPassword?: string, currentSessionId?: string | null): Promise<void> {
     if (actor.id !== userId && !isAdmin(actor)) {
       throw forbidden();
@@ -901,8 +910,6 @@ export class SessionService {
 }
 
 export class AuthService {
-  private static readonly dummyPasswordHash = hashPassword(createSecretToken());
-
   public constructor(
     private readonly users: UserService,
     private readonly sessions: SessionService,
@@ -922,7 +929,7 @@ export class AuthService {
     const user = this.users.resolveLogin(loginId);
     // Unknown and disabled accounts still do password work so login timing
     // does not trivially reveal whether a username exists.
-    const dummyHash = await AuthService.dummyPasswordHash;
+    const dummyHash = await dummyPasswordHash();
     if (user === null || user.disabledAt > 0) {
       await verifyPassword(password, dummyHash);
       await this.auditLog.record({
@@ -940,6 +947,7 @@ export class AuthService {
       });
       throw badRequest('Invalid login credentials');
     }
+    if (passwordNeedsRehash(user.passwordHash)) await this.users.upgradePasswordHash(user.id, user.passwordHash, password);
     return this.sessions.createSession(user, deviceId);
   }
 }
