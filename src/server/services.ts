@@ -15,7 +15,6 @@ import type {
   ChannelRecord,
   CustomEmojiRecord,
   FileInfoRecord,
-  IncomingWebhookRecord,
   InviteCodeRecord,
   PersonalAccessTokenRecord,
   PostEditHistoryRecord,
@@ -690,6 +689,9 @@ export class UserService {
         }
         state.bots = state.bots.filter((bot) => bot.userId !== userId);
         for (const webhook of state.incomingWebhooks) {
+          if (webhook.creatorId === userId) webhook.enabled = false;
+        }
+        for (const webhook of state.outgoingWebhooks) {
           if (webhook.creatorId === userId) webhook.enabled = false;
         }
       }
@@ -1842,7 +1844,11 @@ function channelSearchIndexKey(teamId: string, token: string): string {
   return `${teamId}\u0000${token}`;
 }
 
+type PostedListener = (post: PostRecord, channel: ChannelRecord, author: UserRecord) => void;
+
 export class PostService {
+  private readonly postedListeners: PostedListener[] = [];
+
   public constructor(
     private readonly store: StateStore,
     private readonly channels: ChannelService,
@@ -1850,6 +1856,11 @@ export class PostService {
     private readonly auditLog: AuditLogService,
     private readonly hub: WebSocketHub
   ) {}
+
+  /** Called after a visible post is stored and broadcast; listeners must not throw or block. */
+  public onPosted(listener: PostedListener): void {
+    this.postedListeners.push(listener);
+  }
 
   public getPost(postId: string): PostRecord {
     const post = this.store.read((state) => state.posts.find((candidate) => candidate.id === postId));
@@ -1998,6 +2009,13 @@ export class PostService {
       );
       if (post.rootId !== '') {
         await this.hub.broadcast('thread_updated', { post_id: post.id, root_id: post.rootId }, this.audience(post));
+      }
+      for (const listener of this.postedListeners) {
+        try {
+          listener(post, channel, input.actor);
+        } catch {
+          // A listener failure must never fail the post that was already stored.
+        }
       }
     }
     return post;
@@ -3777,25 +3795,6 @@ function isLifecycleVisibleTo(post: PostRecord, actor: UserRecord): boolean {
     return true;
   }
   return post.userId === actor.id || isAdmin(actor);
-}
-
-export async function createIncomingWebhook(store: StateStore, env: AppEnv, actor: UserRecord, channelId: string, label: string): Promise<{ record: IncomingWebhookRecord; secret: string }> {
-  requireAdmin(actor);
-  const secret = createSecretToken();
-  const now = nowMs();
-  const record: IncomingWebhookRecord = {
-    id: createId(),
-    createAt: now,
-    channelId,
-    secretHash: hashToken(secret, env),
-    label,
-    enabled: true,
-    creatorId: actor.id
-  };
-  await store.write((state) => {
-    state.incomingWebhooks.push(record);
-  });
-  return { record, secret };
 }
 
 function ensureRole(roles: string, role: string): string {

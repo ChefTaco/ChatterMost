@@ -24,6 +24,13 @@ Changes on `main` since 0.8.0. They ship in the next release.
   messages are imported, and the helper sends the export in batches that are
   each applied in one write. Rerunning after a failure resumes without
   duplicates. See [import](admin-guide.md#import).
+- **Webhook lifecycle.** Incoming webhooks can be listed, disabled, rotated and
+  deleted, and every change is audited. Creating one now requires an active
+  channel that includes the creator.
+- **Outgoing webhooks** (off by default, `ENABLE_OUTGOING_WEBHOOKS`): trigger
+  words in public channels are sent to an external URL and a JSON reply is
+  posted back. Callbacks to internal addresses need
+  `OUTGOING_WEBHOOK_ALLOWED_HOSTS`. See [webhooks](admin-guide.md#webhooks).
 
 ### Upgrade notes (unreleased)
 
@@ -32,6 +39,8 @@ Changes on `main` since 0.8.0. They ship in the next release.
 - `POST /api/v4/import/mattermost` reuses an existing channel with the same name
   in the team instead of creating a second one, and accepts requests up to
   16 MiB. Its response keeps the earlier fields and adds per-batch counts.
+- `POST /api/v4/webhooks/incoming` now rejects a missing or archived channel and
+  a channel the creating admin is not a member of. Existing webhooks keep working.
 
 ## Changes in 0.8.0
 

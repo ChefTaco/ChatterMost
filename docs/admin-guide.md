@@ -88,6 +88,52 @@ audio/video/document uploads and mobile background push transport are not
 implemented. The public-links toggle affects metadata; the unauthenticated public
 file route remains denied. See [client limits](clients.md#current-limits-and-coverage).
 
+## Webhooks
+
+Webhooks are managed by system admins through the API; the web UI shows webhook
+posts with a **WEBHOOK** marker but has no management panel yet.
+
+**Incoming webhooks** post into one channel as the admin who created them.
+`POST /api/v4/webhooks/incoming` with `channel_id` and `label` returns the
+delivery URL and its secret once; the channel must exist, be active and include
+the creator. Manage them with:
+
+- `GET /api/v4/webhooks/incoming` (optional `channel_id`) and `GET /api/v4/webhooks/incoming/{id}`: never include the secret.
+- `PATCH /api/v4/webhooks/incoming/{id}` with `label` and/or `enabled`: a disabled webhook answers 404 to deliveries.
+- `PUT /api/v4/webhooks/incoming/{id}/secret`: issues a new URL; the old one stops working at once. Rotate a webhook whose URL may have leaked.
+- `DELETE /api/v4/webhooks/incoming/{id}`.
+
+Each change writes a `webhook.incoming.*` audit entry. Deactivating a user
+disables their webhooks.
+
+**Outgoing webhooks** send matching messages to an external URL, using the
+upstream `/api/v4/hooks/outgoing` routes and payload. They are off unless
+`ENABLE_OUTGOING_WEBHOOKS=true`. A hook belongs to a team and optionally one
+public channel, and lists `trigger_words` with `trigger_when` `0` (the first
+word equals a trigger word) or `1` (the first word starts with one). A hook with
+a channel and no trigger words fires on every message in that channel. Only
+public channels trigger hooks, and posts by bots or webhooks never do.
+
+For each match ChatterMost POSTs `token`, `team_id`, `team_domain`,
+`channel_id`, `channel_name`, `timestamp`, `user_id`, `user_name`, `post_id`,
+`text`, `trigger_word` and `file_ids` as JSON or, with
+`content_type: application/x-www-form-urlencoded`, as a form. Receivers should
+check `token`; it is shown only when the hook is created or its token is
+regenerated (`POST /api/v4/hooks/outgoing/{id}/regen_token`). A JSON reply with
+`text` is posted in the channel as the hook's creator, in the thread when
+`response_type` is `comment`. Delivery happens after the message is stored, has a
+10-second timeout, reads at most 64 KiB of the reply, does not follow redirects
+and is not retried.
+
+Callback URLs must be `http` or `https` without embedded credentials. A URL
+whose host resolves to a loopback, private, link-local, shared or reserved
+address is refused at delivery time, so a hook cannot reach services on the
+server's own network. To call an internal receiver, list its exact host name or
+IP address in `OUTGOING_WEBHOOK_ALLOWED_HOSTS` (comma-separated). Prefer `https`:
+the payload carries the hook token and the message text. Manage hooks with
+`GET`, `PUT` (including `enabled`) and `DELETE /api/v4/hooks/outgoing/{id}`; each
+change writes a `webhook.outgoing.*` audit entry.
+
 ## Import
 
 The import helper runs from a source/operator checkout, not inside the production

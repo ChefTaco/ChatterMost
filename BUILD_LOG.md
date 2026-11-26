@@ -6,6 +6,14 @@
   in one write each, skipping posts already imported. The admin token comes
   from `CHATTERMOST_IMPORT_TOKEN` or a mode-600 `--token-file`; `--token` is
   rejected. The import route accepts up to 16 MiB.
+- Incoming webhooks gained list, get, update (label, enabled), secret rotation
+  and delete routes with `webhook.incoming.*` audit entries; creation checks
+  that the channel exists, is active and includes the creator. Outgoing
+  webhooks (`/api/v4/hooks/outgoing`, off unless `ENABLE_OUTGOING_WEBHOOKS`)
+  send trigger-word matches in public channels to callback URLs and post JSON
+  replies back. Delivery pins the vetted DNS answer and refuses loopback,
+  private, link-local and reserved addresses unless the host is listed in
+  `OUTGOING_WEBHOOK_ALLOWED_HOSTS`.
 - Channel `retention_days` is now enforced. An hourly purge deletes posts older
   than the limit, with their edit history, reactions and attachment files, plus
   old unattached uploads. Each purge writes one `channel.retention_purged` audit

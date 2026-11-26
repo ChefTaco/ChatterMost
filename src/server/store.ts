@@ -86,6 +86,7 @@ export function createEmptyState(): StoreState {
     agentIdentities: [],
     agentConversationBindings: [],
     incomingWebhooks: [],
+    outgoingWebhooks: [],
     metrics: emptyMetrics()
   };
 }
@@ -282,6 +283,7 @@ function hydrateState(input: Partial<StoreState>): StoreState {
     agentIdentities: input.agentIdentities ?? empty.agentIdentities,
     agentConversationBindings: input.agentConversationBindings ?? empty.agentConversationBindings,
     incomingWebhooks: input.incomingWebhooks ?? empty.incomingWebhooks,
+    outgoingWebhooks: input.outgoingWebhooks ?? empty.outgoingWebhooks,
     metrics: input.metrics ?? empty.metrics
   };
 }

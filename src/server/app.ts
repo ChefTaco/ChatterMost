@@ -20,7 +20,8 @@ import { renderShell, webClient, webFavicon, webStyles } from '../web/assets.js'
 import { websocketFanout } from './capabilities.js';
 import type { AppEnv } from './env.js';
 import { resolveDataPath } from './env.js';
-import { bootstrap, createIncomingWebhook, createServices, isAdmin, requireAdmin, type AuthContext, type ServiceBundle } from './services.js';
+import { IncomingWebhookService, OutgoingWebhookService, toIncomingWebhookResponse, toOutgoingWebhookResponse } from './webhooks.js';
+import { bootstrap, createServices, isAdmin, requireAdmin, type AuthContext, type ServiceBundle } from './services.js';
 import { JsonStore, PostgresStore, type StateStore } from './store.js';
 import { toMattermostChannel, toMattermostChannelMember, toMattermostCommand, toMattermostFileInfo, toMattermostPost, toMattermostPostList, toMattermostPreference, toMattermostReaction, toMattermostTeam, toMattermostTeamMember, toMattermostUser } from './mappers.js';
 import { AbuseControl, rateLimit } from './rate-limit.js';
@@ -53,7 +54,19 @@ export type ServerApp = {
   services: ServiceBundle;
   store: StateStore;
   abuseControl: AbuseControl;
+  webhooks: { incoming: IncomingWebhookService; outgoing: OutgoingWebhookService };
 };
+
+const OutgoingWebhookSchema = z.object({
+  team_id: z.string().max(64),
+  channel_id: z.string().max(64).optional(),
+  display_name: z.string().min(1).max(64),
+  description: z.string().max(500).optional(),
+  trigger_words: z.array(z.string().min(1).max(64)).max(50).optional(),
+  trigger_when: z.union([z.literal(0), z.literal(1)]).optional(),
+  callback_urls: z.array(z.string().min(1).max(2048)).min(1).max(10),
+  content_type: z.enum(['application/json', 'application/x-www-form-urlencoded']).optional()
+});
 
 const LoginTypeSchema = z.object({ login_id: z.string().min(1).max(320) });
 const LoginSchema = z.object({
@@ -255,6 +268,10 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
   const store: StateStore = env.AUTHENTICATED_REHEARSAL ? new AuthenticatedRehearsalStore(sourceStore) : sourceStore;
   await store.initialize();
   const services = createServices(store, env);
+  const webhooks = {
+    incoming: new IncomingWebhookService(store, env, services.channels, services.auditLog),
+    outgoing: new OutgoingWebhookService(store, env, services.channels, services.users, services.posts, services.auditLog)
+  };
   if (!env.PREFLIGHT_MODE) await bootstrap(services);
   if (!env.PREFLIGHT_MODE) services.auditLog.publishPendingSoon();
   const abuseControl = new AbuseControl(env);
@@ -1765,19 +1782,59 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
   app.post('/api/v4/webhooks/incoming', async (c) => {
     const auth = await requireAuth(c, services);
     const body = await readJson(c, z.object({ channel_id: z.string().max(64), label: z.string().max(128).default('External agent') }));
-    const { record, secret } = await createIncomingWebhook(store, env, auth.user, body.channel_id, body.label);
-    return c.json(
-      {
-        id: record.id,
-        create_at: record.createAt,
-        channel_id: record.channelId,
-        label: record.label,
-        enabled: record.enabled,
-        url: `${env.SERVER_URL}/api/v4/webhooks/incoming/${record.id}/${secret}`,
-        secret
-      },
-      201
-    );
+    const { record, secret } = await webhooks.incoming.create(auth.user, body.channel_id, body.label);
+    return c.json({ ...toIncomingWebhookResponse(record), url: `${env.SERVER_URL}/api/v4/webhooks/incoming/${record.id}/${secret}`, secret }, 201);
+  });
+  app.get('/api/v4/webhooks/incoming', async (c) => {
+    const auth = await requireAuth(c, services);
+    return c.json(paginate(c, webhooks.incoming.list(auth.user, c.req.query('channel_id'))).map(toIncomingWebhookResponse));
+  });
+  app.get('/api/v4/webhooks/incoming/:id', async (c) => {
+    const auth = await requireAuth(c, services);
+    return c.json(toIncomingWebhookResponse(webhooks.incoming.get(auth.user, c.req.param('id'))));
+  });
+  app.patch('/api/v4/webhooks/incoming/:id', async (c) => {
+    const auth = await requireAuth(c, services);
+    const body = await readJson(c, z.object({ label: z.string().min(1).max(128).optional(), enabled: z.boolean().optional() }));
+    return c.json(toIncomingWebhookResponse(await webhooks.incoming.update(auth.user, c.req.param('id'), body)));
+  });
+  app.put('/api/v4/webhooks/incoming/:id/secret', async (c) => {
+    const auth = await requireAuth(c, services);
+    const { record, secret } = await webhooks.incoming.rotate(auth.user, c.req.param('id'));
+    return c.json({ ...toIncomingWebhookResponse(record), url: `${env.SERVER_URL}/api/v4/webhooks/incoming/${record.id}/${secret}`, secret });
+  });
+  app.delete('/api/v4/webhooks/incoming/:id', async (c) => {
+    const auth = await requireAuth(c, services);
+    await webhooks.incoming.remove(auth.user, c.req.param('id'));
+    return c.json(ok());
+  });
+  app.post('/api/v4/hooks/outgoing', async (c) => {
+    const auth = await requireAuth(c, services);
+    const body = await readJson(c, OutgoingWebhookSchema);
+    return c.json(toOutgoingWebhookResponse(await webhooks.outgoing.create(auth.user, body), { includeToken: true }), 201);
+  });
+  app.get('/api/v4/hooks/outgoing', async (c) => {
+    const auth = await requireAuth(c, services);
+    const hooks = webhooks.outgoing.list(auth.user, { teamId: c.req.query('team_id'), channelId: c.req.query('channel_id') });
+    return c.json(paginate(c, hooks).map((hook) => toOutgoingWebhookResponse(hook)));
+  });
+  app.get('/api/v4/hooks/outgoing/:id', async (c) => {
+    const auth = await requireAuth(c, services);
+    return c.json(toOutgoingWebhookResponse(webhooks.outgoing.get(auth.user, c.req.param('id'))));
+  });
+  app.put('/api/v4/hooks/outgoing/:id', async (c) => {
+    const auth = await requireAuth(c, services);
+    const body = await readJson(c, OutgoingWebhookSchema.partial().omit({ team_id: true }).extend({ id: z.string().max(64).optional(), enabled: z.boolean().optional() }));
+    return c.json(toOutgoingWebhookResponse(await webhooks.outgoing.update(auth.user, c.req.param('id'), body)));
+  });
+  app.post('/api/v4/hooks/outgoing/:id/regen_token', async (c) => {
+    const auth = await requireAuth(c, services);
+    return c.json(toOutgoingWebhookResponse(await webhooks.outgoing.regenerateToken(auth.user, c.req.param('id')), { includeToken: true }));
+  });
+  app.delete('/api/v4/hooks/outgoing/:id', async (c) => {
+    const auth = await requireAuth(c, services);
+    await webhooks.outgoing.remove(auth.user, c.req.param('id'));
+    return c.json(ok());
   });
   app.post('/api/v4/webhooks/incoming/:id/:secret', async (c) => {
     const webhook = store.read((state) => state.incomingWebhooks.find((item) => item.id === c.req.param('id')) ?? null);
@@ -1833,7 +1890,7 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
     )
   );
 
-  return { app, services, store, abuseControl };
+  return { app, services, store, abuseControl, webhooks };
 }
 
 /** Only the webhook route may set these. A client must not make its post look like a webhook's. */

@@ -18,7 +18,7 @@ Supported endpoint groups include:
 - Users, profile images, teams, team membership, channels, channel membership, DMs, group DMs, unread/view markers, and channel privacy.
 - Posts, threads, edit history, search, pins, ephemeral messages, reactions, files, file metadata, thumbnails/previews, preferences, typing, and statuses.
 - Slash-command listing, autocomplete, suggestions, and execution for Hermes bot conversations; Mattermost-compatible import; push/notification no-op compatibility; desktop compatibility metadata; and disabled-by-default SSO discovery.
-- Admin users/invites, supervision policy/events, native agent registry, agent bindings, incoming webhooks, and policy simulation.
+- Admin users/invites, supervision policy/events, native agent registry, agent bindings, incoming webhooks (create, list, disable, rotate, delete), outgoing webhooks (disabled by default), and policy simulation.
 - Mattermost-compatible WebSocket events for hello, posted, typing, reactions, status, channel, user, and thread changes.
 
 Some discovery endpoints return compatible empty or free-tier responses. An

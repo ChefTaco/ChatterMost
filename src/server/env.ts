@@ -55,6 +55,9 @@ const EnvSchema = z.object({
   ENABLE_DIAGNOSTICS: Boolish.default(false),
   ENABLE_SECURITY_ALERT_CHECKS: Boolish.default(false),
   ENABLE_PUBLIC_FILE_LINKS: Boolish.default(false),
+  ENABLE_OUTGOING_WEBHOOKS: Boolish.default(false),
+  // Hosts whose callback URLs may resolve to loopback, private or link-local addresses (comma-separated).
+  OUTGOING_WEBHOOK_ALLOWED_HOSTS: z.string().default(''),
   ENABLE_REDIS_FANOUT: Boolish.default(false),
   ENABLE_DISTRIBUTED_RATE_LIMIT: Boolish.default(false),
   REDIS_URL: z.string().min(1).default('redis://127.0.0.1:6379'),
