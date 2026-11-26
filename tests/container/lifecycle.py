@@ -21,7 +21,10 @@ REQUIRED_BASELINE = '0.3.2'
 # Stepping stones accept every earlier supported source, so later releases only need to be
 # reachable from the newest stone before them. Installations older than that stone upgrade
 # to the stone first, which keeps the tested matrix (one lifecycle run per source) small.
-STEPPING_STONES = ('0.3.2', '0.8.0')
+# 0.9.0 is the first release that verifies scrypt password hashes. Later releases write scrypt by
+# default, so they upgrade only from 0.9.0 onwards and a rollback never lands on a release that
+# could not verify a rehashed password.
+STEPPING_STONES = ('0.3.2', '0.8.0', '0.9.0')
 MAX_SOURCES_AFTER_STONE = 4
 VERSION = re.compile(r'^0\.(?:[2-9]|[1-9][0-9]+)\.[0-9]+$')
 REQUIRED_PROOFS = {

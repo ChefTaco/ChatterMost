@@ -41,13 +41,15 @@ development/example admin, cookie-signing, and token-hashing values. Local test
 helpers may enable the defaults only outside production.
 
 `PASSWORD_HASHING` selects the format for new password hashes. The default,
-`bcrypt`, is verified by every release but runs on the event loop. `scrypt`
-hashes on the threadpool, so a burst of sign-ins no longer delays chat, and
-replaces each bcrypt hash at that account's next successful sign-in. Both formats
-always verify. Releases before scrypt support cannot verify scrypt hashes: after
-rolling back to one, accounts whose hash was replaced cannot sign in with a
-password until it is reset (Oathweave sign-in is unaffected), so enable `scrypt`
-once a rollback past this release is no longer planned.
+`scrypt`, hashes on the threadpool, so a burst of sign-ins no longer delays chat,
+and replaces each bcrypt hash at that account's next successful sign-in.
+`bcrypt`, the default before 0.10.0, runs on the event loop, is verified by every
+release and never rehashes. Both formats always verify in either mode, so
+existing passwords keep working and no reset is needed. Releases before 0.9.0
+cannot verify scrypt hashes: after rolling back to one, accounts whose hash was
+replaced cannot sign in with a password until it is reset (Oathweave sign-in is
+unaffected), so roll back only to 0.9.x, or set `bcrypt` while a rollback below
+0.9.0 is still planned.
 
 `TOKEN_HASH_SECRET` independently keys API, bot, invite, and webhook token hashes. Existing installations are migrated by preserving the prior cookie secret as this token key, so a later cookie-secret rotation can invalidate browser sessions without silently breaking Hermes or personal access tokens.
 
