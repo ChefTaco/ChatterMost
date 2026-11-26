@@ -6,6 +6,10 @@
   needed. The JSON store is written compactly. A 100,000-post regression test
   guards that writes not touching posts stay independent of history size, and
   CI now runs the real-Postgres store tests.
+- `GET /api/v4/metrics/prometheus` renders counters and gauges in the
+  Prometheus text format for admins or a `METRICS_TOKEN_SHA256` bearer token.
+  `/health/ready` now runs a `store` check (persistence not held; `SELECT 1` on
+  Postgres) and the image health check probes readiness instead of ping.
 - The Mattermost import helper reads bulk exports with their authors,
   timestamps, threads (nested or by root ID), reactions and direct messages,
   reports what it cannot carry over, and sends batches that the server applies

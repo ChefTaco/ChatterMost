@@ -29,6 +29,8 @@ const EnvSchema = z.object({
   TLS_PROBE_CA_PATH: z.preprocess(value => value === '' ? undefined : value, z.string().min(1).optional()),
   COOKIE_SECRET: z.string().min(24),
   TOKEN_HASH_SECRET: z.string().min(24),
+  // SHA-256 (hex) of a bearer token that may read the Prometheus metrics; admins can always read them.
+  METRICS_TOKEN_SHA256: z.preprocess((value) => value === '' ? undefined : value, z.string().regex(/^[a-f0-9]{64}$/u).optional()),
   SECURITY_FUSION_SERVICE_TOKEN_HASH: z.preprocess(
     (value) => value === '' ? undefined : value,
     z.string().regex(/^[a-f0-9]{64}$/u).optional()

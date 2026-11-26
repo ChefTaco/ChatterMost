@@ -230,7 +230,14 @@ Set `TRUSTED_PROXIES` to the exact CIDRs allowed to append forwarding data. The 
 
 Native deployment sets `ENABLE_DISTRIBUTED_RATE_LIMIT=true` for atomic Redis
 counters. The supported application topology still has one writer; this flag does
-not enable multiple serving processes. The admin `/api/v4/metrics` response includes `abuse_control` telemetry for source/account checks and throttles, trusted-proxy decisions, local fallback evictions, Redis errors, and whether enforcement is cross-instance consistent.
+not enable multiple serving processes. `GET /api/v4/metrics/prometheus` serves the same counters plus gauges (open
+WebSockets, accounts, channels, posts, files and bytes, active sessions, pending
+audit events, build info) in the Prometheus text format. Admin sessions can read
+it; for a scraper, set `METRICS_TOKEN_SHA256` to the SHA-256 hex digest of a
+random token and send that token as a bearer credential. Labels never carry
+names, IDs or message content.
+
+The admin `/api/v4/metrics` response includes `abuse_control` telemetry for source/account checks and throttles, trusted-proxy decisions, local fallback evictions, Redis errors, and whether enforcement is cross-instance consistent.
 
 `GET /api/v4/ha/status` deliberately reports `websocket_fanout_mode: local-process`, `redis_fanout_enabled: false`, `sticky_session_free_websockets: false`, and `multi_process_websocket_safe: false`. Redis-backed rate limits do not make WebSocket delivery horizontally available.
 
