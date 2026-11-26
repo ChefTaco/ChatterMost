@@ -374,7 +374,9 @@ export class ConfigService {
       EnableSignUpWithOpenId: false,
       EnableSignUpWithGitLab: false,
       EnableSignUpWithGoogle: false,
-      EnablePushNotifications: false,
+      EnablePushNotifications: this.env.PUSH_NOTIFICATION_SERVER.length > 0,
+      SendPushNotifications: String(this.env.PUSH_NOTIFICATION_SERVER.length > 0),
+      PushNotificationContents: this.env.PUSH_NOTIFICATION_CONTENTS,
       PushNotificationServer: '',
       PrivacySettings: this.privacy.clientSafeSettings()
     };
@@ -409,7 +411,8 @@ export class ConfigService {
         LDAP: false
       },
       PushNotifications: {
-        Enabled: false,
+        Enabled: this.env.PUSH_NOTIFICATION_SERVER.length > 0,
+        Contents: this.env.PUSH_NOTIFICATION_CONTENTS,
         MobileAckEndpoint: '/api/v4/notifications/ack'
       },
       SearchSettings: {
@@ -3622,6 +3625,12 @@ export class WebSocketHub {
 
   public connectionCount(): number {
     return this.connections.size;
+  }
+
+  /** Whether the user has an open, authenticated WebSocket on this process. */
+  public hasConnection(userId: string): boolean {
+    for (const connection of this.connections.values()) if (connection.userId === userId) return true;
+    return false;
   }
 
   /**

@@ -50,7 +50,7 @@ server credentials.
 | Core chat | Username/email login, teams, channels, DMs/group DMs, posts, threads, reactions, files, profiles, presence and typing have Mattermost-compatible endpoints. |
 | Files | Uploads accept PNG, JPEG, GIF, WebP and plain text, subject to file signatures and size limits. General audio, video, PDF and office-document uploads are not implemented. |
 | Desktop | The official desktop shell loads the backend's ChatterMost web interface; it does not provide the upstream web interface or all native-shell integrations. |
-| Mobile notifications | Foreground connected clients receive WebSocket events. Device/notification compatibility acknowledgements are present, but background APNs/FCM push transport is disabled. |
+| Mobile notifications | Foreground connected clients receive WebSocket events. Background push is sent through a push proxy when `PUSH_NOTIFICATION_SERVER` is set; see [mobile push](#mobile-push). |
 | Accounts | Invite/admin-created accounts and username/email/password login. SSO discovery reports OIDC, SAML and LDAP disabled. |
 | Extensions | Calls and the upstream server plugin/marketplace runtime are unsupported. Hermes uses a platform plugin on the Hermes host. |
 | Shared file links | Authenticated files work. The unauthenticated public file route remains denied, including when public-link metadata is enabled. |
@@ -71,8 +71,34 @@ checking a deployment or reporting an issue. See [API compatibility](compatibili
 | Version or login discovery fails | Public `/api/v4/system/ping` and `/api/v4/config/client?format=old`, origin and version-advertisement settings. |
 | Login fails | Account exists, is active and uses its current password. An administrator can issue an invite or reset it. |
 | Messages arrive only after refresh | WebSocket proxy upgrades/timeouts and authentication; verify an actual `posted` event rather than only an HTTP ping. |
-| No background push | Push transport is not implemented; keeping the app connected verifies foreground delivery only. |
+| No background push | `PUSH_NOTIFICATION_SERVER` is unset, the proxy does not hold credentials for this app build, the app has not registered a device (sign in again), the account has a WebSocket open elsewhere, or the push preference excludes the message. |
 | Hermes does not respond | Gateway user allowlist, bot token, conversation membership and mention requirements; see [Hermes troubleshooting](hermes-compatibility.md#troubleshooting). |
 
 Keep screenshots, traces, logs, tokens and conversation details private. Use a
 synthetic reproduction when opening a public issue.
+
+## Mobile push
+
+Background notifications for the official mobile apps go through a push proxy:
+ChatterMost sends each notification to `PUSH_NOTIFICATION_SERVER` +
+`/api/v1/send_push` in the upstream push-proxy format, and the proxy delivers it
+through Apple (APNs) or Google (FCM). Push is off while the variable is empty.
+
+The proxy must hold the APNs/FCM credentials of the app build people use. The
+store builds of the official apps are signed by their publisher, so only that
+publisher's hosted push service can reach them; using it is an external service
+with its own terms, and notification metadata leaves your server. A self-hosted
+push proxy works with app builds you sign yourself. ChatterMost does not choose
+or configure a proxy for you.
+
+A post notifies a channel member when they have no WebSocket open on the server,
+signed in on a phone that registered a device, and their push preference allows
+it: **all** messages, **mention** (the default; direct and group messages, and
+`@channel`, `@all` and `@here`, always count) or **none**. The channel's own
+setting overrides the account setting. `PUSH_NOTIFICATION_CONTENTS` controls what
+the notification shows: `generic` (default: sender and channel), `generic_no_channel`
+(sender only) or `full` (also the first 500 characters of the message). When the
+proxy reports a device as removed, ChatterMost clears that registration.
+Deliveries are not retried and failures are logged without device tokens or
+message text.
+

@@ -70,6 +70,10 @@ Changes on `main` since 0.8.0. They ship in the next release.
   cursors. See [compatibility](compatibility.md#mobile-and-proxy-notes).
 - **0.8.0 is a stepping stone.** Releases after it accept upgrades from 0.8.0
   and at most three newer releases, which keeps the tested upgrade matrix small.
+- **Mobile background push** through an operator-configured push proxy
+  (`PUSH_NOTIFICATION_SERVER`, off by default). Notifications show the sender
+  and channel unless `PUSH_NOTIFICATION_CONTENTS=full`. See
+  [mobile push](clients.md#mobile-push).
 
 ### Upgrade notes (unreleased)
 

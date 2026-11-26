@@ -24,6 +24,7 @@ import { IncomingWebhookService, OutgoingWebhookService, toIncomingWebhookRespon
 import { bootstrap, createServices, isAdmin, requireAdmin, type AuthContext, type ServiceBundle } from './services.js';
 import { renderPrometheusMetrics } from './prometheus.js';
 import { UserDataService } from './user-data.js';
+import { PushNotificationService } from './push.js';
 import { JsonStore, PostgresStore, type StateStore } from './store.js';
 import { toMattermostChannel, toMattermostChannelMember, toMattermostCommand, toMattermostFileInfo, toMattermostPost, toMattermostPostList, toMattermostPreference, toMattermostReaction, toMattermostTeam, toMattermostTeamMember, toMattermostUser } from './mappers.js';
 import { AbuseControl, rateLimit } from './rate-limit.js';
@@ -57,6 +58,7 @@ export type ServerApp = {
   store: StateStore;
   abuseControl: AbuseControl;
   webhooks: { incoming: IncomingWebhookService; outgoing: OutgoingWebhookService };
+  push: PushNotificationService;
 };
 
 const OutgoingWebhookSchema = z.object({
@@ -278,6 +280,7 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
     outgoing: new OutgoingWebhookService(store, env, services.channels, services.users, services.posts, services.auditLog)
   };
   const userData = new UserDataService(store, env, services.hub);
+  const push = new PushNotificationService(store, env, services.hub, services.posts);
   if (!env.PREFLIGHT_MODE) await bootstrap(services);
   if (!env.PREFLIGHT_MODE) services.auditLog.publishPendingSoon();
   const abuseControl = new AbuseControl(env);
@@ -1416,9 +1419,10 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
   app.get('/api/v4/push/status', async (c) => {
     await requireAuth(c, services);
     return c.json({
-      enabled: false,
+      enabled: push.enabled(),
       mobile_compatible_ack: true,
-      transport: 'disabled'
+      transport: push.enabled() ? 'push-proxy' : 'disabled',
+      contents: env.PUSH_NOTIFICATION_CONTENTS
     });
   });
   app.post('/api/v4/push/notify', async (c) => {
@@ -1948,7 +1952,7 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
     )
   );
 
-  return { app, services, store, abuseControl, webhooks };
+  return { app, services, store, abuseControl, webhooks, push };
 }
 
 /** Only the webhook route may set these. A client must not make its post look like a webhook's. */
