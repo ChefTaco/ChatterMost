@@ -15,6 +15,58 @@ publish a new version only for an intentional distribution change. Client and
 Hermes instructions live in the [client guide](clients.md),
 [Hermes guide](hermes-compatibility.md) and [agent runbook](../AGENTS.md#installation-runbook-for-agents).
 
+## Changes in 0.8.0
+
+Channel retention limits are now enforced, which permanently deletes data on
+upgraded installations that have a limit set. **Read the upgrade notes before
+upgrading.** No database migration was added. 0.7.2 is an additional reviewed
+upgrade source.
+
+### Upgrade notes for 0.8.0
+
+> **Warning: channels with a retention limit lose older posts and files within
+> about an hour of upgrading.** Earlier releases saved the channel Policy form's
+> **Retention days** value but never applied it. On its first start, 0.8.0 moves
+> every such saved value onto the channel, where it is enforced, and also enforces
+> any `retention_days` set through the channel patch or import APIs. The first
+> purge runs one minute after startup and then hourly. It permanently deletes
+> every post older than the limit in that channel, with its edit history,
+> reactions and attachment files, plus older uploads no kept post references.
+> Rolling back does not bring them back; only a backup taken before the upgrade does.
+
+Before upgrading, list the channels that will be purged. For a Compose
+installation (substitute your installation directory):
+
+```bash
+cd /srv/chattermost
+sudo docker compose --project-name "$(sudo python3 -c 'import json; print(json.load(open("installation.json"))["project"])')" \
+  --env-file compose.env -f compose.yaml exec -T postgres psql -X -U chattermost_app -d chattermost -c \
+  "SELECT c->>'id' AS channel_id, c->>'name' AS channel, c->'retentionDays' AS api_limit, c->'agentPolicy'->'retention_days' AS form_limit FROM \"RuntimeState\", jsonb_array_elements(\"value\"->'channels') AS c WHERE \"key\" = 'default' AND (c->'retentionDays' <> 'null'::jsonb OR c->'agentPolicy' ? 'retention_days')"
+```
+
+A native installation runs the same `SELECT` with `psql` against its database.
+No rows means nothing will be purged. For each listed channel you want to keep in
+full, clear the limit while still on the old release:
+
+- `form_limit` set: as a system admin in the web UI, open the channel's Policy
+  panel, empty **Retention days** and save. The old release replaces the stored
+  policy, so the value is removed.
+- `api_limit` set: as a system admin, send
+  `PUT /api/v4/channels/CHANNEL_ID/patch` with the body `{"retention_days": null}`.
+
+Run the query again to confirm, then take the backup the upgrade procedure
+requires. Limits you keep take effect after the upgrade; each purge is recorded
+as a `channel.retention_purged` audit entry with counts. After the upgrade, the
+Policy panel shows and edits the enforced limit; leave it empty to keep posts
+indefinitely.
+
+### Other changes in 0.8.0
+
+- The channel Policy form now saves **Retention days** on the channel (1 to 36,500 days, or empty to keep everything), and `GET /api/v4/channels/CHANNEL_ID/agent-policy` reports the enforced limit. The import API accepts at most 36,500 days.
+- `GET /api/v4/channels/CHANNEL_ID/posts?since=` returns every post created, edited or deleted after the timestamp (newest first, up to 1,000), with deleted posts as redacted tombstones, instead of one page of live posts. Deleting a post also advances its `update_at`, so reconnecting clients drop it.
+- Post search returns the newest 100 matches instead of the oldest.
+- The agent policy simulator reports the rules ChatterMost enforces (the channel exists and is not archived, the posting account is an active member), with reasons, the members who would see the post, the supervision mode and the channel's retention limit, instead of always answering "allowed". Agent registry permissions, routing, memory flags and allowlists are recorded but not enforced.
+
 ## Changes in 0.7.2
 
 Security update for the migrator image. No database migration was added. 0.7.1 is
@@ -127,8 +179,8 @@ database migration was added. Publication does not alter an installed release.
 
 | Artifact | Meaning |
 | --- | --- |
-| `ghcr.io/cheftaco/chattermost:0.7.2` | Multi-architecture application image |
-| `ghcr.io/cheftaco/chattermost-migrator:0.7.2` | Matching one-off migrator |
+| `ghcr.io/cheftaco/chattermost:0.8.0` | Multi-architecture application image |
+| `ghcr.io/cheftaco/chattermost-migrator:0.8.0` | Matching one-off migrator |
 | `VERSION-amd64`, `VERSION-arm64` image tags | Native build outputs; may exist before all release checks finish |
 | `chattermost-VERSION.tar.gz` | Allowlisted bundle: manager, Compose, manifest, installation README, Apache license and notice |
 | `release.json` | Exact app/migrator/infrastructure digests, source revision, schema/lineage, platforms and permitted upgrade sources |
@@ -136,8 +188,8 @@ database migration was added. Publication does not alter an installed release.
 | `scan-*.json`, `lifecycle-proof-*.json` | Filtered vulnerability findings and sanitized native lifecycle evidence |
 
 Install a completed [GitHub release](https://github.com/ChefTaco/ChatterMost/releases),
-not a candidate architecture tag. The latest lifecycle release is 0.7.2;
-0.3.2, 0.3.3, 0.4.1, 0.4.2, 0.4.4, 0.4.5, 0.5.1, 0.5.2, 0.6.1, 0.6.4, 0.7.0 and 0.7.1 are its tested upgrade sources. The application has one writer
+not a candidate architecture tag. The latest lifecycle release is 0.8.0;
+0.3.2, 0.3.3, 0.4.1, 0.4.2, 0.4.4, 0.4.5, 0.5.1, 0.5.2, 0.6.1, 0.6.4, 0.7.0, 0.7.1 and 0.7.2 are its tested upgrade sources. The application has one writer
 and local WebSocket fanout. Both supported Linux architectures execute on native
 CI runners; there is no claim of emulated execution as native proof.
 
@@ -229,7 +281,7 @@ A successful push is not installation proof. Dispatch the public verification
 workflow for the exact completed release:
 
 ```bash
-gh workflow run verify-public-release.yml --ref main -f version=0.7.2
+gh workflow run verify-public-release.yml --ref main -f version=0.8.0
 ```
 
 Substitute the newly published version. Check both native fresh-install jobs,
@@ -246,7 +298,7 @@ Review the public manifest/digests and per-architecture SBOM/provenance, verify
 all downloaded checksums, and verify the archive and checksum publisher identities:
 
 ```bash
-gh attestation verify chattermost-0.7.2.tar.gz --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
+gh attestation verify chattermost-0.8.0.tar.gz --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
 gh attestation verify SHA256SUMS --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
 ```
 
