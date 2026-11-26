@@ -159,6 +159,8 @@ export type PostRecord = {
   lastReplyAt: number;
   metadata: JsonRecord;
   lifecycleState: 'submitted' | 'approved' | 'rejected' | 'quarantined' | 'deleted';
+  /** Export identity of an imported post; a later import with the same key is skipped. Never sent to clients. */
+  importKey?: string;
 };
 
 export type PostEditHistoryRecord = {

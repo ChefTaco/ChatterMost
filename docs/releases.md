@@ -15,6 +15,24 @@ publish a new version only for an intentional distribution change. Client and
 Hermes instructions live in the [client guide](clients.md),
 [Hermes guide](hermes-compatibility.md) and [agent runbook](../AGENTS.md#installation-runbook-for-agents).
 
+## Unreleased
+
+Changes on `main` since 0.8.0. They ship in the next release.
+
+- **Mattermost import works on real bulk exports.** Posts keep their export
+  author and timestamp, replies stay in their threads, reactions and direct
+  messages are imported, and the helper sends the export in batches that are
+  each applied in one write. Rerunning after a failure resumes without
+  duplicates. See [import](admin-guide.md#import).
+
+### Upgrade notes (unreleased)
+
+- The import helper no longer accepts `--token`. Set `CHATTERMOST_IMPORT_TOKEN`
+  or pass `--token-file PATH` (mode 600).
+- `POST /api/v4/import/mattermost` reuses an existing channel with the same name
+  in the team instead of creating a second one, and accepts requests up to
+  16 MiB. Its response keeps the earlier fields and adds per-batch counts.
+
 ## Changes in 0.8.0
 
 Channel retention limits are now enforced, which permanently deletes data on

@@ -34,6 +34,7 @@ import type {
   StoreState
 } from './domain.js';
 import { websocketFanout } from './capabilities.js';
+import { applyImportBatch, type ImportBatch, type ImportReport } from './mattermost-import.js';
 import type { AppEnv } from './env.js';
 import { resolveDataPath } from './env.js';
 import { toMattermostFileInfo, toMattermostPost, toMattermostReaction } from './mappers.js';
@@ -112,6 +113,7 @@ export type ServiceBundle = {
   teams: TeamService;
   channels: ChannelService;
   posts: PostService;
+  imports: ImportService;
   reactions: ReactionService;
   customEmoji: CustomEmojiService;
   files: FileService;
@@ -247,7 +249,7 @@ export class AuditLogService {
   }
 }
 
-function appendAuditLog(
+export function appendAuditLog(
   state: StoreState,
   input: { actorUserId?: string | null; action: string; targetId?: string | null; ip?: string | null; metadata?: JsonRecord },
   id = createId()
@@ -1446,6 +1448,16 @@ export class ChannelService {
     return channel;
   }
 
+  /** Announces channels that an import created inside its own state write. */
+  public async announceImported(channelIds: string[]): Promise<void> {
+    if (channelIds.length === 0) return;
+    this.searchIndex.invalidate();
+    const created = this.store.read((state) => state.channels.filter((channel) => channelIds.includes(channel.id)));
+    for (const channel of created) {
+      await this.hub.broadcast('channel_created', { channel_id: channel.id }, channel.type === 'O' ? { team_id: channel.teamId } : { channel_id: channel.id });
+    }
+  }
+
   public async patchChannel(channelId: string, patch: Partial<Pick<ChannelRecord, 'displayName' | 'header' | 'purpose' | 'retentionDays'>>, actor: UserRecord): Promise<ChannelRecord> {
     this.assertMember(channelId, actor.id);
     // Renaming a channel and changing its retention policy are management
@@ -2136,6 +2148,39 @@ export class PostService {
   public editHistory(postId: string, actor: UserRecord): PostEditHistoryRecord[] {
     this.getVisiblePost(postId, actor);
     return this.store.read((state) => state.postEditHistory.filter((entry) => entry.postId === postId));
+  }
+}
+
+/**
+ * Imports one batch of a Mattermost bulk export. The whole batch is one state write, so a failure
+ * part-way leaves nothing behind; a dry run applies it to a copy and reports what would happen.
+ */
+export class ImportService {
+  public constructor(
+    private readonly store: StateStore,
+    private readonly channels: ChannelService,
+    private readonly supervision: SupervisionService
+  ) {}
+
+  public async run(actor: UserRecord, batch: ImportBatch, dryRun: boolean): Promise<ImportReport> {
+    requireAdmin(actor);
+    const context = {
+      actor,
+      now: nowMs(),
+      lifecycleFor: (message: string) => this.supervision.initialLifecycleState(message),
+      hashtags: (message: string) => extractHashtags(message).join(' '),
+      mentions: extractMentions,
+      appendAudit: (state: StoreState, input: { actorUserId: string; action: string; metadata: JsonRecord }) => {
+        appendAuditLog(state, input);
+      }
+    };
+    if (dryRun) {
+      const copy = this.store.read((state) => structuredClone(state) as StoreState);
+      return applyImportBatch(copy, batch, context);
+    }
+    const report = await this.store.write((state) => applyImportBatch(state, batch, context));
+    await this.channels.announceImported(report.channel_ids);
+    return report;
   }
 }
 
@@ -3656,6 +3701,7 @@ export function createServices(store: StateStore, env: AppEnv): ServiceBundle {
   const invites = new InviteService(store, env, teams, channels, auditLog, hub);
   const posts = new PostService(store, channels, supervision, auditLog, hub);
   const reactions = new ReactionService(store, posts, channels, auditLog, hub);
+  const imports = new ImportService(store, channels, supervision);
   const customEmoji = new CustomEmojiService(store, auditLog);
   const files = new FileService(store, env, channels, auditLog);
   const retention = new RetentionService(store, env);
@@ -3678,6 +3724,7 @@ export function createServices(store: StateStore, env: AppEnv): ServiceBundle {
     teams,
     channels,
     posts,
+    imports,
     reactions,
     customEmoji,
     files,
@@ -3795,11 +3842,11 @@ function imageDimensions(mimeType: string, bytes: Uint8Array): { width: number; 
   return { width: 0, height: 0 };
 }
 
-function extractMentions(message: string): string[] {
+export function extractMentions(message: string): string[] {
   return [...message.matchAll(/@([a-z0-9._-]+)/giu)].map((match) => match[1] ?? '');
 }
 
-function extractHashtags(message: string): string[] {
+export function extractHashtags(message: string): string[] {
   return [...message.matchAll(/#([a-z0-9._-]+)/giu)].map((match) => match[1] ?? '');
 }
 
