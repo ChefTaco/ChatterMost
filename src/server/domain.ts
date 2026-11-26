@@ -365,6 +365,28 @@ export type IncomingWebhookRecord = {
   label: string;
   enabled: boolean;
   creatorId?: string;
+  /** Absent on webhooks created before the management routes existed. */
+  updateAt?: number;
+};
+
+export type OutgoingWebhookRecord = {
+  id: string;
+  createAt: number;
+  updateAt: number;
+  creatorId: string;
+  teamId: string;
+  /** Empty: any public channel in the team. */
+  channelId: string;
+  displayName: string;
+  description: string;
+  triggerWords: string[];
+  /** 0: the first word equals a trigger word; 1: the first word starts with one. */
+  triggerWhen: 0 | 1;
+  callbackUrls: string[];
+  contentType: 'application/json' | 'application/x-www-form-urlencoded';
+  /** Sent in every payload so the receiver can verify the sender. */
+  token: string;
+  enabled: boolean;
 };
 
 export type MetricsRecord = {
@@ -409,5 +431,6 @@ export type StoreState = {
   agentIdentities: AgentIdentityRecord[];
   agentConversationBindings: AgentConversationBindingRecord[];
   incomingWebhooks: IncomingWebhookRecord[];
+  outgoingWebhooks: OutgoingWebhookRecord[];
   metrics: MetricsRecord;
 };
