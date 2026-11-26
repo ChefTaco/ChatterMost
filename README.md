@@ -42,8 +42,9 @@ advertised to native clients.
    or through HiveXUI at `/signup` in the suite, first.
 
 The native mobile apps use the Mattermost-compatible API. The desktop app loads
-ChatterMost's native web client. Mobile background push delivery, calls,
-upstream server plugins/marketplace and SSO are not implemented. Foreground
+ChatterMost's native web client. Mobile background push needs an
+operator-configured push proxy; calls, upstream server plugins/marketplace and
+SSO are not implemented. Foreground
 messages use WebSocket delivery. [Client setup](docs/clients.md) explains TLS,
 version advertisement, troubleshooting and what the tests establish.
 

@@ -23,8 +23,8 @@ Supported endpoint groups include:
 
 Some discovery endpoints return compatible empty or free-tier responses. An
 acknowledgement does not mean the corresponding upstream feature is implemented.
-Calls, the upstream plugin/marketplace runtime, SSO and mobile background push
-delivery are unsupported. The current [client limits and test coverage](clients.md#current-limits-and-coverage)
+Calls, the upstream plugin/marketplace runtime and SSO are unsupported. Mobile
+background push needs an operator-provided push proxy ([mobile push](clients.md#mobile-push)). The current [client limits and test coverage](clients.md#current-limits-and-coverage)
 also describe upload types, public-link denial and native-device verification.
 
 ## Version Advertising

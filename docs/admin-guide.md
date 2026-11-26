@@ -84,8 +84,8 @@ protected server configuration before the next restart: bootstrap otherwise
 reapplies the old environment token. See [seeded bot configuration](hermes-compatibility.md#chattermost-bot-setup). Privileged bot API mutations also return an operation ID; administrators can reconcile it at `GET /admin/bot-operations/{operation_id}` without exposing the one-time token again.
 
 File uploads currently accept PNG, JPEG, GIF, WebP and plain text. General
-audio/video/document uploads and mobile background push transport are not
-implemented. The public-links toggle affects metadata; the unauthenticated public
+audio/video/document uploads are not implemented. Mobile background push is off
+unless a push proxy is configured; see [mobile push](clients.md#mobile-push). The public-links toggle affects metadata; the unauthenticated public
 file route remains denied. See [client limits](clients.md#current-limits-and-coverage).
 
 ## Webhooks

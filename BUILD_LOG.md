@@ -40,6 +40,11 @@
   must list the newest stone before it, and after 0.8.0 it may list only the
   stone and at most three newer sources, capping lifecycle runs at four per
   release. Older installations upgrade through the stone.
+- Mobile push: with `PUSH_NOTIFICATION_SERVER` set, posts notify channel members
+  without an open WebSocket whose registered mobile device and push preference
+  match, through the push proxy's `/api/v1/send_push` (upstream payload,
+  generic contents by default). A `REMOVE` answer clears the device
+  registration. Client config and `/api/v4/push/status` report the transport.
 - The Mattermost import helper reads bulk exports with their authors,
   timestamps, threads (nested or by root ID), reactions and direct messages,
   reports what it cannot carry over, and sends batches that the server applies
