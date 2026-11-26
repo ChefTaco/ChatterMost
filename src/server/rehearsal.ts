@@ -46,5 +46,6 @@ export class AuthenticatedRehearsalStore implements StateStore {
     this.queue = operation.then(() => undefined, () => undefined);
     return operation;
   }
+  public health(): Promise<void> { return this.source.health(); }
   public async close(): Promise<void> { await this.queue; await this.source.close(); }
 }

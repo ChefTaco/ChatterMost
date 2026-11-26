@@ -130,6 +130,12 @@ export class JsonStore {
     this.state.metrics[name] += 1;
   }
 
+  /** Readiness: refuses once a failed write has made persistence uncertain. */
+  public health(): Promise<void> {
+    if (this.persistenceHeld) return Promise.reject(new Error('persistence_held'));
+    return Promise.resolve();
+  }
+
   public async write<T>(writer: (state: StoreState) => T): Promise<T> {
     if (this.readOnly) throw new Error('Writes are disabled in preflight mode');
     const operation = this.writeQueue.then(async () => {
@@ -215,6 +221,12 @@ export class PostgresStore {
 
   public incrementMetric(name: MetricName): void {
     this.state.metrics[name] += 1;
+  }
+
+  /** Readiness: persistence is trusted and the database answers. */
+  public async health(): Promise<void> {
+    if (this.persistenceHeld) throw new Error('persistence_held');
+    await this.prisma.$queryRawUnsafe('SELECT 1');
   }
 
   public async write<T>(writer: (state: StoreState) => T): Promise<T> {
@@ -370,4 +382,4 @@ function mergeConcurrentMetricIncrements(draft: StoreState, current: Readonly<Me
   }
 }
 
-export type StateStore = Pick<JsonStore, 'initialize' | 'read' | 'incrementMetric' | 'write' | 'close'>;
+export type StateStore = Pick<JsonStore, 'initialize' | 'read' | 'incrementMetric' | 'write' | 'close' | 'health'>;

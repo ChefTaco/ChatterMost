@@ -22,6 +22,7 @@ import type { AppEnv } from './env.js';
 import { resolveDataPath } from './env.js';
 import { IncomingWebhookService, OutgoingWebhookService, toIncomingWebhookResponse, toOutgoingWebhookResponse } from './webhooks.js';
 import { bootstrap, createServices, isAdmin, requireAdmin, type AuthContext, type ServiceBundle } from './services.js';
+import { renderPrometheusMetrics } from './prometheus.js';
 import { JsonStore, PostgresStore, type StateStore } from './store.js';
 import { toMattermostChannel, toMattermostChannelMember, toMattermostCommand, toMattermostFileInfo, toMattermostPost, toMattermostPostList, toMattermostPreference, toMattermostReaction, toMattermostTeam, toMattermostTeamMember, toMattermostUser } from './mappers.js';
 import { AbuseControl, rateLimit } from './rate-limit.js';
@@ -255,6 +256,8 @@ const MattermostImportSchema = z.object({
     .default([])
 });
 
+const processStartedAt = Date.now();
+
 export async function createServerApp(env: AppEnv, options: { storePath?: string | null } = {}): Promise<ServerApp> {
   if (env.AUTHENTICATED_REHEARSAL && (!env.HIVE_REHEARSAL || !env.PREFLIGHT_MODE)) throw new Error('Authenticated rehearsal requires read-only isolation');
   if (!env.PREFLIGHT_MODE) {
@@ -356,8 +359,9 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
     })
   );
   // Suite-standard probes. `/api/v4/system/ping` above stays the Mattermost-compatible
-  // health endpoint that native clients and the container health check call.
-  registerHealthRoutes(app, { service: 'chattermost', aliases: false });
+  // endpoint that native clients call. Liveness never runs checks; readiness (which the
+  // container health check calls) fails while persistence is held or the database is down.
+  registerHealthRoutes(app, { service: 'chattermost', aliases: false, checks: [{ name: 'store', check: () => store.health() }] });
   app.get('/api/v4/system/version', (c) =>
     c.json({
       version: env.ALLOW_VERSION_ADVERTISEMENT ? env.COMPATIBILITY_SERVER_VERSION : '0.0.0-compatible'
@@ -1366,6 +1370,21 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
       ...store.read((state) => state.metrics),
       abuse_control: await abuseControl.telemetry()
     });
+  });
+  app.get('/api/v4/metrics/prometheus', async (c) => {
+    const bearer = c.req.header('authorization')?.replace(/^Bearer\s+/iu, '') ?? '';
+    // A scraper presents the dedicated metrics token; anyone else needs an admin session.
+    if (!matchesSha256Digest(bearer, env.METRICS_TOKEN_SHA256)) requireAdmin((await requireAuth(c, services)).user);
+    const body = renderPrometheusMetrics({
+      state: store.read((state) => state),
+      websocketConnections: services.hub.connectionCount(),
+      abuse: (await abuseControl.telemetry()) as unknown as Record<string, unknown>,
+      version: env.BUILD_NUMBER,
+      compatibilityProfile: env.COMPATIBILITY_PROFILE,
+      startedAtMs: processStartedAt,
+      nowMs: Date.now()
+    });
+    return c.body(body, 200, { 'Content-Type': 'text/plain; version=0.0.4; charset=utf-8', 'Cache-Control': 'no-store' });
   });
   app.get('/api/v4/ha/status', async (c) => {
     requireAdmin((await requireAuth(c, services)).user);

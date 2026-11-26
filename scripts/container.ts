@@ -110,7 +110,8 @@ async function probe(): Promise<void> {
     req.once('error', reject); req.once('timeout', () => req.destroy(new Error('Local readiness timeout')));
     if (body !== undefined) req.write(JSON.stringify(body)); req.end();
   });
-  const response = await localRequest('/api/v4/system/ping');
+  // Readiness, not just a listening socket: it fails while the database is down or persistence is held.
+  const response = await localRequest('/health/ready');
   if (response.status !== 200) throw new Error('Health check failed');
   if (command !== 'ready') return;
   const login = await localRequest('/api/v4/users/login', { login_id: env.ADMIN_USERNAME, password: env.ADMIN_PASSWORD });

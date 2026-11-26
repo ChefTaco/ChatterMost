@@ -69,9 +69,12 @@ default when both TLS references are unset.
 ## Suite health and request IDs
 
 `GET /health/live` and `GET /health/ready` serve the suite health format
-(`service: "chattermost"`, no version). Preflight mode allows them alongside
-`/api/v4/system/ping`, which remains the Mattermost-compatible probe used by
-native clients and the container health check. Every response carries a freshly
+(`service: "chattermost"`, no version). Liveness answers whenever the process
+can. Readiness runs a `store` check and answers 503 `not_ready` when a failed
+write has put persistence on hold or, with Postgres, the database does not
+answer; the image's container health check calls it. Preflight mode allows both
+alongside `/api/v4/system/ping`, which remains the Mattermost-compatible probe
+for native clients and always answers while the process runs. Every response carries a freshly
 generated UUID in `X-Request-Id`. Because ChatterMost is internet-facing, inbound
 `x-request-id`, `x-hive-request-id`, `x-correlation-id` and `traceparent` headers
 are ignored, so callers cannot choose request IDs. The same ID appears in

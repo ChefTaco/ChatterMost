@@ -36,6 +36,11 @@ Changes on `main` since 0.8.0. They ship in the next release.
   markers, audit entries) no longer slow down as message history grows. The
   stored layout is unchanged; no migration. The JSON store file is written
   without indentation. See [storage scaling](development.md#storage-scaling).
+- **Prometheus metrics** at `GET /api/v4/metrics/prometheus`, for admins or a
+  scraper token (`METRICS_TOKEN_SHA256`). See [deployment](deployment.md).
+- **Readiness checks the store.** `/health/ready` answers 503 while persistence
+  is on hold or Postgres does not answer, and the container health check now
+  calls it instead of `/api/v4/system/ping`.
 
 ### Upgrade notes (unreleased)
 
@@ -46,6 +51,8 @@ Changes on `main` since 0.8.0. They ship in the next release.
   16 MiB. Its response keeps the earlier fields and adds per-batch counts.
 - `POST /api/v4/webhooks/incoming` now rejects a missing or archived channel and
   a channel the creating admin is not a member of. Existing webhooks keep working.
+- A container whose database stops answering is now reported unhealthy
+  instead of healthy. `/api/v4/system/ping` is unchanged.
 
 ## Changes in 0.8.0
 
