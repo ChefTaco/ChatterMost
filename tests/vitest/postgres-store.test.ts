@@ -2,6 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { describe, expect, it } from 'vitest';
 
 import { createServerApp } from '../../src/server/app.js';
+import { PostgresStore } from '../../src/server/store.js';
 import { loadEnv } from '../../src/server/env.js';
 
 const postgresUrl = process.env.CHATTERMOST_POSTGRES_TEST_URL;
@@ -91,6 +92,49 @@ describe('Postgres runtime store', () => {
     expect((await restored.app.request('/api/v4/posts', { method: 'POST', headers: restoredHeaders, body: '{}' })).status).toBe(503);
     await restored.store.close(); await restored.abuseControl.close();
     expect(await prismaState(postgresUrl)).toBe(beforePreflight);
+  });
+});
+
+describe('Postgres partial writes', () => {
+  it.runIf(postgresUrl !== undefined)('stores exactly the in-memory state when writes send only the fields they touch', async () => {
+    if (postgresUrl === undefined) throw new Error('CHATTERMOST_POSTGRES_TEST_URL is required');
+    const prisma = new PrismaClient({ datasources: { db: { url: postgresUrl } } });
+    await prisma.$executeRawUnsafe('CREATE TABLE IF NOT EXISTS "RuntimeState" ("key" TEXT PRIMARY KEY, "value" JSONB NOT NULL, "update_at" BIGINT NOT NULL)');
+    await prisma.$executeRawUnsafe('DELETE FROM "RuntimeState" WHERE "key" = $1', 'default');
+    await prisma.$disconnect();
+
+    const store = new PostgresStore(postgresUrl);
+    await store.initialize();
+    const stored = async () => JSON.parse(await prismaState(postgresUrl)) as unknown;
+    const inMemory = () => JSON.parse(JSON.stringify(store.read((state) => state))) as unknown;
+
+    await store.write((state) => {
+      state.preferences.push({ id: 'pref1', userId: 'u1', category: 'display', name: 'theme', value: 'dark', createAt: 1, updateAt: 1 });
+    });
+    await store.write((state) => {
+      state.auditSequence += 7;
+      state.statuses.push({ user_id: 'u1', status: 'online', manual: true, last_activity_at: 5 });
+    });
+    await store.write((state) => {
+      state.preferences = state.preferences.filter((preference) => preference.id !== 'pref1');
+    });
+    expect(await stored()).toEqual(inMemory());
+
+    // A missing row is recreated from the whole in-memory document.
+    const cleaner = new PrismaClient({ datasources: { db: { url: postgresUrl } } });
+    await cleaner.$executeRawUnsafe('DELETE FROM "RuntimeState" WHERE "key" = $1', 'default');
+    await cleaner.$disconnect();
+    await store.write((state) => {
+      state.auditSequence += 1;
+    });
+    expect(await stored()).toEqual(inMemory());
+    await store.close();
+
+    const reopened = new PostgresStore(postgresUrl);
+    await reopened.initialize();
+    expect(reopened.read((state) => state.auditSequence)).toBe(8);
+    expect(reopened.read((state) => state.statuses.map((status) => status.user_id))).toEqual(['u1']);
+    await reopened.close();
   });
 });
 

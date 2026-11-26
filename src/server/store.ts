@@ -136,11 +136,12 @@ export class JsonStore {
       if (this.persistenceHeld) throw new Error('Runtime persistence is uncertain; no subsequent writes are permitted');
       const current = this.state;
       const baselineMetrics = { ...current.metrics };
-      const draft = structuredClone(current);
+      const { draft, commit } = createDraft(current);
       const result = writer(draft);
-      try { await this.persist(draft); } catch (error) { this.persistenceHeld = true; throw error; }
-      mergeConcurrentMetricIncrements(draft, current.metrics, baselineMetrics);
-      this.state = draft;
+      const { next } = commit();
+      try { await this.persist(next); } catch (error) { this.persistenceHeld = true; throw error; }
+      mergeConcurrentMetricIncrements(next, current.metrics, baselineMetrics);
+      this.state = next;
       return result;
     });
     this.writeQueue = operation.then(
@@ -163,7 +164,7 @@ export class JsonStore {
     await mkdir(path.dirname(this.filePath), { recursive: true, mode: 0o700 });
     const tempPath = `${this.filePath}.${randomUUID()}.tmp`;
     try {
-      await writeFile(tempPath, JSON.stringify(state, null, 2), { flag: 'wx', mode: 0o600 });
+      await writeFile(tempPath, JSON.stringify(state), { flag: 'wx', mode: 0o600 });
       const staged = await open(tempPath, 'r+');
       try { await staged.sync(); } finally { await staged.close(); }
       await rename(tempPath, this.filePath);
@@ -184,6 +185,7 @@ export class PostgresStore {
   private readonly prisma: PrismaClient;
   private writeQueue: Promise<void> = Promise.resolve();
   private persistenceHeld = false;
+  private wholeDocumentPending = true;
 
   public constructor(databaseUrl: string, private readonly readOnly = false) {
     this.prisma = new PrismaClient({
@@ -221,11 +223,20 @@ export class PostgresStore {
       if (this.persistenceHeld) throw new Error('Runtime persistence is uncertain; no subsequent writes are permitted');
       const current = this.state;
       const baselineMetrics = { ...current.metrics };
-      const draft = structuredClone(current);
+      const { draft, commit } = createDraft(current);
       const result = writer(draft);
-      try { await this.persist(draft); } catch (error) { this.persistenceHeld = true; throw error; }
-      mergeConcurrentMetricIncrements(draft, current.metrics, baselineMetrics);
-      this.state = draft;
+      const { next, touched } = commit();
+      try {
+        // The first write stores the whole hydrated document; later writes send only what changed.
+        if (this.wholeDocumentPending) await this.persist(next);
+        else await this.persistFields(next, touched);
+        this.wholeDocumentPending = false;
+      } catch (error) {
+        this.persistenceHeld = true;
+        throw error;
+      }
+      mergeConcurrentMetricIncrements(next, current.metrics, baselineMetrics);
+      this.state = next;
       return result;
     });
     this.writeQueue = operation.then(
@@ -244,6 +255,56 @@ export class PostgresStore {
   private async persist(state: StoreState = this.state): Promise<void> {
     await this.prisma.$executeRawUnsafe('INSERT INTO "RuntimeState" ("key", "value", "update_at") VALUES ($1, $2::jsonb, $3) ON CONFLICT ("key") DO UPDATE SET "value" = EXCLUDED."value", "update_at" = EXCLUDED."update_at"', 'default', JSON.stringify(state), nowMs());
   }
+
+  /**
+   * Replaces only the named top-level fields of the stored document, in one statement, so the
+   * row is never left half-written. Falls back to a whole-document write if the row is missing.
+   */
+  private async persistFields(state: StoreState, fields: ReadonlySet<keyof StoreState>): Promise<void> {
+    const patch: Partial<Record<keyof StoreState, unknown>> = {};
+    for (const field of fields) patch[field] = state[field];
+    const updated = await this.prisma.$executeRawUnsafe('UPDATE "RuntimeState" SET "value" = "value" || $2::jsonb, "update_at" = $3 WHERE "key" = $1', 'default', JSON.stringify(patch), nowMs());
+    if (updated !== 1) await this.persist(state);
+  }
+}
+
+/**
+ * A copy-on-write draft of `current` for one write. Each top-level field is cloned the first time
+ * the writer reads or assigns it, so a write that touches a few collections no longer copies the
+ * whole state, and the original is never mutated. `commit` returns the next state (untouched fields
+ * shared with `current`) and the fields the writer touched, which are all that need persisting.
+ * Metrics are always copied up front: concurrent increments are merged into them after the write.
+ */
+export function createDraft(current: StoreState): { draft: StoreState; commit: () => { next: StoreState; touched: ReadonlySet<keyof StoreState> } } {
+  const touched = new Set<keyof StoreState>(['metrics']);
+  const values = new Map<keyof StoreState, unknown>([['metrics', { ...current.metrics }]]);
+  const draft = {} as StoreState;
+  for (const field of Object.keys(current) as (keyof StoreState)[]) {
+    Object.defineProperty(draft, field, {
+      enumerable: true,
+      configurable: false,
+      get: () => {
+        if (!values.has(field)) {
+          values.set(field, structuredClone(current[field]));
+          touched.add(field);
+        }
+        return values.get(field);
+      },
+      set: (value: unknown) => {
+        values.set(field, value);
+        touched.add(field);
+      }
+    });
+  }
+  Object.preventExtensions(draft);
+  return {
+    draft,
+    commit: () => {
+      const next = { ...current };
+      for (const [field, value] of values) (next as Record<keyof StoreState, unknown>)[field] = value;
+      return { next, touched };
+    }
+  };
 }
 
 /** Fills collections that older persisted documents lack; both stores read the same document shape. */

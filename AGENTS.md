@@ -42,7 +42,8 @@ or deployment. Released images and bundles are immutable.
 - `src/web/assets.ts` serves native HTML/CSS/JS. `tests/vitest/` and
   `tests/playwright/` cover API/runtime and browser behavior. `BUILD_LOG.md` tracks sessions.
 - Local tests use JSON or in-memory stores. Production uses `STORE_BACKEND=postgres`
-  and stores the entire `StoreState` in `RuntimeState`. Normalized Prisma tables
+  and stores the entire `StoreState` in `RuntimeState`; writes persist only the
+  top-level fields they touch ([storage scaling](docs/development.md#storage-scaling)). Normalized Prisma tables
   are compatibility/migration artifacts. Write records through the service layer.
 - Use the patched Node version from `.nvmrc` for source and the Dockerfile pin for
   containers. Use `npm run dev` locally. The production entry point is

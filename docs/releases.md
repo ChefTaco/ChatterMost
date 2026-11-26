@@ -31,6 +31,11 @@ Changes on `main` since 0.8.0. They ship in the next release.
   words in public channels are sent to an external URL and a JSON reply is
   posted back. Callbacks to internal addresses need
   `OUTGOING_WEBHOOK_ALLOWED_HOSTS`. See [webhooks](admin-guide.md#webhooks).
+- **Cheaper writes on large installations.** A write copies and stores only the
+  parts of the state it changes, so most writes (sign-ins, statuses, read
+  markers, audit entries) no longer slow down as message history grows. The
+  stored layout is unchanged; no migration. The JSON store file is written
+  without indentation. See [storage scaling](development.md#storage-scaling).
 
 ### Upgrade notes (unreleased)
 
