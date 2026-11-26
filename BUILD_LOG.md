@@ -1,5 +1,11 @@
 # ChatterMost Build Log
 
+- The Mattermost import helper reads bulk exports with their authors,
+  timestamps, threads (nested or by root ID), reactions and direct messages,
+  reports what it cannot carry over, and sends batches that the server applies
+  in one write each, skipping posts already imported. The admin token comes
+  from `CHATTERMOST_IMPORT_TOKEN` or a mode-600 `--token-file`; `--token` is
+  rejected. The import route accepts up to 16 MiB.
 - Channel `retention_days` is now enforced. An hourly purge deletes posts older
   than the limit, with their edit history, reactions and attachment files, plus
   old unattached uploads. Each purge writes one `channel.retention_purged` audit

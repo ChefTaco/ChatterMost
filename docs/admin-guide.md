@@ -91,20 +91,50 @@ file route remains denied. See [client limits](clients.md#current-limits-and-cov
 ## Import
 
 The import helper runs from a source/operator checkout, not inside the production
-image (which has no npm/TypeScript toolchain). It imports a supported subset of
-channels/posts; it is not a complete account, credential or attachment migration.
-Use the Mattermost-compatible helper to inspect a JSONL export:
+image (which has no npm/TypeScript toolchain). It reads a Mattermost bulk export
+(JSONL) and imports channels, posts, threads, reactions and direct messages. It
+does not create accounts and does not copy credentials, attachments, pins, saved
+(flagged) posts, edit history or custom emoji. Inspect the export first; nothing
+is written without `--apply`:
 
 ```bash
 npm run import:mm-export -- --file export.jsonl
 ```
 
-Add `--server-url`, `--token`, and `--apply` to submit normalized channels and posts to `/api/v4/import/mattermost`.
+The report counts channels, posts, replies and direct messages, and lists under
+`lost` what will not be carried over. To have the server check the plan as well
+(unknown teams or channels, and authors without a matching account), add
+`--server-url https://chat.example.test`. The admin token comes from the
+`CHATTERMOST_IMPORT_TOKEN` environment variable or from `--token-file PATH`,
+which must not be readable by group or others (`chmod 600`). A token on the
+command line is rejected because other local users and shell history can see it.
+Review the report, then rerun with `--apply`.
 
-The dry run prints sample channel/post content. Treat exports and output as private;
-use synthetic exports in public reports. Supplying `--token` exposes that argument
-to the local process argument list and potentially shell history, so use a protected operator workflow.
-This helper does not replace a consistent installation backup/restore.
+How the import maps the export:
+
+- **Authors.** Each post is attributed to the active account with the export's
+  username, who is added to the channel if needed. An author without an active
+  account in the target team is listed in `unmapped_users`; their posts are
+  attributed to the importing admin with `props.imported_username`. Create those
+  accounts (and add them to the team) before applying to keep authorship.
+- **Timestamps and threads.** Posts keep their export `create_at`. Replies stay
+  attached to their root, whether nested (`replies`) or flat (`root_id` naming
+  the root's export `id`).
+- **Teams and channels.** Posts go to the team named in the export; pass
+  `--team NAME` to import everything into one existing team. Teams are not
+  created. An existing channel with the same name in the team is reused.
+- **Direct messages.** Conversations between people who all have accounts are
+  imported; others are counted as lost.
+- **Batches and retries.** The helper sends threads in batches (4 MiB by default,
+  `--batch-bytes`) and stops at the first failure. Each batch is applied in one
+  write, so a failed batch leaves nothing behind. Imported posts carry their
+  export identity, so rerunning the same command skips what was already imported
+  and resumes. Each batch writes one `import.mattermost_archive` audit entry.
+
+Channels with a retention limit purge imported posts older than the limit at the
+next retention sweep. Treat exports and output as private; use synthetic exports
+in public reports. This helper does not replace a consistent installation
+backup/restore; take a backup before a large import.
 
 ## Browser administration contracts
 

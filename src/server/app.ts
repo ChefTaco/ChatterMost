@@ -194,31 +194,50 @@ const PushNotifySchema = z.object({
   post_id: z.string().optional(),
   message: z.string().optional().default('')
 });
+const ImportReactionSchema = z.object({
+  user: z.string().min(1).max(64),
+  emoji_name: z.string().min(1).max(64),
+  create_at: z.number().int().optional()
+});
+const ImportReplySchema = z.object({
+  import_id: z.string().min(1).max(200).optional(),
+  user: z.string().max(64).optional(),
+  message: z.string().max(16_383).default(''),
+  create_at: z.number().int().optional(),
+  props: z.record(z.string(), z.unknown()).optional().default({}),
+  reactions: z.array(ImportReactionSchema).max(500).optional().default([])
+});
+/** Largest import request; `scripts/import-mattermost-export.mjs` sends batches well below it. */
+const IMPORT_BODY_LIMIT_BYTES = 16 * 1024 * 1024;
 const MattermostImportSchema = z.object({
   dry_run: z.boolean().optional().default(true),
   channels: z
     .array(
       z.object({
         team_id: z.string().optional(),
-        name: z.string().min(1),
-        display_name: z.string().min(1),
+        team: z.string().optional(),
+        name: z.string().min(1).max(64),
+        display_name: z.string().min(1).max(64),
         type: z.enum(['O', 'P']).optional().default('O'),
-        header: z.string().optional().default(''),
-        purpose: z.string().optional().default(''),
+        header: z.string().max(1024).optional().default(''),
+        purpose: z.string().max(250).optional().default(''),
         retention_days: z.number().int().positive().max(36_500).nullable().optional()
       })
     )
+    .max(5_000)
     .optional()
     .default([]),
   posts: z
     .array(
-      z.object({
-        channel_id: z.string().optional().default(''),
-        message: z.string().default(''),
-        root_id: z.string().optional().default(''),
-        props: z.record(z.string(), z.unknown()).optional().default({})
+      ImportReplySchema.extend({
+        channel_id: z.string().max(64).optional().default(''),
+        team: z.string().max(64).optional(),
+        direct_members: z.array(z.string().min(1).max(64)).min(2).max(8).optional(),
+        root_id: z.string().max(200).optional().default(''),
+        replies: z.array(ImportReplySchema).max(10_000).optional().default([])
       })
     )
+    .max(20_000)
     .optional()
     .default([])
 });
@@ -1383,58 +1402,14 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
     const auth = await requireAuth(c, services);
     requireAdmin(auth.user);
     const body = await readJson(c, MattermostImportSchema);
-    const defaultTeamId = services.teams.listVisibleTeams(auth.user).at(0)?.id ?? '';
-    const defaultChannelId = services.channels.listForUser(auth.user.id).at(0)?.id ?? '';
-    const channelIdByName = new Map<string, string>();
-    let importedChannels = 0;
-    let importedPosts = 0;
-
-    if (!body.dry_run) {
-      for (const channelInput of body.channels) {
-        const channel = await services.channels.createChannel({
-          creatorId: auth.user.id,
-          teamId: channelInput.team_id ?? defaultTeamId,
-          type: channelInput.type,
-          name: channelInput.name,
-          displayName: channelInput.display_name,
-          header: channelInput.header,
-          purpose: channelInput.purpose
-        });
-        if (channelInput.retention_days !== undefined) {
-          await services.channels.patchChannel(channel.id, { retentionDays: channelInput.retention_days }, auth.user);
-        }
-        channelIdByName.set(channel.name, channel.id);
-        importedChannels += 1;
-      }
-
-      for (const postInput of body.posts) {
-        const channelId = postInput.channel_id.length > 0 ? (channelIdByName.get(postInput.channel_id) ?? postInput.channel_id) : defaultChannelId;
-        if (channelId.length === 0) {
-          throw badRequest('Import post requires a channel_id when no default channel exists');
-        }
-        await services.posts.createPost({
-          actor: auth.user,
-          channelId,
-          message: postInput.message,
-          rootId: postInput.root_id,
-          props: asJsonRecord(postInput.props)
-        });
-        importedPosts += 1;
-      }
-      await services.auditLog.record({
-        actorUserId: auth.user.id,
-        action: 'import.mattermost_archive',
-        metadata: { channels: importedChannels, posts: importedPosts }
-      });
-    }
-
+    const report = await services.imports.run(auth.user, body, body.dry_run);
+    const visible: Partial<typeof report> = { ...report };
+    delete visible.channel_ids;
     return c.json({
       status: 'OK',
       dry_run: body.dry_run,
-      planned_channels: body.channels.length,
-      planned_posts: body.posts.length,
-      imported_channels: importedChannels,
-      imported_posts: importedPosts
+      ...visible,
+      imported_channels: report.created_channels
     });
   });
 
@@ -2100,6 +2075,12 @@ function requestBodyLimit(): MiddlewareHandler {
       throw new HttpAppError('api.context.request_body_too_large.app_error', 'Request body is too large', 413);
     }
   });
+  const importLimit = honoBodyLimit({
+    maxSize: IMPORT_BODY_LIMIT_BYTES,
+    onError: () => {
+      throw new HttpAppError('api.context.request_body_too_large.app_error', 'Request body is too large', 413);
+    }
+  });
   const uploadLimit = honoBodyLimit({
     maxSize: 30 * 1024 * 1024,
     onError: () => {
@@ -2112,7 +2093,8 @@ function requestBodyLimit(): MiddlewareHandler {
       contentType.startsWith('multipart/form-data') &&
       ((c.req.method === 'POST' && c.req.path === '/api/v4/files') ||
         (c.req.method === 'POST' && /^\/api\/v4\/users\/[^/]+\/image$/u.test(c.req.path)));
-    return (isMultipartUpload ? uploadLimit : jsonLimit)(c, next);
+    if (isMultipartUpload) return uploadLimit(c, next);
+    return (c.req.method === 'POST' && c.req.path === '/api/v4/import/mattermost' ? importLimit : jsonLimit)(c, next);
   };
 }
 
