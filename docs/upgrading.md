@@ -13,18 +13,21 @@ Keep credentials, backup paths, diagnostics and recovery evidence private.
 | Published Compose 0.3.2 | Published Compose 0.3.3 | Run the verified **0.3.3 manager** with `upgrade 0.3.3` |
 | Published Compose 0.3.2, 0.3.3, 0.4.1, 0.4.2, 0.4.4, 0.4.5, 0.5.1, 0.5.2, 0.6.1, 0.6.4, 0.7.0, 0.7.1 or 0.7.2 | Published Compose 0.8.0 | Run the verified **0.8.0 manager** with `upgrade 0.8.0` |
 | Published Compose 0.8.0 | Published Compose 0.9.0 | Run the verified **0.9.0 manager** with `upgrade 0.9.0` |
+| Published Compose 0.9.0 | Published Compose 0.10.0 | Run the verified **0.10.0 manager** with `upgrade 0.10.0` |
 | Compose 0.3.2 to 0.7.2 | A release after 0.8.0 | Upgrade to the **0.8.0 stepping stone** first, then to the target |
 | Compose 0.8.0 | A release after 0.9.0 | Upgrade to the **0.9.0 stepping stone** first, then to the target |
-| Compose 0.9.0 | Same version | No upgrade required; `start` checks/starts the selected release |
-| Compose 0.9.0 | A future release | Only when that published target explicitly lists `0.9.0` in `release.json` → `upgrade_from` and the path has release-test coverage |
+| Compose 0.10.0 | Same version | No upgrade required; `start` checks/starts the selected release |
+| Compose 0.9.0 or 0.10.0 | A future release | Only when that published target explicitly lists the installed version in `release.json` → `upgrade_from` and the path has release-test coverage |
 | Compose with a recorded previous release | That previous release | `rollback`, only when generation, lineage and actual schema checks permit it |
 | Native SSH/systemd | Compatible newer native release | Verified backup, then the native staged migration/preflight/activation transaction |
 | Native SSH/systemd or JSON store | Compose | Separate authorized migration; not an ordinary version upgrade or a cross-installation `restore` |
 
-The current published release is **0.9.0**. Its reviewed `upgrade_from` list contains
-**0.8.0** only. An installation on 0.3.2 to 0.7.2 must first upgrade to the 0.8.0
-stepping stone, and an older 0.2.3 installation must first upgrade to the historical
-0.3.2 release using its verified manager; a direct 0.2.3 → 0.9.0 or 0.7.2 → 0.9.0 path is unsupported.
+The current published release is **0.10.0**. Its reviewed `upgrade_from` list contains
+**0.9.0** only. An installation on 0.8.0 must first upgrade to the 0.9.0 stepping
+stone, an installation on 0.3.2 to 0.7.2 to the 0.8.0 stepping stone and then 0.9.0,
+and an older 0.2.3 installation must first upgrade to the historical 0.3.2 release
+using its verified manager; a direct 0.8.0 → 0.10.0, 0.7.2 → 0.10.0 or 0.2.3 → 0.10.0
+path is unsupported.
 The `v0.4.0`, `v0.5.0`, `v0.6.0`, `v0.6.2` and `v0.6.3` tags were never published as releases and are not upgrade targets.
 Do not infer a path from version ordering, source tags or the presence
 of an architecture-specific image. Failed candidate versions are not installations.
@@ -40,6 +43,19 @@ always lands on a release that can still verify every password. The release test
 runner enforces this and exercises every declared source on each native
 architecture. This coverage requirement does not publish a future version or
 change an immutable published manifest.
+
+## Upgrading to 0.10.0 switches new password hashes to scrypt
+
+0.10.0 hashes new and changed passwords with scrypt and replaces each bcrypt hash
+at that account's next successful sign-in; existing passwords keep working and no
+reset is needed. Releases before 0.9.0 cannot verify scrypt, so **roll back only to
+0.9.x** (the manager's `rollback` from 0.10.0 lands on 0.9.0). `PASSWORD_HASHING=bcrypt`
+in the protected runtime configuration keeps the old behaviour; set it before
+upgrading if a native installation may still need to go back below 0.9.0. Deleting
+a thread's root now removes the whole thread, including other people's replies;
+threads deleted before the upgrade are not changed. No database migration is added
+and the stored layout is unchanged. See the
+[0.10.0 upgrade notes](releases.md#upgrade-notes-for-0100).
 
 ## Upgrading to 0.9.0 removes deleted attachments and old unattached uploads
 
@@ -82,11 +98,11 @@ editing the mounted file alone does not reload the running process.
 2. Review the target's `upgrade_from`, infrastructure image digests and schema
    contract. Verify the current `status`, and take a backup with the new manager.
    Plan a brief interruption: backup drains the app and resumes it afterward if
-   it was running. In this example, both commands use the downloaded 0.9.0 tool:
+   it was running. In this example, both commands use the downloaded 0.10.0 tool:
 
    ```bash
-   ./chattermost-0.9.0/chattermost --directory /srv/chattermost status
-   ./chattermost-0.9.0/chattermost --directory /srv/chattermost backup
+   ./chattermost-0.10.0/chattermost --directory /srv/chattermost status
+   ./chattermost-0.10.0/chattermost --directory /srv/chattermost backup
    ```
 
    Save the printed backup path privately, copy the complete backup off-host and
@@ -97,11 +113,11 @@ editing the mounted file alone does not reload the running process.
 3. Request the exact version:
 
    ```bash
-   ./chattermost-0.9.0/chattermost --directory /srv/chattermost upgrade 0.9.0
+   ./chattermost-0.10.0/chattermost --directory /srv/chattermost upgrade 0.10.0
    /srv/chattermost/chattermost --directory /srv/chattermost status
    ```
 
-   The example assumes the download directory contains `chattermost-0.9.0/`;
+   The example assumes the download directory contains `chattermost-0.10.0/`;
    do not run it from inside that extracted directory with the same relative path.
    After a successful upgrade, the manager is installed at the installation root.
 4. Check public HTTPS ping/client configuration against the selected manifest's

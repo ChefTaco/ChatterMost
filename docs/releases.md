@@ -15,7 +15,12 @@ publish a new version only for an intentional distribution change. Client and
 Hermes instructions live in the [client guide](clients.md),
 [Hermes guide](hermes-compatibility.md) and [agent runbook](../AGENTS.md#installation-runbook-for-agents).
 
-## Unreleased
+## Changes in 0.10.0
+
+Released 2026-11-26. **Read the upgrade notes before upgrading:** new password
+hashes are scrypt, so roll back only to 0.9.x. 0.10.0 upgrades only from the
+0.9.0 stepping stone; installations on 0.8.0 upgrade to 0.9.0 first. No database
+migration was added and the stored layout is unchanged.
 
 - **scrypt is the default password hashing** (`PASSWORD_HASHING=scrypt`). New
   and changed passwords are hashed with scrypt on the threadpool, so a burst of
@@ -33,8 +38,11 @@ Hermes instructions live in the [client guide](clients.md),
   the `post.deleted` audit entry records `deleted_replies`. The native web UI
   asks before deleting a root that has replies. `post_deleted` events now also
   carry the deleted `post` (redacted), like retention purges.
+- Dependabot opens one grouped weekly pull request for `@hivemagnus/*` package
+  updates (a stray copy of the old configuration was removed first). Repository
+  configuration only; nothing changes in the images or the bundle.
 
-### Upgrade notes
+### Upgrade notes for 0.10.0
 
 - **Roll back only to 0.9.x.** 0.9.0 is the first release that verifies scrypt
   hashes. After this release rehashes an account at sign-in, a release before
@@ -44,12 +52,16 @@ Hermes instructions live in the [client guide](clients.md),
   0.9.x. Native installations must not roll back past 0.9.0 either; if one still
   needs that option, set `PASSWORD_HASHING=bcrypt` before upgrading (hashes that
   are already scrypt stay scrypt).
-- **Upgrade from 0.9.0 only.** Installations on 0.8.0 upgrade to 0.9.0 first.
+- **`PASSWORD_HASHING=bcrypt` keeps the old behaviour**: new hashes stay bcrypt
+  and nothing is rehashed. Both formats verify in either mode.
+- **Upgrade from 0.9.0 only.** Installations on 0.8.0 upgrade to the 0.9.0
+  stepping stone first (read its upgrade notes below), then to 0.10.0.
 - Deleting a thread root now removes the whole thread. Before, replies stayed
   visible under a deleted root. Replies deleted this way are kept as deletion
   tombstones like any other deleted post, so their text is not lost to moderation
   review until `DELETED_POST_PURGE_DAYS` clears it; threads deleted before the
   upgrade are not changed.
+- No database migration and no settings change are required.
 
 ## Changes in 0.9.0
 
@@ -320,8 +332,8 @@ database migration was added. Publication does not alter an installed release.
 
 | Artifact | Meaning |
 | --- | --- |
-| `ghcr.io/cheftaco/chattermost:0.9.0` | Multi-architecture application image |
-| `ghcr.io/cheftaco/chattermost-migrator:0.9.0` | Matching one-off migrator |
+| `ghcr.io/cheftaco/chattermost:0.10.0` | Multi-architecture application image |
+| `ghcr.io/cheftaco/chattermost-migrator:0.10.0` | Matching one-off migrator |
 | `VERSION-amd64`, `VERSION-arm64` image tags | Native build outputs; may exist before all release checks finish |
 | `chattermost-VERSION.tar.gz` | Allowlisted bundle: manager, Compose, manifest, installation README, Apache license and notice |
 | `release.json` | Exact app/migrator/infrastructure digests, source revision, schema/lineage, platforms and permitted upgrade sources |
@@ -329,8 +341,8 @@ database migration was added. Publication does not alter an installed release.
 | `scan-*.json`, `lifecycle-proof-*.json` | Filtered vulnerability findings and sanitized native lifecycle evidence |
 
 Install a completed [GitHub release](https://github.com/ChefTaco/ChatterMost/releases),
-not a candidate architecture tag. The latest lifecycle release is 0.9.0;
-0.8.0, the stepping stone, is its tested upgrade source. The application has one writer
+not a candidate architecture tag. The latest lifecycle release is 0.10.0;
+0.9.0, the stepping stone, is its tested upgrade source. The application has one writer
 and local WebSocket fanout. Both supported Linux architectures execute on native
 CI runners; there is no claim of emulated execution as native proof.
 
@@ -428,7 +440,7 @@ A successful push is not installation proof. Dispatch the public verification
 workflow for the exact completed release:
 
 ```bash
-gh workflow run verify-public-release.yml --ref main -f version=0.9.0
+gh workflow run verify-public-release.yml --ref main -f version=0.10.0
 ```
 
 Substitute the newly published version. Check both native fresh-install jobs,
@@ -445,7 +457,7 @@ Review the public manifest/digests and per-architecture SBOM/provenance, verify
 all downloaded checksums, and verify the archive and checksum publisher identities:
 
 ```bash
-gh attestation verify chattermost-0.9.0.tar.gz --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
+gh attestation verify chattermost-0.10.0.tar.gz --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
 gh attestation verify SHA256SUMS --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
 ```
 
