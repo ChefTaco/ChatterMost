@@ -36,6 +36,19 @@ class LifecycleCoverageTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, message):
                     sources('0.9.0', {'version': '0.9.0', 'upgrade_from': upgrade_from})
 
+    def test_releases_after_090_step_through_it_so_rollbacks_verify_scrypt(self):
+        sources = self.module['upgrade_sources']
+        self.assertEqual(['0.9.0'], sources('0.10.0', {'version': '0.10.0', 'upgrade_from': ['0.9.0']}))
+        self.assertEqual(['0.9.0', '0.9.1'], sources('0.9.2', {'version': '0.9.2', 'upgrade_from': ['0.9.0', '0.9.1']}))
+        refused = [
+            (['0.8.0'], 'upgrades from 0.9.0'),
+            (['0.8.0', '0.9.0'], 'upgrade through it'),
+        ]
+        for upgrade_from, message in refused:
+            with self.subTest(upgrade_from=upgrade_from):
+                with self.assertRaisesRegex(ValueError, message):
+                    sources('0.10.0', {'version': '0.10.0', 'upgrade_from': upgrade_from})
+
     def test_published_080_policy_keeps_its_direct_paths(self):
         policy = {'version': '0.8.0', 'upgrade_from': ['0.3.2', '0.3.3', '0.4.1', '0.4.2', '0.4.4', '0.4.5', '0.5.1', '0.5.2', '0.6.1', '0.6.4', '0.7.0', '0.7.1', '0.7.2']}
         self.assertEqual(policy['upgrade_from'], self.module['upgrade_sources']('0.8.0', policy))

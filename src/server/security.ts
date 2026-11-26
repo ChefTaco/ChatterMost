@@ -7,15 +7,16 @@ import { HttpAppError } from '../shared/mattermost.js';
 import type { AppEnv } from './env.js';
 
 /**
- * With PASSWORD_HASHING=scrypt, new password hashes use scrypt, which runs on libuv's threadpool
- * instead of the event loop, and bcrypt hashes are replaced at the next successful sign-in.
- * Hashes are self-describing (`$scrypt$ln=15,r=8,p=1$<salt>$<key>`, base64url) so the parameters
- * can be raised later. Both formats always verify. The default stays bcrypt for now because
- * releases before scrypt support cannot verify scrypt hashes after a rollback.
+ * New password hashes use scrypt by default (PASSWORD_HASHING=scrypt), which runs on libuv's
+ * threadpool instead of the event loop, and bcrypt hashes are replaced at the next successful
+ * sign-in. Hashes are self-describing (`$scrypt$ln=15,r=8,p=1$<salt>$<key>`, base64url) so the
+ * parameters can be raised later. Both formats always verify, so no existing password stops
+ * working. PASSWORD_HASHING=bcrypt keeps writing bcrypt and never rehashes. Releases before
+ * 0.9.0 cannot verify scrypt hashes, which is why later releases only roll back to 0.9.x.
  */
 const BCRYPT_COST = 12;
 const SCRYPT_PREFIX = '$scrypt$';
-let hashing: 'bcrypt' | 'scrypt' = 'bcrypt';
+let hashing: 'bcrypt' | 'scrypt' = 'scrypt';
 
 /** Selects the format for new hashes (PASSWORD_HASHING); set once at startup. */
 export function configurePasswordHashing(algorithm: 'bcrypt' | 'scrypt'): void {

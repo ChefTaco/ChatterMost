@@ -57,8 +57,9 @@ const EnvSchema = z.object({
   ENABLE_DIAGNOSTICS: Boolish.default(false),
   ENABLE_SECURITY_ALERT_CHECKS: Boolish.default(false),
   ENABLE_PUBLIC_FILE_LINKS: Boolish.default(false),
-  // New password hashes: bcrypt (default, readable by every release) or scrypt (threadpool; migrates on sign-in).
-  PASSWORD_HASHING: z.enum(['bcrypt', 'scrypt']).default('bcrypt'),
+  // New password hashes: scrypt (default; threadpool, bcrypt hashes migrate on sign-in) or bcrypt
+  // (the default before 0.10.0, readable by every release). Both formats always verify.
+  PASSWORD_HASHING: z.enum(['bcrypt', 'scrypt']).default('scrypt'),
   // Push proxy for mobile background notifications (empty: off). It must hold the credentials of the app builds in use.
   PUSH_NOTIFICATION_SERVER: z.preprocess((value) => (typeof value === 'string' ? value.replace(/\/+$/u, '') : value), z.union([z.literal(''), z.url({ protocol: /^https?$/u })]).default('')),
   // What a notification shows: generic_no_channel, generic (sender and channel; default) or full (also the message text).

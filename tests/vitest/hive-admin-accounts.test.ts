@@ -75,7 +75,7 @@ describe('Hive installation admin provisioning', () => {
     expect(state.posts.some(value => value.message === 'A concurrent synthetic message')).toBe(true);
     const user = state.users.find(value => value.id === input.user_id);
     expect(user).toMatchObject({ isBot: false, disabledAt: 0, deleteAt: 0, roles: 'system_admin system_user' });
-    expect(user?.passwordHash).toMatch(/^\$2[aby]\$/u);
+    expect(user?.passwordHash).toMatch(/^\$scrypt\$/u);
     expect(state.teamMembers.some(value => value.userId === input.user_id)).toBe(true);
     expect(state.channelMembers.some(value => value.userId === input.user_id)).toBe(true);
     expect((await current.app.request('/api/v4/users/login', { method: 'POST', headers: current.baseHeaders,

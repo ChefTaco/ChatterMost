@@ -17,6 +17,15 @@ Hermes instructions live in the [client guide](clients.md),
 
 ## Unreleased
 
+- **scrypt is the default password hashing** (`PASSWORD_HASHING=scrypt`). New
+  and changed passwords are hashed with scrypt on the threadpool, so a burst of
+  sign-ins no longer delays chat. Existing bcrypt passwords keep working: both
+  formats always verify, and each bcrypt hash is replaced with scrypt at that
+  account's next successful sign-in. No one is asked to reset a password.
+  `PASSWORD_HASHING=bcrypt` keeps the earlier behaviour. See
+  [deployment](deployment.md).
+- **0.9.0 is a stepping stone.** Releases after it upgrade from 0.9.0 and at
+  most three newer releases; 0.8.0 installations upgrade to 0.9.0 first.
 - **Deleting a thread's root deletes its replies**, as upstream does. When the
   root's author or an admin deletes it, every reply in the thread is deleted too,
   including replies by other people. Their attachments follow the usual
@@ -27,6 +36,15 @@ Hermes instructions live in the [client guide](clients.md),
 
 ### Upgrade notes
 
+- **Roll back only to 0.9.x.** 0.9.0 is the first release that verifies scrypt
+  hashes. After this release rehashes an account at sign-in, a release before
+  0.9.0 cannot verify that password and the account cannot sign in with it until
+  an admin resets it (Oathweave sign-in is unaffected). Releases after 0.9.0
+  therefore upgrade only from 0.9.0 or newer, so the manager's `rollback` lands on
+  0.9.x. Native installations must not roll back past 0.9.0 either; if one still
+  needs that option, set `PASSWORD_HASHING=bcrypt` before upgrading (hashes that
+  are already scrypt stay scrypt).
+- **Upgrade from 0.9.0 only.** Installations on 0.8.0 upgrade to 0.9.0 first.
 - Deleting a thread root now removes the whole thread. Before, replies stayed
   visible under a deleted root. Replies deleted this way are kept as deletion
   tombstones like any other deleted post, so their text is not lost to moderation
@@ -342,17 +360,19 @@ ones retroactively. See [GitHub's immutability documentation](https://docs.githu
    intended release, then confirm their published links after publication.
 3. List only reviewed and actually tested source releases in `upgrade_from`.
    Every release must permit the newest stepping stone before it (0.3.2, then
-   0.8.0; see `STEPPING_STONES` in `tests/container/lifecycle.py`). Releases after
-   0.8.0 list 0.8.0 and at most three newer sources and nothing older, so each
-   release tests at most four paths; older installations upgrade to the stone
-   first. When the list would grow past four, designate a new stepping stone
+   0.8.0, then 0.9.0; see `STEPPING_STONES` in `tests/container/lifecycle.py`).
+   Releases after a later stone list it and at most three newer sources and
+   nothing older, so each release tests at most four paths; older installations
+   upgrade to the stone first. 0.9.0 is a stone because it is the first release
+   that verifies scrypt password hashes: later releases write scrypt by default,
+   so their `rollback` must land on 0.9.0 or newer. When the list would grow past four, designate a new stepping stone
    that accepts everything since the previous one. Preserve migration SQL already applied in released installations;
    add new expansion-only migrations and review generation/compatibility ranges.
    Do not broaden compatibility or allowlists to bypass a failing check.
 4. Validate the candidate policy with `python3 tests/container/lifecycle.py VERSION --plan`.
    The runner exercises **each** `upgrade_from` entry, in separate disposable stacks.
    The pre-build policy check refuses a release that omits its stepping stone,
-   lists a source older than it, or lists more than four sources after 0.8.0. Public 0.3.2 verification retains its
+   lists a source older than it, or lists more than four sources after a later stone. Public 0.3.2 verification retains its
    historical 0.2.3 source from the verified archive. Verify
    fresh install, restart/data/token/file persistence, backups/restoration,
    compatible rollback, migration/health failures, incompatible rollback refusal,
