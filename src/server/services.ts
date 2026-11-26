@@ -2140,6 +2140,14 @@ export class PostService {
       post.updateAt = post.deleteAt;
       post.deleteBy = actor.id;
       post.lifecycleState = 'deleted';
+      // Attachments go with the post: they stop being served now and the next sweep removes their bytes.
+      const stillAttached = new Set(state.posts.filter((candidate) => candidate.deleteAt === 0).flatMap((candidate) => candidate.fileIds));
+      for (const file of state.files) {
+        if (post.fileIds.includes(file.id) && file.deleteAt === 0 && !stillAttached.has(file.id)) {
+          file.deleteAt = post.deleteAt;
+          file.updateAt = post.deleteAt;
+        }
+      }
       return post;
     });
     await this.auditLog.record({ actorUserId: actor.id, action: 'post.deleted', targetId: postId });
@@ -2499,7 +2507,13 @@ export type RetentionSweepResult = {
   channels: number;
   posts: number;
   files: number;
+  /** Deleted attachments and unattached uploads past their grace period. */
+  unreferencedFiles: number;
+  /** Deleted posts whose text was cleared after DELETED_POST_PURGE_DAYS. */
+  redactedPosts: number;
 };
+
+const HOUR_MS = 3_600_000;
 
 /** A retention limit only applies when it is a whole number of days within the accepted range. */
 export function effectiveRetentionDays(value: unknown): number | null {
@@ -2536,11 +2550,80 @@ export class RetentionService {
   }
 
   private async purge(now: number): Promise<RetentionSweepResult> {
-    const empty: RetentionSweepResult = { channels: 0, posts: 0, files: 0 };
-    if (!this.store.read((state) => state.channels.some((channel) => effectiveRetentionDays(channel.retentionDays) !== null))) {
-      return empty;
+    const channelResult = await this.purgeChannels(now);
+    const lifecycle = await this.purgeUnreferenced(now);
+    await this.removeBytes([...channelResult.storageKeys, ...lifecycle.storageKeys]);
+    return { ...channelResult.result, unreferencedFiles: lifecycle.files, redactedPosts: lifecycle.redactedPosts };
+  }
+
+  /**
+   * Removes attachment files of deleted posts, uploads that no post references once they are older
+   * than ORPHAN_UPLOAD_GRACE_HOURS, and (with DELETED_POST_PURGE_DAYS) the text of long-deleted posts.
+   */
+  private async purgeUnreferenced(now: number): Promise<{ files: number; redactedPosts: number; storageKeys: string[] }> {
+    const graceMs = this.env.ORPHAN_UPLOAD_GRACE_HOURS * HOUR_MS;
+    const deletedPostCutoff = this.env.DELETED_POST_PURGE_DAYS > 0 ? now - this.env.DELETED_POST_PURGE_DAYS * DAY_MS : null;
+    const candidates = (state: Readonly<StoreState>): { fileIds: Set<string>; postIds: Set<string> } => {
+      const referenced = new Set<string>();
+      for (const post of state.posts) if (post.deleteAt === 0) for (const fileId of post.fileIds) referenced.add(fileId);
+      const fileIds = new Set<string>();
+      for (const file of state.files) {
+        // Soft-deleted files go at once; an upload no live post references waits out the grace period.
+        if (file.deleteAt > 0 || (graceMs > 0 && !referenced.has(file.id) && file.createAt < now - graceMs)) fileIds.add(file.id);
+      }
+      const postIds = new Set<string>();
+      if (deletedPostCutoff !== null) {
+        for (const post of state.posts) {
+          if (post.deleteAt > 0 && post.deleteAt < deletedPostCutoff && !isRedacted(post)) postIds.add(post.id);
+        }
+      }
+      return { fileIds, postIds };
+    };
+    const planned = this.store.read(candidates);
+    if (planned.fileIds.size === 0 && planned.postIds.size === 0) return { files: 0, redactedPosts: 0, storageKeys: [] };
+    return this.store.write((state) => {
+      const { fileIds, postIds } = candidates(state);
+      const storageKeys = state.files.filter((file) => fileIds.has(file.id)).map((file) => file.storageKey);
+      state.files = state.files.filter((file) => !fileIds.has(file.id));
+      for (const post of state.posts) {
+        if (postIds.has(post.id)) Object.assign(post, redactDeletedPost(post), { updateAt: post.updateAt });
+      }
+      state.postEditHistory = state.postEditHistory.filter((entry) => !postIds.has(entry.postId));
+      state.reactions = state.reactions.filter((reaction) => !postIds.has(reaction.postId));
+      if (fileIds.size > 0 || postIds.size > 0) {
+        appendAuditLog(state, {
+          actorUserId: null,
+          action: 'content.unreferenced_purged',
+          metadata: { files: fileIds.size, redacted_posts: postIds.size, orphan_grace_hours: this.env.ORPHAN_UPLOAD_GRACE_HOURS, deleted_post_purge_days: this.env.DELETED_POST_PURGE_DAYS }
+        });
+      }
+      return { files: fileIds.size, redactedPosts: postIds.size, storageKeys };
+    });
+  }
+
+  private async removeBytes(storageKeys: string[]): Promise<void> {
+    const root = resolveDataPath(this.env.FILE_STORAGE_PATH);
+    let removalFailures = 0;
+    for (const storageKey of storageKeys) {
+      // Storage keys are generated server-side; refuse anything that would leave the storage root.
+      if (storageKey.length === 0 || path.basename(storageKey) !== storageKey) continue;
+      try {
+        await rm(path.join(root, storageKey), { force: true });
+      } catch {
+        removalFailures += 1;
+      }
     }
-    const purged = await this.store.write((state) => {
+    if (removalFailures > 0) {
+      process.stderr.write(JSON.stringify({ level: 'error', message: 'retention_file_removal_failed', count: removalFailures }) + '\n');
+    }
+  }
+
+  private async purgeChannels(now: number): Promise<{ result: Pick<RetentionSweepResult, 'channels' | 'posts' | 'files'>; storageKeys: string[] }> {
+    const empty = { channels: 0, posts: 0, files: 0 };
+    if (!this.store.read((state) => state.channels.some((channel) => effectiveRetentionDays(channel.retentionDays) !== null))) {
+      return { result: empty, storageKeys: [] };
+    }
+    return this.store.write((state) => {
       const cutoffs = new Map<string, { cutoff: number; days: number }>();
       for (const channel of state.channels) {
         const days = effectiveRetentionDays(channel.retentionDays);
@@ -2598,22 +2681,11 @@ export class RetentionService {
         storageKeys: expiredFiles.map((file) => file.storageKey)
       };
     });
-    const root = resolveDataPath(this.env.FILE_STORAGE_PATH);
-    let removalFailures = 0;
-    for (const storageKey of purged.storageKeys) {
-      // Storage keys are generated server-side; refuse anything that would leave the storage root.
-      if (storageKey.length === 0 || path.basename(storageKey) !== storageKey) continue;
-      try {
-        await rm(path.join(root, storageKey), { force: true });
-      } catch {
-        removalFailures += 1;
-      }
-    }
-    if (removalFailures > 0) {
-      process.stderr.write(JSON.stringify({ level: 'error', message: 'retention_file_removal_failed', count: removalFailures }) + '\n');
-    }
-    return purged.result;
   }
+}
+
+function isRedacted(post: PostRecord): boolean {
+  return post.message === '' && post.fileIds.length === 0 && Object.keys(post.props).length === 0 && Object.keys(post.metadata).length === 0;
 }
 
 export class ProfileImageService {
@@ -3786,7 +3858,7 @@ export function isAdmin(user: UserRecord): boolean {
 // other members while they are pending or blocked. The post author still sees
 // their own held post, and system admins see everything for moderation.
 /** A deleted post as reported to clients: identity and timestamps only, never its former content. */
-function redactDeletedPost(post: PostRecord): PostRecord {
+export function redactDeletedPost(post: PostRecord): PostRecord {
   return { ...post, message: '', props: {}, hashtags: '', fileIds: [], metadata: {} };
 }
 

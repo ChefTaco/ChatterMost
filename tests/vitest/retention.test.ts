@@ -40,9 +40,10 @@ async function createSecondChannel(server: TestServer, token: string): Promise<s
   return ((await response.json()) as { id: string }).id;
 }
 
+// Unattached-upload collection is covered in data-lifecycle.test.ts; it is off here to isolate channel limits.
 describe('channel retention', () => {
   it('purges posts, history, reactions and files older than the channel limit and audits it', async () => {
-    const server = await createTestServer();
+    const server = await createTestServer({ ORPHAN_UPLOAD_GRACE_HOURS: '0' });
     try {
       const token = await login(server);
       const channelId = await firstChannelId(server.app, token);
@@ -69,7 +70,7 @@ describe('channel retention', () => {
       expect(server.store.read((state) => state.posts.find((post) => post.id === newRoot.id)?.replyCount)).toBe(1);
 
       // Without a limit nothing is removed.
-      expect(await server.services.retention.sweep()).toEqual({ channels: 0, posts: 0, files: 0 });
+      expect(await server.services.retention.sweep()).toMatchObject({ channels: 0, posts: 0, files: 0 });
 
       const patch = await server.app.request(`/api/v4/channels/${channelId}/patch`, {
         method: 'PUT',
@@ -79,7 +80,7 @@ describe('channel retention', () => {
       expect(patch.status).toBe(200);
 
       const result = await server.services.retention.sweep();
-      expect(result).toEqual({ channels: 1, posts: 2, files: 2 });
+      expect(result).toMatchObject({ channels: 1, posts: 2, files: 2 });
 
       const state = server.store.read((current) => current);
       const postIds = state.posts.map((post) => post.id);
@@ -103,14 +104,14 @@ describe('channel retention', () => {
       expect(audit).toMatchObject({ actorUserId: null, targetId: channelId, metadata: { retention_days: 30, posts: 2, files: 2 } });
 
       // A second sweep finds nothing left to purge.
-      expect(await server.services.retention.sweep()).toEqual({ channels: 0, posts: 0, files: 0 });
+      expect(await server.services.retention.sweep()).toMatchObject({ channels: 0, posts: 0, files: 0 });
     } finally {
       await server.store.close();
     }
   });
 
   it('ignores limits outside the accepted range and rejects them at the API', async () => {
-    const server = await createTestServer();
+    const server = await createTestServer({ ORPHAN_UPLOAD_GRACE_HOURS: '0' });
     try {
       const token = await login(server);
       const channelId = await firstChannelId(server.app, token);
@@ -129,7 +130,7 @@ describe('channel retention', () => {
         const channel = state.channels.find((candidate) => candidate.id === channelId);
         if (channel !== undefined) channel.retentionDays = 0;
       });
-      expect(await server.services.retention.sweep()).toEqual({ channels: 0, posts: 0, files: 0 });
+      expect(await server.services.retention.sweep()).toMatchObject({ channels: 0, posts: 0, files: 0 });
       expect(server.store.read((state) => state.posts.some((candidate) => candidate.id === post.id))).toBe(true);
     } finally {
       await server.store.close();
@@ -139,7 +140,7 @@ describe('channel retention', () => {
 
 describe('channel retention settings', () => {
   it('stores the admin policy form value as the enforced channel limit', async () => {
-    const server = await createTestServer();
+    const server = await createTestServer({ ORPHAN_UPLOAD_GRACE_HOURS: '0' });
     try {
       const token = await login(server);
       const channelId = await firstChannelId(server.app, token);
@@ -167,7 +168,7 @@ describe('channel retention settings', () => {
   });
 
   it('moves a legacy policy value onto the channel at startup', async () => {
-    const server = await createTestServer();
+    const server = await createTestServer({ ORPHAN_UPLOAD_GRACE_HOURS: '0' });
     try {
       const token = await login(server);
       const channelId = await firstChannelId(server.app, token);
@@ -187,7 +188,7 @@ describe('channel retention settings', () => {
 
 describe('post sync and search', () => {
   it('returns every change since a timestamp, with deletions as redacted tombstones', async () => {
-    const server = await createTestServer();
+    const server = await createTestServer({ ORPHAN_UPLOAD_GRACE_HOURS: '0' });
     try {
       const token = await login(server);
       const channelId = await firstChannelId(server.app, token);
@@ -218,7 +219,7 @@ describe('post sync and search', () => {
   });
 
   it('returns the newest matches when a search has more than 100 hits', async () => {
-    const server = await createTestServer();
+    const server = await createTestServer({ ORPHAN_UPLOAD_GRACE_HOURS: '0' });
     try {
       const token = await login(server);
       const channelId = await firstChannelId(server.app, token);
@@ -246,7 +247,7 @@ describe('post sync and search', () => {
 
 describe('agent policy simulator', () => {
   it('reports enforced channel rules instead of always allowing', async () => {
-    const server = await createTestServer();
+    const server = await createTestServer({ ORPHAN_UPLOAD_GRACE_HOURS: '0' });
     try {
       const token = await login(server);
       const channelId = await firstChannelId(server.app, token);

@@ -10,6 +10,13 @@
   Prometheus text format for admins or a `METRICS_TOKEN_SHA256` bearer token.
   `/health/ready` now runs a `store` check (persistence not held; `SELECT 1` on
   Postgres) and the image health check probes readiness instead of ping.
+- Deleting a post now soft-deletes its attachments, and the hourly sweep removes
+  the bytes of deleted files and of uploads no post references after
+  `ORPHAN_UPLOAD_GRACE_HOURS` (default 168). `DELETED_POST_PURGE_DAYS` (default
+  0, off) clears the text, edit history and reactions of long-deleted posts.
+  Admins can export one account's data (`GET /admin/users/:id/export`, with file
+  downloads) and erase it (`POST /admin/users/:id/erase`, dry run by default,
+  username confirmation), leaving an anonymous deactivated placeholder.
 - The Mattermost import helper reads bulk exports with their authors,
   timestamps, threads (nested or by root ID), reactions and direct messages,
   reports what it cannot carry over, and sends batches that the server applies

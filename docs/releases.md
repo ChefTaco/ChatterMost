@@ -41,6 +41,13 @@ Changes on `main` since 0.8.0. They ship in the next release.
 - **Readiness checks the store.** `/health/ready` answers 503 while persistence
   is on hold or Postgres does not answer, and the container health check now
   calls it instead of `/api/v4/system/ping`.
+- **Deleted attachments and abandoned uploads are removed.** Deleting a post
+  deletes its attachment files, and uploads that no post references are removed
+  after a week (`ORPHAN_UPLOAD_GRACE_HOURS`). `DELETED_POST_PURGE_DAYS` can also
+  clear the text of long-deleted posts (off by default). See
+  [message retention](privacy.md#message-retention).
+- **Per-user export and erase** for admins. See
+  [per-user export and erase](privacy.md#per-user-export-and-erase).
 
 ### Upgrade notes (unreleased)
 
@@ -53,6 +60,12 @@ Changes on `main` since 0.8.0. They ship in the next release.
   a channel the creating admin is not a member of. Existing webhooks keep working.
 - A container whose database stops answering is now reported unhealthy
   instead of healthy. `/api/v4/system/ping` is unchanged.
+
+> **The first sweep after upgrading (about a minute after startup) permanently
+> removes attachment files of posts deleted earlier, and uploads older than a
+> week that no post references.** Set `ORPHAN_UPLOAD_GRACE_HOURS=0` before
+> upgrading to keep unattached uploads. Attachments of deleted posts are removed
+> either way; take a backup first if you may need them.
 
 ## Changes in 0.8.0
 

@@ -60,6 +60,10 @@ const EnvSchema = z.object({
   ENABLE_OUTGOING_WEBHOOKS: Boolish.default(false),
   // Hosts whose callback URLs may resolve to loopback, private or link-local addresses (comma-separated).
   OUTGOING_WEBHOOK_ALLOWED_HOSTS: z.string().default(''),
+  // Uploads no post references are removed once this old (0 keeps them); deleted attachments go at the next sweep.
+  ORPHAN_UPLOAD_GRACE_HOURS: z.coerce.number().int().min(0).max(87_600).default(168),
+  // Deleted posts keep their text for moderation review until this many days after deletion (0 keeps it).
+  DELETED_POST_PURGE_DAYS: z.coerce.number().int().min(0).max(36_500).default(0),
   ENABLE_REDIS_FANOUT: Boolish.default(false),
   ENABLE_DISTRIBUTED_RATE_LIMIT: Boolish.default(false),
   REDIS_URL: z.string().min(1).default('redis://127.0.0.1:6379'),

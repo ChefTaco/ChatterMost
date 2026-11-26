@@ -61,9 +61,43 @@ channel. With a limit, an hourly job permanently deletes posts older than the
 limit, together with their edit history, reactions and attachment files, and
 deletes old uploads in the channel that no kept post references. Each purge is
 recorded in the audit log (`channel.retention_purged`) with counts only.
-Deleted (not purged) posts keep their content in storage until retention or an
-operator removes them; clients only see a tombstone. Backups keep whatever
+
+Deleting a post also deletes its attachments: they stop being served at once and
+the next hourly sweep removes their bytes. The same sweep removes uploads that no
+post references once they are older than `ORPHAN_UPLOAD_GRACE_HOURS` (default
+168, one week; `0` keeps them). The deleted post's text stays in storage for
+moderation review; clients only see a tombstone. Set `DELETED_POST_PURGE_DAYS`
+to clear the text, edit history and reactions of posts deleted longer ago than
+that (default `0`, keep). Each sweep that removes something writes one
+`content.unreferenced_purged` audit entry with counts only. Backups keep whatever
 existed at their recovery point.
+
+## Per-user export and erase
+
+Admins can export everything stored about one account with
+`GET /admin/users/{id}/export`: profile, team and channel memberships, posts
+(including deleted ones and their edit history), reactions, file metadata,
+preferences, status, session and personal-access-token metadata, and audit
+entries about the account. Password hashes, token hashes and session
+credentials are never included. Each file listed has a `download` link
+(`GET /admin/users/{id}/export/files/{file_id}`). Every export is audited
+(`admin.user.exported`). Treat the export as personal data.
+
+`POST /admin/users/{id}/erase` removes the account's data. Without
+`"dry_run": false` it only reports counts. Applying it requires
+`"confirm": "<username>"` and:
+
+- turns the account's posts into deletion tombstones (text, attachments, edit
+  history and reactions removed), so replies by others stay in their threads;
+- deletes its uploads and profile image (bytes included), reactions, sessions,
+  personal access tokens, preferences, status, memberships and the webhooks it
+  created;
+- keeps the account ID as a deactivated placeholder named `erased-…` with an
+  unusable password, and writes one `admin.user.erased` audit entry with counts.
+
+Admins, bots and your own account cannot be erased. Audit entries keep the
+account ID. Remove the account from `OATHWEAVE_CHAT_IDENTITIES_JSON` if it has an
+identity link. Backups taken earlier still contain the data.
 
 ## Container configuration, logs and recovery data
 
