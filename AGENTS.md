@@ -136,7 +136,8 @@ in scope. Keep evidence private under `output/playwright/`.
   Run `npm run container:test` and `python3 tests/container/lifecycle.py VERSION --plan`.
   The lifecycle run without `--plan` proves each path against public artifacts,
   including backup/restore, rollback, retained credentials/data and post-upgrade writes.
-  Keep published 0.3.2 in policies for newer releases. Historical 0.3.2 testing
+  Each release lists the newest stepping stone before it (0.3.2, then 0.8.0); after
+  0.8.0 list at most four sources, none older than 0.8.0. Historical 0.3.2 testing
   uses its published 0.2.3 policy. Native release jobs prove the published baseline
   against candidate images before assembling the release. Preserve links when
   `docs/containers.md` becomes the bundle README.

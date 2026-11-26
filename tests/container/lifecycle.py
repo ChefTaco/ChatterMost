@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify every declared upgrade path, including 0.3.2 for the next release.
+"""Verify every declared upgrade path, including the stepping stone the next release requires.
 
 Candidate mode uses the reviewed source policy. Public mode obtains the policy
 from the integrity-checked published archive. Each path gets its own disposable
@@ -18,6 +18,11 @@ import tempfile
 import github_api
 
 REQUIRED_BASELINE = '0.3.2'
+# Stepping stones accept every earlier supported source, so later releases only need to be
+# reachable from the newest stone before them. Installations older than that stone upgrade
+# to the stone first, which keeps the tested matrix (one lifecycle run per source) small.
+STEPPING_STONES = ('0.3.2', '0.8.0')
+MAX_SOURCES_AFTER_STONE = 4
 VERSION = re.compile(r'^0\.(?:[2-9]|[1-9][0-9]+)\.[0-9]+$')
 REQUIRED_PROOFS = {
     'upgrade', 'backup_restore', 'compatible_rollback', 'migration_failure',
@@ -52,8 +57,17 @@ def upgrade_sources(version, policy):
     for source in sources:
         if version_tuple(source) >= target:
             raise ValueError('An upgrade source must precede the target release')
-    if target > version_tuple(REQUIRED_BASELINE) and REQUIRED_BASELINE not in sources:
-        raise ValueError('Releases after 0.3.2 must declare and test upgrades from 0.3.2')
+    stones = [stone for stone in STEPPING_STONES if version_tuple(stone) < target]
+    if stones:
+        stone = stones[-1]
+        if stone not in sources:
+            raise ValueError(f'Releases after {stone} must declare and test upgrades from {stone}')
+        if stone != REQUIRED_BASELINE:
+            # Past the first stone, older installations step through the stone instead.
+            if any(version_tuple(source) < version_tuple(stone) for source in sources):
+                raise ValueError(f'Sources older than the {stone} stepping stone upgrade through it, not directly')
+            if len(sources) > MAX_SOURCES_AFTER_STONE:
+                raise ValueError(f'Declare at most {MAX_SOURCES_AFTER_STONE} upgrade sources; add a stepping stone instead')
     if target >= version_tuple('0.3.0') and not sources:
         raise ValueError('Lifecycle releases must declare a tested upgrade source')
     return sources

@@ -14,6 +14,7 @@ Keep credentials, backup paths, diagnostics and recovery evidence private.
 | Published Compose 0.3.2, 0.3.3, 0.4.1, 0.4.2, 0.4.4, 0.4.5, 0.5.1, 0.5.2, 0.6.1, 0.6.4, 0.7.0, 0.7.1 or 0.7.2 | Published Compose 0.8.0 | Run the verified **0.8.0 manager** with `upgrade 0.8.0` |
 | Compose 0.8.0 | Same version | No upgrade required; `start` checks/starts the selected release |
 | Compose 0.8.0 | A future release | Only when that published target explicitly lists `0.8.0` in `release.json` → `upgrade_from` and the path has release-test coverage |
+| Compose 0.3.2 to 0.7.2 | A release after 0.8.0 | Upgrade to the **0.8.0 stepping stone** first, then to the target |
 | Compose with a recorded previous release | That previous release | `rollback`, only when generation, lineage and actual schema checks permit it |
 | Native SSH/systemd | Compatible newer native release | Verified backup, then the native staged migration/preflight/activation transaction |
 | Native SSH/systemd or JSON store | Compose | Separate authorized migration; not an ordinary version upgrade or a cross-installation `restore` |
@@ -26,9 +27,13 @@ Do not infer a path from version ordering, source tags or the presence
 of an architecture-specific image. Failed candidate versions are not installations.
 Future releases must add and test their paths before publication; see
 [maintainer releases](releases.md). There is no mutable `latest` update channel.
-The release test runner requires 0.3.2 as a source for later releases and exercises
-every declared source on each native architecture. This coverage requirement does
-not publish a future version or change the immutable 0.3.2 manifest.
+Releases 0.3.2 and 0.8.0 are **stepping stones**: each accepts every earlier
+supported source. A later release only needs to be reachable from the newest
+stone before it, so releases after 0.8.0 list 0.8.0 and at most three newer
+releases, and an older installation upgrades to 0.8.0 first. The release test
+runner enforces this and exercises every declared source on each native
+architecture. This coverage requirement does not publish a future version or
+change an immutable published manifest.
 
 ## Upgrading to 0.8.0 deletes posts in channels with a retention limit
 

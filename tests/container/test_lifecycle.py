@@ -21,6 +21,25 @@ class LifecycleCoverageTests(unittest.TestCase):
                     self.module['upgrade_sources']('0.3.3', {'version': '0.3.3', 'upgrade_from': sources})
         self.assertEqual(['0.3.2'], self.module['upgrade_sources']('0.3.3', {'version': '0.3.3', 'upgrade_from': ['0.3.2']}))
 
+    def test_releases_after_the_080_stepping_stone_step_through_it(self):
+        sources = self.module['upgrade_sources']
+        self.assertEqual(['0.8.0'], sources('0.9.0', {'version': '0.9.0', 'upgrade_from': ['0.8.0']}))
+        self.assertEqual(['0.8.0', '0.8.1'], sources('0.8.2', {'version': '0.8.2', 'upgrade_from': ['0.8.0', '0.8.1']}))
+        refused = [
+            (['0.8.1'], 'upgrades from 0.8.0'),
+            (['0.3.2', '0.8.0'], 'upgrade through it'),
+            (['0.7.2', '0.8.0'], 'upgrade through it'),
+            (['0.8.0', '0.8.1', '0.8.2', '0.8.3', '0.8.4'], 'at most 4'),
+        ]
+        for upgrade_from, message in refused:
+            with self.subTest(upgrade_from=upgrade_from):
+                with self.assertRaisesRegex(ValueError, message):
+                    sources('0.9.0', {'version': '0.9.0', 'upgrade_from': upgrade_from})
+
+    def test_published_080_policy_keeps_its_direct_paths(self):
+        policy = {'version': '0.8.0', 'upgrade_from': ['0.3.2', '0.3.3', '0.4.1', '0.4.2', '0.4.4', '0.4.5', '0.5.1', '0.5.2', '0.6.1', '0.6.4', '0.7.0', '0.7.1', '0.7.2']}
+        self.assertEqual(policy['upgrade_from'], self.module['upgrade_sources']('0.8.0', policy))
+
     def test_existing_public_release_keeps_its_historical_path(self):
         self.assertEqual(['0.2.3'], self.module['upgrade_sources']('0.3.2', {'version': '0.3.2', 'upgrade_from': ['0.2.3']}))
 

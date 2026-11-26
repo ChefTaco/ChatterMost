@@ -36,6 +36,10 @@
   posts), and channel history fills `next_post_id`/`prev_post_id` from the page
   window like upstream. The native web UI sorts the conversation by
   `create_at` and shows search results in the order received.
+- The lifecycle policy check knows stepping stones (0.3.2 and 0.8.0): a release
+  must list the newest stone before it, and after 0.8.0 it may list only the
+  stone and at most three newer sources, capping lifecycle runs at four per
+  release. Older installations upgrade through the stone.
 - The Mattermost import helper reads bulk exports with their authors,
   timestamps, threads (nested or by root ID), reactions and direct messages,
   reports what it cannot carry over, and sends batches that the server applies
