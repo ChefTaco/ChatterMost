@@ -1,5 +1,11 @@
 # ChatterMost Build Log
 
+- Store writes use copy-on-write drafts: only the top-level fields a writer
+  touches are copied, and Postgres persists just those fields with one atomic
+  JSONB merge (`value || patch`), falling back to a whole-document write when
+  needed. The JSON store is written compactly. A 100,000-post regression test
+  guards that writes not touching posts stay independent of history size, and
+  CI now runs the real-Postgres store tests.
 - The Mattermost import helper reads bulk exports with their authors,
   timestamps, threads (nested or by root ID), reactions and direct messages,
   reports what it cannot carry over, and sends batches that the server applies
