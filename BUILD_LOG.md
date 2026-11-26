@@ -5,6 +5,10 @@
   Retention purges threads as a unit by their newest post and broadcasts
   `post_deleted` for each purged post. `channelChangesSince` caps by most
   recent change time instead of creation time.
+- `@hivemagnus/hive-common` moves to ^0.7.0: readiness runs are shared between
+  concurrent probes and the verifier reads userinfo with a 64 KiB bound. Its new
+  `/rate-limit` module is not adopted yet; ChatterMost keeps its own trusted-proxy
+  resolver and Redis-backed abuse counters.
 - Store writes use copy-on-write drafts: only the top-level fields a writer
   touches are copied, and Postgres persists just those fields with one atomic
   JSONB merge (`value || patch`), falling back to a whole-document write when
