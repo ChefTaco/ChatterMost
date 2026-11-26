@@ -68,6 +68,8 @@ Changes on `main` since 0.8.0. They ship in the next release.
   history, thread, search, pinned and flagged responses now lists the newest
   post first, and channel history pages carry `next_post_id`/`prev_post_id`
   cursors. See [compatibility](compatibility.md#mobile-and-proxy-notes).
+- **0.8.0 is a stepping stone.** Releases after it accept upgrades from 0.8.0
+  and at most three newer releases, which keeps the tested upgrade matrix small.
 
 ### Upgrade notes (unreleased)
 
@@ -96,6 +98,8 @@ Changes on `main` since 0.8.0. They ship in the next release.
 - Integrations that read `order` as oldest first must sort by `create_at` (the
   native web UI and HiveXUI already do). `before`/`after` requests now honour
   `page` relative to the pivot.
+- Installations on 0.3.2 to 0.7.2 upgrade to 0.8.0 first, then to the next
+  release. See [upgrade paths](upgrading.md#supported-paths).
 
 ## Changes in 0.8.0
 
@@ -300,14 +304,18 @@ ones retroactively. See [GitHub's immutability documentation](https://docs.githu
    installation examples, supported-path matrix and bundled README for the
    intended release, then confirm their published links after publication.
 3. List only reviewed and actually tested source releases in `upgrade_from`.
-   A future release intended for existing 0.3.2 installations must explicitly
-   permit 0.3.2. Preserve migration SQL already applied in released installations;
+   Every release must permit the newest stepping stone before it (0.3.2, then
+   0.8.0; see `STEPPING_STONES` in `tests/container/lifecycle.py`). Releases after
+   0.8.0 list 0.8.0 and at most three newer sources and nothing older, so each
+   release tests at most four paths; older installations upgrade to the stone
+   first. When the list would grow past four, designate a new stepping stone
+   that accepts everything since the previous one. Preserve migration SQL already applied in released installations;
    add new expansion-only migrations and review generation/compatibility ranges.
    Do not broaden compatibility or allowlists to bypass a failing check.
 4. Validate the candidate policy with `python3 tests/container/lifecycle.py VERSION --plan`.
    The runner exercises **each** `upgrade_from` entry, in separate disposable stacks.
-   Releases after 0.3.2 must include published 0.3.2; the pre-build policy check
-   refuses a future release that omits it. Public 0.3.2 verification retains its
+   The pre-build policy check refuses a release that omits its stepping stone,
+   lists a source older than it, or lists more than four sources after 0.8.0. Public 0.3.2 verification retains its
    historical 0.2.3 source from the verified archive. Verify
    fresh install, restart/data/token/file persistence, backups/restoration,
    compatible rollback, migration/health failures, incompatible rollback refusal,
