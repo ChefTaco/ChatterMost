@@ -56,16 +56,18 @@ Admins can change privacy-related settings from the System panel:
 
 ## Message retention
 
-Channels keep messages indefinitely unless an admin sets **Retention days** on the
-channel. With a limit, an hourly job permanently deletes posts older than the
-limit, together with their edit history, reactions and attachment files, and
-deletes old uploads in the channel that no kept post references. Each purge is
+Channels keep messages indefinitely unless a system admin sets **Retention days**
+on the channel. With a limit, an hourly job permanently deletes threads whose
+newest post is older than the limit (the root and its replies together), with
+their edit history, reactions and attachment files, and deletes old uploads in
+the channel that no kept post references. Each purge is
 recorded in the audit log (`channel.retention_purged`) with counts only.
 
 Deleting a post also deletes its attachments: they stop being served at once and
 the next hourly sweep removes their bytes. The same sweep removes uploads that no
 post references once they are older than `ORPHAN_UPLOAD_GRACE_HOURS` (default
-168, one week; `0` keeps them). The deleted post's text stays in storage for
+168, one week; `0` keeps them, including attachments of posts deleted before
+this behaviour existed). The deleted post's text stays in storage for
 moderation review; clients only see a tombstone. Set `DELETED_POST_PURGE_DAYS`
 to clear the text, edit history and reactions of posts deleted longer ago than
 that (default `0`, keep). Each sweep that removes something writes one

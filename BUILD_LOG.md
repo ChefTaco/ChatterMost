@@ -1,5 +1,10 @@
 # ChatterMost Build Log
 
+- Setting a channel `retention_days` (patch API or Policy form) requires a
+  system admin and writes `channel.retention_changed` with old and new values.
+  Retention purges threads as a unit by their newest post and broadcasts
+  `post_deleted` for each purged post. `channelChangesSince` caps by most
+  recent change time instead of creation time.
 - Store writes use copy-on-write drafts: only the top-level fields a writer
   touches are copied, and Postgres persists just those fields with one atomic
   JSONB merge (`value || patch`), falling back to a whole-document write when

@@ -54,6 +54,15 @@ Changes on `main` since 0.8.0. They ship in the next release.
 - **Optional scrypt password hashing** (`PASSWORD_HASHING=scrypt`) runs on the
   threadpool and migrates bcrypt hashes at sign-in. The default stays bcrypt;
   read [deployment](deployment.md) before switching.
+- **Only system admins can set channel retention limits.** In 0.8.0 a channel
+  admin, including any user who created a channel, could set `retention_days`
+  through the channel patch API and so permanently delete other members'
+  posts. Changes are now audited as `channel.retention_changed`.
+- **Retention purges whole threads.** A thread is purged when its newest post
+  is older than the limit, so replies are no longer left without their root,
+  and clients receive `post_deleted` for purged posts.
+- `since=` post listings keep the most recent changes when more than 1,000
+  posts changed.
 
 ### Upgrade notes (unreleased)
 
@@ -70,8 +79,15 @@ Changes on `main` since 0.8.0. They ship in the next release.
 > **The first sweep after upgrading (about a minute after startup) permanently
 > removes attachment files of posts deleted earlier, and uploads older than a
 > week that no post references.** Set `ORPHAN_UPLOAD_GRACE_HOURS=0` before
-> upgrading to keep unattached uploads. Attachments of deleted posts are removed
-> either way; take a backup first if you may need them.
+> upgrading to keep both. Attachments of posts deleted after the upgrade are
+> removed at the next sweep whatever the setting; take a backup first if you
+> may need any of them.
+
+- Check `channel.retention_purged` audit entries and channel limits on 0.8.0
+  installations: a limit set by a non-admin through the patch API stays in
+  place after the upgrade until a system admin changes it.
+- Threads with recent replies are now kept whole, so their older posts are
+  purged later than in 0.8.0.
 
 ## Changes in 0.8.0
 

@@ -1469,10 +1469,11 @@ export class ChannelService {
   }
 
   public async patchChannel(channelId: string, patch: Partial<Pick<ChannelRecord, 'displayName' | 'header' | 'purpose' | 'retentionDays'>>, actor: UserRecord): Promise<ChannelRecord> {
-    this.assertMember(channelId, actor.id);
-    // Renaming a channel and changing its retention policy are management
-    // actions; ordinary members may still edit header/purpose.
-    if (patch.displayName !== undefined || patch.retentionDays !== undefined) {
+    // A retention limit permanently deletes other people's posts, so only system admins set it.
+    if (patch.retentionDays !== undefined) requireAdmin(actor);
+    else this.assertMember(channelId, actor.id);
+    // Renaming a channel is a management action; ordinary members may still edit header/purpose.
+    if (patch.displayName !== undefined) {
       this.requireChannelManager(channelId, actor);
     }
     const updated = await this.store.write((state) => {
@@ -1480,7 +1481,9 @@ export class ChannelService {
       if (channel === undefined) {
         throw notFound('Channel');
       }
+      const previousRetention = channel.retentionDays;
       Object.assign(channel, patch, { updateAt: nowMs(), extraUpdateAt: nowMs() });
+      if (patch.retentionDays !== undefined) recordRetentionChange(state, channel, previousRetention, actor);
       return channel;
     });
     this.searchIndex.invalidate();
@@ -1689,7 +1692,11 @@ export class ChannelService {
         throw notFound('Channel');
       }
       channel.agentPolicy = agentPolicy;
-      if (hasRetention) channel.retentionDays = retentionDays;
+      if (hasRetention) {
+        const previousRetention = channel.retentionDays;
+        channel.retentionDays = retentionDays;
+        recordRetentionChange(state, channel, previousRetention, actor);
+      }
       channel.updateAt = nowMs();
       return channel;
     });
@@ -1714,6 +1721,17 @@ export class ChannelService {
       }
     });
   }
+}
+
+/** Audits a channel retention change in the same write, with the old and new limits. */
+function recordRetentionChange(state: StoreState, channel: ChannelRecord, previous: number | null, actor: UserRecord): void {
+  if (previous === channel.retentionDays) return;
+  appendAuditLog(state, {
+    actorUserId: actor.id,
+    action: 'channel.retention_changed',
+    targetId: channel.id,
+    metadata: { old_retention_days: previous, new_retention_days: channel.retentionDays }
+  });
 }
 
 function createChannelMember(channelId: string, userId: string, roles: string, timestamp: number): ChannelMemberRecord {
@@ -1906,8 +1924,8 @@ export class PostService {
   }
 
   /**
-   * Every post in the channel created, edited or deleted after `since`, newest first and capped at
-   * `limit`. Deleted posts are included as redacted tombstones so a reconnecting client can drop them.
+   * Every post in the channel created, edited or deleted after `since`, capped at the `limit` most
+   * recent changes. Deleted posts are included as redacted tombstones so a reconnecting client can drop them.
    */
   public channelChangesSince(channelId: string, actor: UserRecord, since: number, limit = 1000): PostRecord[] {
     this.channels.assertMember(channelId, actor.id);
@@ -1915,7 +1933,8 @@ export class PostService {
       state.posts
         .map((post, index) => ({ post, index }))
         .filter(({ post }) => post.channelId === channelId && isLifecycleVisibleTo(post, actor) && (post.createAt > since || post.updateAt > since || post.deleteAt > since))
-        .sort((a, b) => b.post.createAt - a.post.createAt || b.index - a.index)
+        // The most recent changes first, so a cap drops the oldest changes rather than recent edits or deletions of old posts.
+        .sort((a, b) => changedAt(b.post) - changedAt(a.post) || b.index - a.index)
         .slice(0, limit)
         .map(({ post }) => (post.deleteAt > 0 ? redactDeletedPost(post) : post))
     );
@@ -2539,7 +2558,8 @@ export class RetentionService {
 
   public constructor(
     private readonly store: StateStore,
-    private readonly env: AppEnv
+    private readonly env: AppEnv,
+    private readonly hub?: WebSocketHub
   ) {}
 
   /** Runs one sweep; concurrent callers share the sweep already in progress. */
@@ -2559,6 +2579,9 @@ export class RetentionService {
 
   private async purge(now: number): Promise<RetentionSweepResult> {
     const channelResult = await this.purgeChannels(now);
+    for (const post of channelResult.purgedPosts) {
+      await this.hub?.broadcast('post_deleted', { post_id: post.id, post: JSON.stringify(toMattermostPost(redactDeletedPost({ ...post, deleteAt: now, updateAt: now }))) }, { channel_id: post.channelId });
+    }
     const lifecycle = await this.purgeUnreferenced(now);
     await this.removeBytes([...channelResult.storageKeys, ...lifecycle.storageKeys]);
     return { ...channelResult.result, unreferencedFiles: lifecycle.files, redactedPosts: lifecycle.redactedPosts };
@@ -2626,10 +2649,15 @@ export class RetentionService {
     }
   }
 
-  private async purgeChannels(now: number): Promise<{ result: Pick<RetentionSweepResult, 'channels' | 'posts' | 'files'>; storageKeys: string[] }> {
+  /**
+   * A thread expires as a unit: its root and every reply go once the newest post in the thread is
+   * older than the limit, so no reply is left pointing at a purged root. A reply whose root is
+   * already missing expires by its own age.
+   */
+  private async purgeChannels(now: number): Promise<{ result: Pick<RetentionSweepResult, 'channels' | 'posts' | 'files'>; storageKeys: string[]; purgedPosts: PostRecord[] }> {
     const empty = { channels: 0, posts: 0, files: 0 };
     if (!this.store.read((state) => state.channels.some((channel) => effectiveRetentionDays(channel.retentionDays) !== null))) {
-      return { result: empty, storageKeys: [] };
+      return { result: empty, storageKeys: [], purgedPosts: [] };
     }
     return this.store.write((state) => {
       const cutoffs = new Map<string, { cutoff: number; days: number }>();
@@ -2641,15 +2669,24 @@ export class RetentionService {
         const policy = cutoffs.get(record.channelId);
         return policy !== undefined && record.createAt < policy.cutoff;
       };
+      const roots = new Map<string, PostRecord>();
+      for (const post of state.posts) if (post.rootId === '') roots.set(post.id, post);
+      const threadActivity = new Map<string, number>();
+      for (const post of state.posts) {
+        const threadId = post.rootId === '' ? post.id : roots.has(post.rootId) ? post.rootId : null;
+        if (threadId !== null) threadActivity.set(threadId, Math.max(threadActivity.get(threadId) ?? 0, post.createAt));
+      }
+      const postExpired = (post: PostRecord): boolean => {
+        const threadId = post.rootId === '' ? post.id : roots.has(post.rootId) ? post.rootId : null;
+        return expired({ channelId: post.channelId, createAt: threadId === null ? post.createAt : (threadActivity.get(threadId) ?? post.createAt) });
+      };
       const expiredPostIds = new Set<string>();
       const expiredAttachmentIds = new Set<string>();
       const keptAttachmentIds = new Set<string>();
-      const purgedRepliesByRoot = new Map<string, number>();
       for (const post of state.posts) {
-        if (expired(post)) {
+        if (postExpired(post)) {
           expiredPostIds.add(post.id);
           for (const fileId of post.fileIds) expiredAttachmentIds.add(fileId);
-          if (post.rootId !== '') purgedRepliesByRoot.set(post.rootId, (purgedRepliesByRoot.get(post.rootId) ?? 0) + 1);
         } else {
           for (const fileId of post.fileIds) keptAttachmentIds.add(fileId);
         }
@@ -2657,7 +2694,8 @@ export class RetentionService {
       const expiredFiles = state.files.filter(
         (file) => cutoffs.has(file.channelId) && !keptAttachmentIds.has(file.id) && (expiredAttachmentIds.has(file.id) || expired(file))
       );
-      if (expiredPostIds.size === 0 && expiredFiles.length === 0) return { result: empty, storageKeys: [] as string[] };
+      if (expiredPostIds.size === 0 && expiredFiles.length === 0) return { result: empty, storageKeys: [] as string[], purgedPosts: [] };
+      const purgedPosts = state.posts.filter((post) => expiredPostIds.has(post.id)).map((post) => ({ ...post }));
       const expiredFileIds = new Set(expiredFiles.map((file) => file.id));
       const perChannel = new Map<string, { posts: number; files: number }>();
       const count = (channelId: string, field: 'posts' | 'files'): void => {
@@ -2668,10 +2706,6 @@ export class RetentionService {
       for (const post of state.posts) if (expiredPostIds.has(post.id)) count(post.channelId, 'posts');
       for (const file of expiredFiles) count(file.channelId, 'files');
       state.posts = state.posts.filter((post) => !expiredPostIds.has(post.id));
-      for (const post of state.posts) {
-        const removedReplies = purgedRepliesByRoot.get(post.id);
-        if (removedReplies !== undefined) post.replyCount = Math.max(0, post.replyCount - removedReplies);
-      }
       state.postEditHistory = state.postEditHistory.filter((entry) => !expiredPostIds.has(entry.postId));
       state.reactions = state.reactions.filter((reaction) => !expiredPostIds.has(reaction.postId));
       state.files = state.files.filter((file) => !expiredFileIds.has(file.id));
@@ -2686,7 +2720,8 @@ export class RetentionService {
       }
       return {
         result: { channels: perChannel.size, posts: expiredPostIds.size, files: expiredFiles.length },
-        storageKeys: expiredFiles.map((file) => file.storageKey)
+        storageKeys: expiredFiles.map((file) => file.storageKey),
+        purgedPosts
       };
     });
   }
@@ -3802,7 +3837,7 @@ export function createServices(store: StateStore, env: AppEnv): ServiceBundle {
   const imports = new ImportService(store, channels, supervision);
   const customEmoji = new CustomEmojiService(store, auditLog);
   const files = new FileService(store, env, channels, auditLog);
-  const retention = new RetentionService(store, env);
+  const retention = new RetentionService(store, env, hub);
   const profileImages = new ProfileImageService(store, env, users, auditLog, hub);
   const preferences = new PreferenceService(store, hub);
   const statuses = new StatusService(store, hub);
@@ -3866,6 +3901,10 @@ export function isAdmin(user: UserRecord): boolean {
 // other members while they are pending or blocked. The post author still sees
 // their own held post, and system admins see everything for moderation.
 /** A deleted post as reported to clients: identity and timestamps only, never its former content. */
+function changedAt(post: PostRecord): number {
+  return Math.max(post.createAt, post.updateAt, post.deleteAt);
+}
+
 export function redactDeletedPost(post: PostRecord): PostRecord {
   return { ...post, message: '', props: {}, hashtags: '', fileIds: [], metadata: {} };
 }
