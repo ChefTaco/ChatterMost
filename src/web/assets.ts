@@ -3147,6 +3147,8 @@ async function loadPosts() {
       orderedPosts.push(post);
     }
   }
+  // The list arrives newest first; the conversation reads oldest to newest.
+  orderedPosts.sort((a, b) => a.create_at - b.create_at);
   state.posts = orderedPosts;
   state.visiblePostCounts[state.activeChannelId] = Math.max(state.visiblePostCounts[state.activeChannelId] || postHistoryPageSize, postHistoryPageSize);
   state.reactions = await api('/api/v4/posts/ids/reactions', { method: 'POST', body: state.posts.map((post) => post.id) });
@@ -5761,7 +5763,7 @@ async function searchMessages(event) {
   renderApp();
   try {
     const result = await api('/api/v4/teams/' + state.activeTeamId + '/posts/search', { method: 'POST', body: { terms } });
-    state.searchResults = result.order.map((id) => result.posts[id]).filter(Boolean).reverse();
+    state.searchResults = result.order.map((id) => result.posts[id]).filter(Boolean);
     state.searchStatus = state.searchResults.length ? state.searchResults.length + ' result' + (state.searchResults.length === 1 ? '' : 's') : 'No messages found.';
     state.searchOpen = true;
     renderApp();

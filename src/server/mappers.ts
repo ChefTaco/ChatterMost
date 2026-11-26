@@ -146,13 +146,19 @@ export function toMattermostPost(
   };
 }
 
-export function toMattermostPostList(posts: PostRecord[]): MattermostPostList {
-  const ordered = [...posts].sort((a, b) => a.createAt - b.createAt);
+/**
+ * A post list in the upstream wire shape: `order` newest first, as official clients expect.
+ * `next_post_id` names a newer post to page forward from with `after`, and `prev_post_id` an
+ * older one to page back from with `before`; each is empty when nothing further exists.
+ */
+export function toMattermostPostList(posts: PostRecord[], cursors: { nextPostId?: string; prevPostId?: string } = {}): MattermostPostList {
+  // A stable sort: posts created in the same millisecond keep the caller's order.
+  const ordered = [...posts].sort((a, b) => b.createAt - a.createAt);
   return {
     order: ordered.map((post) => post.id),
     posts: Object.fromEntries(ordered.map((post) => [post.id, toMattermostPost(post)])),
-    next_post_id: '',
-    prev_post_id: ''
+    next_post_id: cursors.nextPostId ?? '',
+    prev_post_id: cursors.prevPostId ?? ''
   };
 }
 

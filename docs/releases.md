@@ -64,6 +64,10 @@ Changes on `main` since 0.8.0. They ship in the next release.
   and clients receive `post_deleted` for purged posts.
 - `since=` post listings keep the most recent changes when more than 1,000
   posts changed.
+- **Post lists are newest first**, matching upstream: `order` in channel
+  history, thread, search, pinned and flagged responses now lists the newest
+  post first, and channel history pages carry `next_post_id`/`prev_post_id`
+  cursors. See [compatibility](compatibility.md#mobile-and-proxy-notes).
 
 ### Upgrade notes (unreleased)
 
@@ -89,6 +93,9 @@ Changes on `main` since 0.8.0. They ship in the next release.
   place after the upgrade until a system admin changes it.
 - Threads with recent replies are now kept whole, so their older posts are
   purged later than in 0.8.0.
+- Integrations that read `order` as oldest first must sort by `create_at` (the
+  native web UI and HiveXUI already do). `before`/`after` requests now honour
+  `page` relative to the pivot.
 
 ## Changes in 0.8.0
 

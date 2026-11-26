@@ -1095,20 +1095,32 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
     const before = c.req.query('before') ?? '';
     const after = c.req.query('after') ?? '';
     const since = Math.max(0, Number.parseInt(c.req.query('since') ?? '0', 10) || 0);
-    let posts = allPosts;
-    if (before.length > 0) {
-      const pivotIndex = allPosts.findIndex((post) => post.id === before);
-      posts = pivotIndex < 0 ? [] : allPosts.slice(pivotIndex + 1);
-    } else if (after.length > 0) {
-      const pivotIndex = allPosts.findIndex((post) => post.id === after);
-      posts = pivotIndex < 0 ? [] : allPosts.slice(0, pivotIndex).reverse();
-    } else if (since > 0) {
+    if (since > 0 && before.length === 0 && after.length === 0) {
       // Every change since the client's last sync, deletions included, not just one page.
       return c.json(toMattermostPostList(services.posts.channelChangesSince(c.req.param('channel_id'), auth.user, since)));
-    } else {
-      posts = posts.slice(page * perPage);
     }
-    return c.json(toMattermostPostList(posts.slice(0, perPage)));
+    // The page as a window [start, end) of the newest-first list.
+    let start: number;
+    let end: number;
+    if (before.length > 0) {
+      const pivotIndex = allPosts.findIndex((post) => post.id === before);
+      start = pivotIndex < 0 ? allPosts.length : pivotIndex + 1 + page * perPage;
+      end = Math.min(allPosts.length, start + perPage);
+    } else if (after.length > 0) {
+      const pivotIndex = allPosts.findIndex((post) => post.id === after);
+      end = pivotIndex < 0 ? 0 : Math.max(0, pivotIndex - page * perPage);
+      start = Math.max(0, end - perPage);
+    } else {
+      start = page * perPage;
+      end = Math.min(allPosts.length, start + perPage);
+    }
+    const posts = start < end ? allPosts.slice(start, end) : [];
+    return c.json(
+      toMattermostPostList(posts, {
+        nextPostId: posts.length > 0 && start > 0 ? posts[0]?.id ?? '' : '',
+        prevPostId: posts.length > 0 && end < allPosts.length ? posts[posts.length - 1]?.id ?? '' : ''
+      })
+    );
   });
   app.get('/api/v4/posts/:post_id/thread', async (c) => {
     const auth = await requireAuth(c, services);
