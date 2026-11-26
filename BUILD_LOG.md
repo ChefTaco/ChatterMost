@@ -32,6 +32,10 @@
   network failures and 408/429/5xx with `/retry`. `PASSWORD_HASHING=scrypt`
   hashes new passwords with scrypt on the threadpool and rehashes bcrypt at the
   next successful sign-in; the default stays bcrypt so rollback keeps working.
+- `toMattermostPostList` sends `order` newest first (stable for same-millisecond
+  posts), and channel history fills `next_post_id`/`prev_post_id` from the page
+  window like upstream. The native web UI sorts the conversation by
+  `create_at` and shows search results in the order received.
 - The Mattermost import helper reads bulk exports with their authors,
   timestamps, threads (nested or by root ID), reactions and direct messages,
   reports what it cannot carry over, and sends batches that the server applies
