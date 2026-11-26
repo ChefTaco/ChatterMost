@@ -48,7 +48,8 @@ Changes on `main` since 0.8.0. They ship in the next release.
   [message retention](privacy.md#message-retention).
 - **Per-user export and erase** for admins. See
   [per-user export and erase](privacy.md#per-user-export-and-erase).
-- **HiveCommon 0.6.** Bot posts record a valid `x-hive-execution` context as
+- **HiveCommon 0.7.** Concurrent `/health/ready` requests share one readiness
+  run, and the Oathweave userinfo answer is read with a size limit. Bot posts record a valid `x-hive-execution` context as
   `props.hive_execution` (see [execution attribution](hermes-compatibility.md#execution-attribution)),
   and Oathweave JWKS/userinfo reads are retried briefly after transient failures.
 - **Optional scrypt password hashing** (`PASSWORD_HASHING=scrypt`) runs on the
