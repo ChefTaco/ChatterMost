@@ -61,12 +61,14 @@ describe('channel retention', () => {
       const oldRoot = await posts.createPost({ actor: admin, channelId, message: 'old root', fileIds: [oldFile.id] });
       await posts.patchPost(oldRoot.id, { message: 'old root edited' }, admin);
       await reactions.add({ actor: admin, postId: oldRoot.id, emojiName: 'thumbsup' });
-      const newReplyToOldRoot = await posts.createPost({ actor: admin, channelId, message: 'new reply', rootId: oldRoot.id });
+      const oldReplyToOldRoot = await posts.createPost({ actor: admin, channelId, message: 'old reply in an old thread', rootId: oldRoot.id });
+      const activeOldRoot = await posts.createPost({ actor: admin, channelId, message: 'old root, active thread' });
+      const newReplyToOldRoot = await posts.createPost({ actor: admin, channelId, message: 'new reply', rootId: activeOldRoot.id });
       const newRoot = await posts.createPost({ actor: admin, channelId, message: 'new root', fileIds: [keptByNewPost.id] });
       const oldReplyToNewRoot = await posts.createPost({ actor: admin, channelId, message: 'old reply', rootId: newRoot.id });
       const oldPostElsewhere = await posts.createPost({ actor: admin, channelId: otherChannelId, message: 'old elsewhere' });
 
-      await ageRecords(server, [oldFile.id, oldOrphan.id, keptByNewPost.id, oldRoot.id, oldReplyToNewRoot.id, oldPostElsewhere.id], 40);
+      await ageRecords(server, [oldFile.id, oldOrphan.id, keptByNewPost.id, oldRoot.id, oldReplyToOldRoot.id, activeOldRoot.id, oldReplyToNewRoot.id, oldPostElsewhere.id], 40);
       expect(server.store.read((state) => state.posts.find((post) => post.id === newRoot.id)?.replyCount)).toBe(1);
 
       // Without a limit nothing is removed.
@@ -79,15 +81,19 @@ describe('channel retention', () => {
       });
       expect(patch.status).toBe(200);
 
+      const events: { event: string; data: Record<string, unknown> }[] = [];
+      server.services.hub.attach({ send: (frame: string) => events.push(JSON.parse(frame) as { event: string; data: Record<string, unknown> }), close: () => undefined } as never, admin.id);
       const result = await server.services.retention.sweep();
       expect(result).toMatchObject({ channels: 1, posts: 2, files: 2 });
 
       const state = server.store.read((current) => current);
       const postIds = state.posts.map((post) => post.id);
+      // Threads expire as a unit, by their newest post: an old thread goes whole, an active one stays whole.
       expect(postIds).not.toContain(oldRoot.id);
-      expect(postIds).not.toContain(oldReplyToNewRoot.id);
-      expect(postIds).toEqual(expect.arrayContaining([newReplyToOldRoot.id, newRoot.id, oldPostElsewhere.id]));
-      expect(state.posts.find((post) => post.id === newRoot.id)?.replyCount).toBe(0);
+      expect(postIds).not.toContain(oldReplyToOldRoot.id);
+      expect(postIds).toEqual(expect.arrayContaining([activeOldRoot.id, newReplyToOldRoot.id, newRoot.id, oldReplyToNewRoot.id, oldPostElsewhere.id]));
+      expect(state.posts.find((post) => post.id === newRoot.id)?.replyCount).toBe(1);
+      expect(events.filter((event) => event.event === 'post_deleted').map((event) => event.data.post_id).sort()).toEqual([oldRoot.id, oldReplyToOldRoot.id].sort());
       expect(state.postEditHistory.some((entry) => entry.postId === oldRoot.id)).toBe(false);
       expect(state.reactions.some((reaction) => reaction.postId === oldRoot.id)).toBe(false);
 
@@ -280,3 +286,61 @@ describe('agent policy simulator', () => {
     }
   });
 });
+
+describe('retention limit changes', () => {
+  it('lets only system admins set a channel retention limit and audits each change', async () => {
+    const server = await createTestServer({ ORPHAN_UPLOAD_GRACE_HOURS: '0' });
+    try {
+      const token = await login(server);
+      const team = server.store.read((state) => state.teams[0]);
+      const creator = await server.services.users.createUser({ username: 'channelowner', email: 'channelowner@example.test', password: 'SyntheticPassword123!', role: 'system_user', actorUserId: null });
+      await server.services.teams.addUserToTeam(team?.id ?? '', creator.id, 'team_user');
+      const signIn = await server.app.request('/api/v4/users/login', { method: 'POST', headers: server.baseHeaders, body: JSON.stringify({ login_id: 'channelowner', password: 'SyntheticPassword123!' }) });
+      const creatorToken = signIn.headers.get('Token') ?? '';
+      const created = await server.app.request('/api/v4/channels', { method: 'POST', headers: bearer(creatorToken), body: JSON.stringify({ team_id: team?.id, name: 'owned-channel', display_name: 'Owned', type: 'O' }) });
+      expect(created.status).toBe(201);
+      const channelId = ((await created.json()) as { id: string }).id;
+      const patch = (as: string, body: unknown) => server.app.request(`/api/v4/channels/${channelId}/patch`, { method: 'PUT', headers: bearer(as), body: JSON.stringify(body) });
+
+      // The creator is channel_admin and may still rename the channel, but not set a retention limit.
+      expect((await patch(creatorToken, { display_name: 'Renamed' })).status).toBe(200);
+      expect((await patch(creatorToken, { retention_days: 1 })).status).toBe(403);
+      expect(server.store.read((state) => state.channels.find((channel) => channel.id === channelId)?.retentionDays)).toBeNull();
+
+      expect((await patch(token, { retention_days: 30 })).status).toBe(200);
+      expect((await patch(token, { retention_days: 30 })).status).toBe(200);
+      expect((await patch(token, { retention_days: null })).status).toBe(200);
+      const changes = server.store.read((state) => state.auditLogs.filter((entry) => entry.action === 'channel.retention_changed' && entry.targetId === channelId).map((entry) => entry.metadata));
+      expect(changes).toEqual([
+        { old_retention_days: 30, new_retention_days: null },
+        { old_retention_days: null, new_retention_days: 30 }
+      ]);
+    } finally {
+      await server.store.close();
+    }
+  });
+});
+
+describe('changes since a timestamp', () => {
+  it('keeps the most recent changes when capped, including edits of old posts', async () => {
+    const server = await createTestServer({ ORPHAN_UPLOAD_GRACE_HOURS: '0' });
+    try {
+      const token = await login(server);
+      const channelId = await firstChannelId(server.app, token);
+      const admin = adminUser(server);
+      const old = await server.services.posts.createPost({ actor: admin, channelId, message: 'old post' });
+      await ageRecords(server, [old.id], 2);
+      const since = Date.now() - DAY_MS;
+      await server.services.posts.createPost({ actor: admin, channelId, message: 'new one' });
+      await server.services.posts.createPost({ actor: admin, channelId, message: 'new two' });
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      await server.services.posts.patchPost(old.id, { message: 'old post, edited just now' }, admin);
+      const changes = server.services.posts.channelChangesSince(channelId, admin, since, 2);
+      expect(changes.map((post) => post.message)).toContain('old post, edited just now');
+      expect(changes).toHaveLength(2);
+    } finally {
+      await server.store.close();
+    }
+  });
+});
+
