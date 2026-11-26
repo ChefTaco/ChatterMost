@@ -23,6 +23,7 @@ import { resolveDataPath } from './env.js';
 import { IncomingWebhookService, OutgoingWebhookService, toIncomingWebhookResponse, toOutgoingWebhookResponse } from './webhooks.js';
 import { bootstrap, createServices, isAdmin, requireAdmin, type AuthContext, type ServiceBundle } from './services.js';
 import { renderPrometheusMetrics } from './prometheus.js';
+import { UserDataService } from './user-data.js';
 import { JsonStore, PostgresStore, type StateStore } from './store.js';
 import { toMattermostChannel, toMattermostChannelMember, toMattermostCommand, toMattermostFileInfo, toMattermostPost, toMattermostPostList, toMattermostPreference, toMattermostReaction, toMattermostTeam, toMattermostTeamMember, toMattermostUser } from './mappers.js';
 import { AbuseControl, rateLimit } from './rate-limit.js';
@@ -275,6 +276,7 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
     incoming: new IncomingWebhookService(store, env, services.channels, services.auditLog),
     outgoing: new OutgoingWebhookService(store, env, services.channels, services.users, services.posts, services.auditLog)
   };
+  const userData = new UserDataService(store, env, services.hub);
   if (!env.PREFLIGHT_MODE) await bootstrap(services);
   if (!env.PREFLIGHT_MODE) services.auditLog.publishPendingSoon();
   const abuseControl = new AbuseControl(env);
@@ -1546,6 +1548,30 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
     const body = await readJson(c, PasswordSchema);
     await services.users.changePassword(c.req.param('id'), body.new_password, auth.user, undefined, auth.sessionId);
     return c.json(ok());
+  });
+  app.get('/admin/users/:id/export', async (c) => {
+    const auth = await requireAuth(c, services);
+    const data = await userData.export(auth.user, c.req.param('id'), null);
+    return c.json(data, 200, { 'Content-Disposition': contentDisposition('attachment', `user-${c.req.param('id')}-export.json`), 'Cache-Control': 'no-store' });
+  });
+  app.get('/admin/users/:id/export/files/:file_id', async (c) => {
+    const auth = await requireAuth(c, services);
+    const { file, bytes } = await userData.exportFile(auth.user, c.req.param('id'), c.req.param('file_id'));
+    return new Response(Buffer.from(bytes), {
+      headers: {
+        'Content-Type': safeDownloadContentType(file.mimeType),
+        'Content-Length': String(bytes.byteLength),
+        'Content-Disposition': contentDisposition('attachment', file.name),
+        'X-Content-Type-Options': 'nosniff',
+        'Cache-Control': 'no-store'
+      }
+    });
+  });
+  app.post('/admin/users/:id/erase', async (c) => {
+    const auth = await requireAuth(c, services);
+    const body = await readJson(c, z.object({ dry_run: z.boolean().optional().default(true), confirm: z.string().max(128).optional().default('') }));
+    const report = await userData.erase(auth.user, c.req.param('id'), { confirm: body.confirm, dryRun: body.dry_run, ip: null });
+    return c.json({ status: 'OK', dry_run: body.dry_run, ...report });
   });
   app.post('/admin/users/:id/revoke-sessions', async (c) => {
     const auth = await requireAuth(c, services);

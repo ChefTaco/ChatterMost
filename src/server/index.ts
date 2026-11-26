@@ -37,7 +37,7 @@ const RETENTION_FIRST_SWEEP_MS = 60_000;
 function runRetentionSweep(): void {
   if (shuttingDown) return;
   services.retention.sweep().then((result) => {
-    if (result.posts > 0 || result.files > 0) {
+    if (result.posts > 0 || result.files > 0 || result.unreferencedFiles > 0 || result.redactedPosts > 0) {
       process.stdout.write(JSON.stringify({ level: 'info', message: 'retention_purged', ...result }) + '\n');
     }
   }, (error: unknown) => {
