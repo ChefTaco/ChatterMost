@@ -64,7 +64,10 @@ the channel that no kept post references. Each purge is
 recorded in the audit log (`channel.retention_purged`) with counts only.
 
 Deleting a post also deletes its attachments: they stop being served at once and
-the next hourly sweep removes their bytes. The same sweep removes uploads that no
+the next hourly sweep removes their bytes. Deleting a thread's root, which its
+author or an admin can do, deletes every reply in the thread as well, including
+replies by other people, with their attachments; the `post.deleted` audit entry
+records how many replies went with it. The same sweep removes uploads that no
 post references once they are older than `ORPHAN_UPLOAD_GRACE_HOURS` (default
 168, one week; `0` keeps them, including attachments of posts deleted before
 this behaviour existed). The deleted post's text stays in storage for

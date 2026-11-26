@@ -66,9 +66,16 @@ test('create channel, post, edit, reply in thread, react, and delete', async ({ 
   const editedPost = page.getByTestId('post').filter({ hasText: 'Edited from Playwright' });
   await expect(editedPost).toBeVisible();
 
+  // The root has a reply, so deleting it asks first and then removes the whole thread.
   await editedPost.hover();
-  await editedPost.getByRole('button', { name: 'Delete', exact: true }).click();
+  const confirmation = page.waitForEvent('dialog');
+  const deleteClick = editedPost.getByRole('button', { name: 'Delete', exact: true }).click();
+  const dialog = await confirmation;
+  expect(dialog.message()).toBe('Delete this message and all replies in its thread?');
+  await dialog.accept();
+  await deleteClick;
   await expect(page.getByTestId('post-list').getByText('Edited from Playwright')).toBeHidden();
+  await expect(page.getByTestId('post-list').getByText('Thread reply from Playwright')).toBeHidden();
 });
 
 test('start a direct message from the DM panel', async ({ page }) => {
