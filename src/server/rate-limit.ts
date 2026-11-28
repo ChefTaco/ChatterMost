@@ -5,9 +5,9 @@ import {
   createRateLimiter,
   enforceRateLimit,
   trustedProxies,
-  type ClientAddress,
   type ClientAddressDecision,
   type RateLimiter,
+  type RateLimitRefusal,
   type RateLimitResult,
   type RateLimitStore,
   type TrustedProxies
@@ -192,19 +192,20 @@ export class AbuseControl {
         this.localTelemetry.cross_instance_consistent = false;
       }
     }
-    const limiter = this.localLimiter(kind, limit);
-    // At capacity, a key the limiter does not hold displaces the least recently used one.
-    const displaces = limiter.size >= this.env.RATE_LIMIT_MAX_KEYS && limiter.peek(key).resetMs === 0;
-    const result = limiter.consume(key);
-    if (displaces && result.allowed) this.incrementTelemetry('local_evictions');
-    return result;
+    return this.localLimiter(kind, limit).consume(key);
   }
 
   private localLimiter(kind: CounterKind, limit: number): RateLimiter {
     const name = `${kind}:${limit}`;
     let limiter = this.localLimiters.get(name);
     if (limiter === undefined) {
-      limiter = createRateLimiter({ limit, windowMs: WINDOW_MS, maxKeys: this.env.RATE_LIMIT_MAX_KEYS });
+      limiter = createRateLimiter({
+        limit,
+        windowMs: WINDOW_MS,
+        maxKeys: this.env.RATE_LIMIT_MAX_KEYS,
+        // At capacity, a new key displaces the least recently used one; HiveCommon reports each.
+        onEvict: () => { this.incrementTelemetry('local_evictions'); }
+      });
       this.localLimiters.set(name, limiter);
     }
     return limiter;
@@ -216,23 +217,30 @@ export class AbuseControl {
   }
 }
 
+/** Answers a refused request; `Retry-After` is already set on the context. */
+export type RateLimitRespond = (c: Context<AppHonoEnv>, refusal: RateLimitRefusal) => Response | Promise<Response>;
+
 /**
- * The per-request budgets: one per method, route and client address (the stricter sign-in budget
+ * The per-request budget: one per method, route and client address (the stricter sign-in budget
  * on credential routes, 240 a minute elsewhere), then the per-account helpers routes call.
- * A refusal throws HiveCommon's `rate_limited` error, which the app answers in Mattermost's shape.
+ * A refused request is answered by `respond` in Mattermost's shape; the per-account helpers throw
+ * HiveCommon's `rate_limited` error, which the app answers the same way.
  */
-export function rateLimit(env: AppEnv, abuseControl: AbuseControl): MiddlewareHandler<AppHonoEnv>[] {
+export function rateLimit(env: AppEnv, abuseControl: AbuseControl, respond: RateLimitRespond): MiddlewareHandler<AppHonoEnv>[] {
   const proxies = parseTrustedProxies(env.TRUSTED_PROXIES);
   const scopeOf = (c: Context): string => routePath(c, -1) || '*';
-  const sourceKey = (credential: boolean) => (c: Context, client: ClientAddress): string | undefined => {
-    const scope = scopeOf(c);
-    if (CREDENTIAL_ROUTES.has(`${c.req.method} ${scope}`) !== credential) return undefined;
-    abuseControl.recordProxyDecision(client.decision);
-    return `${c.req.method}:${scope}:${client.address}`;
-  };
+  const loginSource = abuseControl.store('source', env.RATE_LIMIT_LOGIN_SOURCE_MAX);
+  const generalSource = abuseControl.store('source', GENERAL_SOURCE_LIMIT);
   return [
-    hiveRateLimit({ limiter: abuseControl.store('source', env.RATE_LIMIT_LOGIN_SOURCE_MAX), trustedProxies: proxies, key: sourceKey(true) }),
-    hiveRateLimit({ limiter: abuseControl.store('source', GENERAL_SOURCE_LIMIT), trustedProxies: proxies, key: sourceKey(false) }),
+    hiveRateLimit({
+      limiter: (c) => (CREDENTIAL_ROUTES.has(`${c.req.method} ${scopeOf(c)}`) ? loginSource : generalSource),
+      trustedProxies: proxies,
+      key: (c, client) => {
+        abuseControl.recordProxyDecision(client.decision);
+        return `${c.req.method}:${scopeOf(c)}:${client.address}`;
+      },
+      respond: (c, refusal) => respond(c as Context<AppHonoEnv>, refusal)
+    }),
     async (c, next) => {
       c.set('rateLimitAccount', async (account) => abuseControl.enforce('account', normalizeAccount(account), env.RATE_LIMIT_LOGIN_ACCOUNT_MAX));
       c.set('rateLimitActor', async (action, actorId, limit) => abuseControl.enforce('account', `${action}\u0000${actorId}`, limit));

@@ -309,7 +309,13 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
   }
   app.use('*', requestContext(store, env));
   app.use('*', secureHeaders(env));
-  app.use('*', ...rateLimit(env, abuseControl));
+  // Every refused request gets Mattermost's 429 envelope, counted as an error like the others.
+  const tooManyRequests = (c: Context<AppHonoEnv>): Response =>
+    c.json(mattermostError(new HttpAppError('api.context.rate_limit.app_error', 'Too many requests', 429), c.get('requestId') ?? 'unknown'), 429);
+  app.use('*', ...rateLimit(env, abuseControl, (c) => {
+    store.incrementMetric('errors');
+    return tooManyRequests(c);
+  }));
   app.use('*', csrfProtection(env));
   app.use('*', requestBodyLimit());
   registerHiveAdminAccountRoutes(app, env, new HiveAdminAccounts(store, env, services.auditLog));
@@ -321,10 +327,10 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
       return c.json(mattermostError(error, requestId), error.statusCode as ContentfulStatusCode);
     }
     if (HiveError.is(error, 'rate_limited')) {
-      // HiveCommon's limiter refused the request; clients read Mattermost's envelope and Retry-After.
+      // A per-account or per-actor budget a route spent; clients read Mattermost's envelope and Retry-After.
       const retryAfter = error.headers?.['retry-after'];
       if (retryAfter !== undefined) c.header('Retry-After', retryAfter);
-      return c.json(mattermostError(new HttpAppError('api.context.rate_limit.app_error', 'Too many requests', 429), requestId), 429);
+      return tooManyRequests(c);
     }
     if (error instanceof z.ZodError) {
       // Zod error strings can contain submitted values, including credentials.
