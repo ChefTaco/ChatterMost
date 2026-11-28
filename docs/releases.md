@@ -38,7 +38,7 @@ Hermes instructions live in the [client guide](clients.md),
   than 32 hops) used to attribute the request to the proxy itself, sharing one
   budget among every client behind it; such a request is now attributed to the
   client the proxy reported. IPv6 addresses are counted in their canonical form.
-- **HiveCommon 0.11.0.** One rate-limit middleware now picks the sign-in or the
+- **HiveCommon 0.11.1.** One rate-limit middleware now picks the sign-in or the
   general budget per request and answers a refusal with the Mattermost 429 body
   itself; status, body, `Retry-After` and the other headers are byte for byte the
   same, no `RateLimit-*` headers are sent, and refusals still count in the
