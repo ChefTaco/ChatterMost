@@ -56,48 +56,98 @@ describe('Mattermost-compatible API', () => {
     expect((await response.json()) as { username: string }[]).toContainEqual(expect.objectContaining({ username: 'admin' }));
   });
 
+  // The source budgets are token buckets refilled continuously, so these tests stop the clock
+  // to count exactly one minute's allowance.
   it('ignores forwarding headers from direct untrusted clients', async () => {
-    const server = await createTestServer({ TRUSTED_PROXIES: '127.0.0.1/32' });
-    let response = new Response();
-    for (let index = 0; index <= 240; index += 1) {
-      response = await server.app.request('/favicon.svg', {
-        headers: { 'X-Forwarded-For': `198.51.100.${index % 250}` }
-      }, peer('203.0.113.9'));
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const server = await createTestServer({ TRUSTED_PROXIES: '127.0.0.1/32' });
+      let response = new Response();
+      for (let index = 0; index <= 240; index += 1) {
+        response = await server.app.request('/favicon.svg', {
+          headers: { 'X-Forwarded-For': `198.51.100.${index % 250}` }
+        }, peer('203.0.113.9'));
+      }
+      expect(response.status).toBe(429);
+      expect(response.headers.get('Retry-After')).not.toBeNull();
+
+      // The forged addresses were never charged: the same client behind the trusted proxy is untouched.
+      const victim = await server.app.request('/favicon.svg', { headers: { 'X-Forwarded-For': '198.51.100.7' } }, peer('127.0.0.1'));
+      expect(victim.status).toBe(200);
+    } finally {
+      vi.useRealTimers();
     }
-    expect(response.status).toBe(429);
-    expect(response.headers.get('Retry-After')).not.toBeNull();
   });
 
   it('walks the full trusted proxy chain to the first untrusted address', async () => {
-    const server = await createTestServer({ TRUSTED_PROXIES: '127.0.0.1/32,10.0.0.0/8' });
-    let response = new Response();
-    for (let index = 0; index <= 240; index += 1) {
-      response = await server.app.request('/favicon.svg', {
-        headers: { 'X-Forwarded-For': `198.51.100.7, 10.${index % 250}.0.1` }
-      }, peer('127.0.0.1'));
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const server = await createTestServer({ TRUSTED_PROXIES: '127.0.0.1/32,10.0.0.0/8' });
+      let response = new Response();
+      for (let index = 0; index <= 240; index += 1) {
+        response = await server.app.request('/favicon.svg', {
+          headers: { 'X-Forwarded-For': `198.51.100.7, 10.${index % 250}.0.1` }
+        }, peer('127.0.0.1'));
+      }
+      expect(response.status).toBe(429);
+    } finally {
+      vi.useRealTimers();
     }
-    expect(response.status).toBe(429);
+  });
+
+  it('keeps separate budgets for two clients behind one trusted proxy and answers 429 in Mattermost shape', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const server = await createTestServer({ TRUSTED_PROXIES: '127.0.0.1/32' });
+      const fromClient = async (address: string, prefix = ''): Promise<Response> =>
+        server.app.request('/favicon.svg', { headers: { 'X-Forwarded-For': `${prefix}${address}` } }, peer('127.0.0.1'));
+      for (let index = 0; index < 240; index += 1) expect((await fromClient('198.51.100.7')).status).toBe(200);
+      const refused = await fromClient('198.51.100.7');
+      expect(refused.status).toBe(429);
+      expect(Number(refused.headers.get('Retry-After'))).toBeGreaterThanOrEqual(1);
+      expect((await refused.json()) as Record<string, unknown>).toEqual({
+        id: 'api.context.rate_limit.app_error',
+        message: 'Too many requests',
+        detailed_error: '',
+        request_id: expect.any(String) as unknown,
+        status_code: 429
+      });
+      // A forged entry, even garbage, left of the proxy's hop does not move a client to another bucket.
+      expect((await fromClient('198.51.100.7', 'not-an-address, ')).status).toBe(429);
+      expect((await fromClient('198.51.100.7', '203.0.113.50, ')).status).toBe(429);
+      expect((await fromClient('198.51.100.8')).status).toBe(200);
+      expect((await fromClient('198.51.100.8', 'not-an-address, ')).status).toBe(200);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('rate limits login accounts separately across changing source addresses', async () => {
-    // Twenty real password checks can exceed ten seconds on shared CI runners.
-    const server = await createTestServer({ TRUSTED_PROXIES: '127.0.0.1/32', RATE_LIMIT_LOGIN_SOURCE_MAX: '20', RATE_LIMIT_LOGIN_ACCOUNT_MAX: '20' });
-    let response = new Response();
-    for (let index = 1; index <= 21; index += 1) {
-      response = await server.app.request('/api/v4/users/login', {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      // Twenty real password checks can exceed ten seconds on shared CI runners.
+      const server = await createTestServer({ TRUSTED_PROXIES: '127.0.0.1/32', RATE_LIMIT_LOGIN_SOURCE_MAX: '20', RATE_LIMIT_LOGIN_ACCOUNT_MAX: '20' });
+      let response = new Response();
+      for (let index = 1; index <= 21; index += 1) {
+        response = await server.app.request('/api/v4/users/login', {
+          method: 'POST',
+          headers: server.baseHeaders,
+          body: JSON.stringify({ login_id: 'admin', password: 'incorrect-password' })
+        }, peer(`198.51.100.${index}`));
+      }
+      expect(response.status).toBe(429);
+      expect(response.headers.get('Retry-After')).not.toBeNull();
+      expect((await response.json()) as Record<string, unknown>).toMatchObject({ id: 'api.context.rate_limit.app_error', status_code: 429 });
+
+      const unrelated = await server.app.request('/api/v4/users/login', {
         method: 'POST',
         headers: server.baseHeaders,
-        body: JSON.stringify({ login_id: 'admin', password: 'incorrect-password' })
-      }, peer(`198.51.100.${index}`));
+        body: JSON.stringify({ login_id: 'nobody-else', password: 'incorrect-password' })
+      }, peer('198.51.100.99'));
+      expect(unrelated.status).toBe(400);
+    } finally {
+      vi.useRealTimers();
     }
-    expect(response.status).toBe(429);
-
-    const unrelated = await server.app.request('/api/v4/users/login', {
-      method: 'POST',
-      headers: server.baseHeaders,
-      body: JSON.stringify({ login_id: 'nobody-else', password: 'incorrect-password' })
-    }, peer('198.51.100.99'));
-    expect(unrelated.status).toBe(400);
   }, 30_000);
 
   it('reports abuse-control identity and throttle telemetry to administrators', async () => {

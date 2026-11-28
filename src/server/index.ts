@@ -6,12 +6,13 @@ import type { Duplex } from 'node:stream';
 import { serve } from '@hono/node-server';
 import type { ServerType } from '@hono/node-server';
 import { WebSocketServer, type RawData } from 'ws';
+import { resolveClientAddress } from '@hivemagnus/hive-common/rate-limit';
 import { createServer } from 'node:https';
 
 import { createServerApp } from './app.js';
 import { loadEnv } from './env.js';
 import { listenerTls } from './listener.js';
-import { resolveClientIdentity, TrustedProxySet, WEBSOCKET_UPGRADE_SOURCE_LIMIT } from './rate-limit.js';
+import { parseTrustedProxies, WEBSOCKET_UPGRADE_SOURCE_LIMIT } from './rate-limit.js';
 import { SocketAdmission, SocketMessageBudget } from './socket-limits.js';
 
 const env = loadEnv({ envFile: process.env.CHATTERMOST_ENV_FILE ?? '.env' });
@@ -48,7 +49,7 @@ function runRetentionSweep(): void {
 }
 const retentionTimers = env.PREFLIGHT_MODE ? [] : [setTimeout(runRetentionSweep, RETENTION_FIRST_SWEEP_MS), setInterval(runRetentionSweep, RETENTION_SWEEP_MS)];
 for (const timer of retentionTimers) timer.unref();
-const trustedProxies = new TrustedProxySet(env.TRUSTED_PROXIES);
+const trustedProxies = parseTrustedProxies(env.TRUSTED_PROXIES);
 const socketAdmission = new SocketAdmission({
   maximum: env.WEBSOCKET_MAX_CONNECTIONS,
   maximumPerSource: env.WEBSOCKET_MAX_CONNECTIONS_PER_SOURCE
@@ -102,9 +103,8 @@ async function handleUpgradeRequest(request: IncomingMessage, socket: Duplex, he
 
   // Upgrades bypass the HTTP middleware, so they are budgeted here: a handshake rate per
   // address, then ceilings on open sockets overall, per address, and not yet signed in.
-  const forwardedFor = request.headers['x-forwarded-for'];
-  const source = resolveClientIdentity(request.socket.remoteAddress, Array.isArray(forwardedFor) ? forwardedFor.join(',') : forwardedFor, trustedProxies).address;
-  if (!(await abuseControl.allow('source', `UPGRADE:/api/v4/websocket:${source}`, WEBSOCKET_UPGRADE_SOURCE_LIMIT, Date.now()))) {
+  const source = resolveClientAddress({ peer: request.socket.remoteAddress, forwardedFor: request.headers['x-forwarded-for'], trusted: trustedProxies }).address;
+  if (!(await abuseControl.allow('source', `UPGRADE:/api/v4/websocket:${source}`, WEBSOCKET_UPGRADE_SOURCE_LIMIT))) {
     refuseUpgrade(socket, 429, 'Too Many Requests');
     return;
   }

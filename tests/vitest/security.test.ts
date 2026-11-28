@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { TrustedProxySet } from '../../src/server/rate-limit.js';
+import { parseTrustedProxies } from '../../src/server/rate-limit.js';
 import { hashSessionToken, hashToken, isSameWebSocketOrigin, safeEqualText } from '../../src/server/security.js';
 
 describe('trusted proxy configuration', () => {
   it('supports IPv4 and IPv6 CIDRs', () => {
-    const proxies = new TrustedProxySet('127.0.0.0/8,::1/128');
+    const proxies = parseTrustedProxies('127.0.0.0/8,::1/128');
     expect(proxies.has('127.0.0.1')).toBe(true);
     expect(proxies.has('::ffff:127.0.0.1')).toBe(true);
     expect(proxies.has('::1')).toBe(true);
@@ -13,8 +13,19 @@ describe('trusted proxy configuration', () => {
   });
 
   it('fails startup-oriented parsing for malformed entries', () => {
-    expect(() => new TrustedProxySet('127.0.0.1/99')).toThrow(/TRUSTED_PROXIES/u);
-    expect(() => new TrustedProxySet('not-an-address')).toThrow(/TRUSTED_PROXIES/u);
+    expect(() => parseTrustedProxies('127.0.0.1/99')).toThrow(/TRUSTED_PROXIES/u);
+    expect(() => parseTrustedProxies('not-an-address')).toThrow(/TRUSTED_PROXIES/u);
+    // An empty prefix once parsed as /0 and trusted every address.
+    expect(() => parseTrustedProxies('10.0.0.0/')).toThrow(/TRUSTED_PROXIES/u);
+  });
+
+  it('trusts nothing when unset and accepts the shared presets', () => {
+    expect(parseTrustedProxies('').has('127.0.0.1')).toBe(false);
+    const proxies = parseTrustedProxies('loopback, 10.0.0.0/8');
+    expect(proxies.has('127.0.0.1')).toBe(true);
+    expect(proxies.has('::1')).toBe(true);
+    expect(proxies.has('10.1.2.3')).toBe(true);
+    expect(proxies.has('192.168.1.1')).toBe(false);
   });
 });
 

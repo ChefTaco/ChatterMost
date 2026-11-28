@@ -15,6 +15,30 @@ publish a new version only for an intentional distribution change. Client and
 Hermes instructions live in the [client guide](clients.md),
 [Hermes guide](hermes-compatibility.md) and [agent runbook](../AGENTS.md#installation-runbook-for-agents).
 
+## Unreleased
+
+- **Rate limiting runs on HiveCommon `/rate-limit`** (`@hivemagnus/hive-common`
+  0.10.0). The budgets, environment variables, routes and the 429 body clients
+  read (`api.context.rate_limit.app_error` with `Retry-After`) are unchanged.
+  Redis counters (`ENABLE_DISTRIBUTED_RATE_LIMIT=true`) keep their fixed one-minute
+  window and key names. Without Redis, each budget is now a token bucket: the same
+  number per minute, refilled continuously instead of all at once when the minute
+  ends, so `Retry-After` is the wait for the next request rather than for the
+  window to end. `RATE_LIMIT_MAX_KEYS` now bounds each budget's local keys
+  (general, sign-in, per account, uploads, WebSocket handshakes) instead of all
+  of them together.
+- **Stricter `TRUSTED_PROXIES` parsing.** An entry with an empty prefix
+  (`192.0.2.0/`) used to parse as `/0` and trust every address; it now stops
+  startup with an `Invalid TRUSTED_PROXIES entry` error. Entries may also be
+  separated by spaces and may use the presets `loopback`, `private` and
+  `linklocal`. Check the value before upgrading if it was hand-edited.
+- **Forged forwarding entries no longer merge clients.** Behind a trusted proxy,
+  `X-Forwarded-For` is read from the right only as far as the first untrusted
+  address. A client-written entry further left that is not an address (or more
+  than 32 hops) used to attribute the request to the proxy itself, sharing one
+  budget among every client behind it; such a request is now attributed to the
+  client the proxy reported. IPv6 addresses are counted in their canonical form.
+
 ## Changes in 0.10.0
 
 Released 2026-11-26. **Read the upgrade notes before upgrading:** new password
