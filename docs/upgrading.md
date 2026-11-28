@@ -14,19 +14,20 @@ Keep credentials, backup paths, diagnostics and recovery evidence private.
 | Published Compose 0.3.2, 0.3.3, 0.4.1, 0.4.2, 0.4.4, 0.4.5, 0.5.1, 0.5.2, 0.6.1, 0.6.4, 0.7.0, 0.7.1 or 0.7.2 | Published Compose 0.8.0 | Run the verified **0.8.0 manager** with `upgrade 0.8.0` |
 | Published Compose 0.8.0 | Published Compose 0.9.0 | Run the verified **0.9.0 manager** with `upgrade 0.9.0` |
 | Published Compose 0.9.0 | Published Compose 0.10.0 | Run the verified **0.10.0 manager** with `upgrade 0.10.0` |
+| Published Compose 0.9.0 or 0.10.0 | Published Compose 0.11.0 | Check `TRUSTED_PROXIES`, then run the verified **0.11.0 manager** with `upgrade 0.11.0` |
 | Compose 0.3.2 to 0.7.2 | A release after 0.8.0 | Upgrade to the **0.8.0 stepping stone** first, then to the target |
 | Compose 0.8.0 | A release after 0.9.0 | Upgrade to the **0.9.0 stepping stone** first, then to the target |
-| Compose 0.10.0 | Same version | No upgrade required; `start` checks/starts the selected release |
-| Compose 0.9.0 or 0.10.0 | A future release | Only when that published target explicitly lists the installed version in `release.json` → `upgrade_from` and the path has release-test coverage |
+| Compose 0.11.0 | Same version | No upgrade required; `start` checks/starts the selected release |
+| Compose 0.9.0, 0.10.0 or 0.11.0 | A future release | Only when that published target explicitly lists the installed version in `release.json` → `upgrade_from` and the path has release-test coverage |
 | Compose with a recorded previous release | That previous release | `rollback`, only when generation, lineage and actual schema checks permit it |
 | Native SSH/systemd | Compatible newer native release | Verified backup, then the native staged migration/preflight/activation transaction |
 | Native SSH/systemd or JSON store | Compose | Separate authorized migration; not an ordinary version upgrade or a cross-installation `restore` |
 
-The current published release is **0.10.0**. Its reviewed `upgrade_from` list contains
-**0.9.0** only. An installation on 0.8.0 must first upgrade to the 0.9.0 stepping
+The current published release is **0.11.0**. Its reviewed `upgrade_from` list contains
+**0.9.0** and **0.10.0**. An installation on 0.8.0 must first upgrade to the 0.9.0 stepping
 stone, an installation on 0.3.2 to 0.7.2 to the 0.8.0 stepping stone and then 0.9.0,
 and an older 0.2.3 installation must first upgrade to the historical 0.3.2 release
-using its verified manager; a direct 0.8.0 → 0.10.0, 0.7.2 → 0.10.0 or 0.2.3 → 0.10.0
+using its verified manager; a direct 0.8.0 → 0.11.0, 0.7.2 → 0.11.0 or 0.2.3 → 0.11.0
 path is unsupported.
 The `v0.4.0`, `v0.5.0`, `v0.6.0`, `v0.6.2` and `v0.6.3` tags were never published as releases and are not upgrade targets.
 Do not infer a path from version ordering, source tags or the presence
@@ -43,6 +44,28 @@ always lands on a release that can still verify every password. The release test
 runner enforces this and exercises every declared source on each native
 architecture. This coverage requirement does not publish a future version or
 change an immutable published manifest.
+
+## Upgrading to 0.11.0 refuses an empty `TRUSTED_PROXIES` prefix
+
+**Check `TRUSTED_PROXIES` before upgrading** (in a Compose installation, in
+`secrets/runtime.env`; natively, in the protected `.env`), especially if it was
+edited by hand. An entry with an empty prefix, such as `192.0.2.0/`, used to be
+read as `/0` and trusted every address, so any client could set its own
+rate-limit source address with `X-Forwarded-For`. 0.11.0 stops startup with an
+`Invalid TRUSTED_PROXIES entry` error instead. A Compose upgrade with such an
+entry fails its readiness check and the manager restarts the previous release;
+correct the entry (for example `192.0.2.0/24`, keeping the file's mode 600) and
+run the upgrade again. Entries may now also be separated by spaces and may use
+the presets `loopback`, `private` and `linklocal`.
+
+Rate limiting now runs on HiveCommon. Budgets, settings, routes and the 429 body
+are unchanged and Redis counters keep their one-minute window. Without Redis,
+each budget is a token bucket that refills continuously, so `Retry-After` is the
+wait for the next request, and `RATE_LIMIT_MAX_KEYS` bounds each budget's keys
+separately. 0.11.0 adds no database migration and the stored layout is
+unchanged, so `rollback` to 0.10.0 or 0.9.0 is compatible. An installation
+upgrading from 0.9.0 also takes the 0.10.0 changes below (scrypt for new password
+hashes). See the [0.11.0 upgrade notes](releases.md#upgrade-notes-for-0110).
 
 ## Upgrading to 0.10.0 switches new password hashes to scrypt
 
@@ -98,11 +121,11 @@ editing the mounted file alone does not reload the running process.
 2. Review the target's `upgrade_from`, infrastructure image digests and schema
    contract. Verify the current `status`, and take a backup with the new manager.
    Plan a brief interruption: backup drains the app and resumes it afterward if
-   it was running. In this example, both commands use the downloaded 0.10.0 tool:
+   it was running. In this example, both commands use the downloaded 0.11.0 tool:
 
    ```bash
-   ./chattermost-0.10.0/chattermost --directory /srv/chattermost status
-   ./chattermost-0.10.0/chattermost --directory /srv/chattermost backup
+   ./chattermost-0.11.0/chattermost --directory /srv/chattermost status
+   ./chattermost-0.11.0/chattermost --directory /srv/chattermost backup
    ```
 
    Save the printed backup path privately, copy the complete backup off-host and
@@ -113,11 +136,11 @@ editing the mounted file alone does not reload the running process.
 3. Request the exact version:
 
    ```bash
-   ./chattermost-0.10.0/chattermost --directory /srv/chattermost upgrade 0.10.0
+   ./chattermost-0.11.0/chattermost --directory /srv/chattermost upgrade 0.11.0
    /srv/chattermost/chattermost --directory /srv/chattermost status
    ```
 
-   The example assumes the download directory contains `chattermost-0.10.0/`;
+   The example assumes the download directory contains `chattermost-0.11.0/`;
    do not run it from inside that extracted directory with the same relative path.
    After a successful upgrade, the manager is installed at the installation root.
 4. Check public HTTPS ping/client configuration against the selected manifest's

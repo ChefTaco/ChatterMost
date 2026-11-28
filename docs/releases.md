@@ -15,10 +15,16 @@ publish a new version only for an intentional distribution change. Client and
 Hermes instructions live in the [client guide](clients.md),
 [Hermes guide](hermes-compatibility.md) and [agent runbook](../AGENTS.md#installation-runbook-for-agents).
 
-## Unreleased
+## Changes in 0.11.0
+
+Released 2026-11-28. **Check `TRUSTED_PROXIES` before upgrading:** an entry
+with an empty prefix such as `192.0.2.0/` used to trust every address and now
+stops startup (see the upgrade notes). 0.11.0 upgrades from 0.10.0 and from the
+0.9.0 stepping stone; installations on 0.8.0 upgrade to 0.9.0 first. No database
+migration was added and the stored layout is unchanged.
 
 - **Rate limiting runs on HiveCommon `/rate-limit`** (`@hivemagnus/hive-common`
-  0.10.0). The budgets, environment variables, routes and the 429 body clients
+  0.11.1). The budgets, environment variables, routes and the 429 body clients
   read (`api.context.rate_limit.app_error` with `Retry-After`) are unchanged.
   Redis counters (`ENABLE_DISTRIBUTED_RATE_LIMIT=true`) keep their fixed one-minute
   window and key names. Without Redis, each budget is now a token bucket: the same
@@ -38,7 +44,7 @@ Hermes instructions live in the [client guide](clients.md),
   than 32 hops) used to attribute the request to the proxy itself, sharing one
   budget among every client behind it; such a request is now attributed to the
   client the proxy reported. IPv6 addresses are counted in their canonical form.
-- **HiveCommon 0.11.1.** One rate-limit middleware now picks the sign-in or the
+- **One rate-limit middleware.** It now picks the sign-in or the
   general budget per request and answers a refusal with the Mattermost 429 body
   itself; status, body, `Retry-After` and the other headers are byte for byte the
   same, no `RateLimit-*` headers are sent, and refusals still count in the
@@ -46,6 +52,34 @@ Hermes instructions live in the [client guide](clients.md),
   keys HiveCommon's limiter actually dropped to stay within `RATE_LIMIT_MAX_KEYS`.
   It used to also count a request for a held key whose budget had fully refilled,
   so on a busy instance at capacity it may read lower than before.
+
+### Upgrade notes for 0.11.0
+
+- **Check `TRUSTED_PROXIES` before upgrading.** In a Compose installation it is
+  in `secrets/runtime.env` (written by `setup --trusted-proxies`); natively, in
+  the protected `.env`. An entry with an empty prefix, such as `192.0.2.0/`, was
+  read as `/0` and trusted every address, so any client could set its own
+  rate-limit source address with `X-Forwarded-For`. 0.11.0 stops startup with
+  `Invalid TRUSTED_PROXIES entry` instead. A Compose upgrade with such an entry
+  fails its readiness check and the manager restarts the previous release.
+  Correct the entry to the intended prefix (for example `192.0.2.0/24`, keeping
+  the file's mode 600) before upgrading, or after a failed attempt, and run the
+  upgrade again. Other malformed entries were already refused.
+- **Without Redis, rate-limit budgets refill continuously.** Each budget allows
+  the same number of requests per minute, but a client that used it up can send
+  again as soon as one request's worth has refilled, and `Retry-After` reports
+  that shorter wait. `RATE_LIMIT_MAX_KEYS` now applies to each budget on its own,
+  so more local keys can be held in total than the setting; lower it if memory
+  matters more than per-client accuracy.
+  Installations with `ENABLE_DISTRIBUTED_RATE_LIMIT=true` keep the fixed
+  one-minute Redis window and key names.
+- The `local_evictions` abuse-control counter may read lower than before on a
+  busy instance at capacity; it now counts only keys actually dropped.
+- **Upgrade from 0.10.0 or 0.9.0.** Installations on 0.8.0 upgrade to the 0.9.0
+  stepping stone first. An upgrade from 0.9.0 also takes the 0.10.0 changes
+  (scrypt for new password hashes; read its upgrade notes below).
+- No database migration and no settings change are required, so the manager's
+  `rollback` to the previous release (0.10.0 or 0.9.0) is a compatible rollback.
 
 ## Changes in 0.10.0
 
@@ -364,8 +398,8 @@ database migration was added. Publication does not alter an installed release.
 
 | Artifact | Meaning |
 | --- | --- |
-| `ghcr.io/cheftaco/chattermost:0.10.0` | Multi-architecture application image |
-| `ghcr.io/cheftaco/chattermost-migrator:0.10.0` | Matching one-off migrator |
+| `ghcr.io/cheftaco/chattermost:0.11.0` | Multi-architecture application image |
+| `ghcr.io/cheftaco/chattermost-migrator:0.11.0` | Matching one-off migrator |
 | `VERSION-amd64`, `VERSION-arm64` image tags | Native build outputs; may exist before all release checks finish |
 | `chattermost-VERSION.tar.gz` | Allowlisted bundle: manager, Compose, manifest, installation README, Apache license and notice |
 | `release.json` | Exact app/migrator/infrastructure digests, source revision, schema/lineage, platforms and permitted upgrade sources |
@@ -373,8 +407,8 @@ database migration was added. Publication does not alter an installed release.
 | `scan-*.json`, `lifecycle-proof-*.json` | Filtered vulnerability findings and sanitized native lifecycle evidence |
 
 Install a completed [GitHub release](https://github.com/ChefTaco/ChatterMost/releases),
-not a candidate architecture tag. The latest lifecycle release is 0.10.0;
-0.9.0, the stepping stone, is its tested upgrade source. The application has one writer
+not a candidate architecture tag. The latest lifecycle release is 0.11.0;
+0.10.0 and 0.9.0, the stepping stone, are its tested upgrade sources. The application has one writer
 and local WebSocket fanout. Both supported Linux architectures execute on native
 CI runners; there is no claim of emulated execution as native proof.
 
@@ -472,7 +506,7 @@ A successful push is not installation proof. Dispatch the public verification
 workflow for the exact completed release:
 
 ```bash
-gh workflow run verify-public-release.yml --ref main -f version=0.10.0
+gh workflow run verify-public-release.yml --ref main -f version=0.11.0
 ```
 
 Substitute the newly published version. Check both native fresh-install jobs,
@@ -489,7 +523,7 @@ Review the public manifest/digests and per-architecture SBOM/provenance, verify
 all downloaded checksums, and verify the archive and checksum publisher identities:
 
 ```bash
-gh attestation verify chattermost-0.10.0.tar.gz --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
+gh attestation verify chattermost-0.11.0.tar.gz --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
 gh attestation verify SHA256SUMS --repo ChefTaco/ChatterMost --signer-workflow ChefTaco/ChatterMost/.github/workflows/release.yml
 ```
 
