@@ -5,6 +5,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 
 import { createRequestContext, getRequestContext, runWithRequestContext } from '@hivemagnus/hive-common/context';
+import { HiveError } from '@hivemagnus/hive-common/errors';
 import { HEALTH_PATHS } from '@hivemagnus/hive-common/health';
 import { registerHealthRoutes, securityHeaders } from '@hivemagnus/hive-common/hono';
 import { matchesSha256Digest } from '@hivemagnus/hive-common/secrets';
@@ -308,7 +309,7 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
   }
   app.use('*', requestContext(store, env));
   app.use('*', secureHeaders(env));
-  app.use('*', rateLimit(env, abuseControl));
+  app.use('*', ...rateLimit(env, abuseControl));
   app.use('*', csrfProtection(env));
   app.use('*', requestBodyLimit());
   registerHiveAdminAccountRoutes(app, env, new HiveAdminAccounts(store, env, services.auditLog));
@@ -318,6 +319,12 @@ export async function createServerApp(env: AppEnv, options: { storePath?: string
     store.incrementMetric('errors');
     if (error instanceof HttpAppError) {
       return c.json(mattermostError(error, requestId), error.statusCode as ContentfulStatusCode);
+    }
+    if (HiveError.is(error, 'rate_limited')) {
+      // HiveCommon's limiter refused the request; clients read Mattermost's envelope and Retry-After.
+      const retryAfter = error.headers?.['retry-after'];
+      if (retryAfter !== undefined) c.header('Retry-After', retryAfter);
+      return c.json(mattermostError(new HttpAppError('api.context.rate_limit.app_error', 'Too many requests', 429), requestId), 429);
     }
     if (error instanceof z.ZodError) {
       // Zod error strings can contain submitted values, including credentials.

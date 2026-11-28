@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveClientIdentity, TrustedProxySet } from '../../src/server/rate-limit.js';
+import { resolveClientAddress } from '@hivemagnus/hive-common/rate-limit';
+
+import { parseTrustedProxies } from '../../src/server/rate-limit.js';
 import { PasswordWorkGate } from '../../src/server/security.js';
 import { SocketAdmission, SocketMessageBudget } from '../../src/server/socket-limits.js';
 import { webClient } from '../../src/web/assets.js';
@@ -209,10 +211,13 @@ describe('WebSocket ceilings', () => {
   });
 
   it('attributes a connection to the forwarded address only behind a trusted proxy', () => {
-    const trusted = new TrustedProxySet('127.0.0.1/32');
-    expect(resolveClientIdentity('203.0.113.9', '198.51.100.7', trusted).address).toBe('203.0.113.9');
-    expect(resolveClientIdentity('127.0.0.1', '198.51.100.7', trusted).address).toBe('198.51.100.7');
-    expect(resolveClientIdentity('::ffff:127.0.0.1', '10.0.0.1, 198.51.100.7', trusted).address).toBe('198.51.100.7');
-    expect(resolveClientIdentity('127.0.0.1', 'not-an-address', trusted).address).toBe('127.0.0.1');
+    const trusted = parseTrustedProxies('127.0.0.1/32');
+    const resolve = (peer: string, forwardedFor: string): string => resolveClientAddress({ peer, forwardedFor, trusted }).address;
+    expect(resolve('203.0.113.9', '198.51.100.7')).toBe('203.0.113.9');
+    expect(resolve('127.0.0.1', '198.51.100.7')).toBe('198.51.100.7');
+    expect(resolve('::ffff:127.0.0.1', '10.0.0.1, 198.51.100.7')).toBe('198.51.100.7');
+    expect(resolve('127.0.0.1', 'not-an-address')).toBe('127.0.0.1');
+    // A client-written entry left of the proxy's own hop is never read, even when it is garbage.
+    expect(resolve('127.0.0.1', 'not-an-address, 198.51.100.7')).toBe('198.51.100.7');
   });
 });
