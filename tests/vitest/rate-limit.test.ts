@@ -26,6 +26,10 @@ describe('abuse control on HiveCommon rate limiting', () => {
     expect(after.source_checks - before.source_checks).toBe(WEBSOCKET_UPGRADE_SOURCE_LIMIT + 2 + 100);
     expect(after.source_throttles - before.source_throttles).toBe(1);
     expect(after.local_evictions - before.local_evictions).toBe(2);
+    // A held key whose bucket has refilled displaces nothing, even at capacity.
+    vi.setSystemTime(Date.now() + 120_000);
+    await abuse.allow('source', 'UPGRADE:/api/v4/websocket:203.0.113.99', WEBSOCKET_UPGRADE_SOURCE_LIMIT);
+    expect((await abuse.telemetry()).local_evictions - before.local_evictions).toBe(2);
     await server.store.close(); await abuse.close();
   });
 

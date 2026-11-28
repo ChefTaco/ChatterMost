@@ -102,16 +102,19 @@ describe('Mattermost-compatible API', () => {
       const fromClient = async (address: string, prefix = ''): Promise<Response> =>
         server.app.request('/favicon.svg', { headers: { 'X-Forwarded-For': `${prefix}${address}` } }, peer('127.0.0.1'));
       for (let index = 0; index < 240; index += 1) expect((await fromClient('198.51.100.7')).status).toBe(200);
+      const errorsBefore = server.store.read((state) => state.metrics.errors);
       const refused = await fromClient('198.51.100.7');
       expect(refused.status).toBe(429);
       expect(Number(refused.headers.get('Retry-After'))).toBeGreaterThanOrEqual(1);
+      expect(refused.headers.get('RateLimit-Limit')).toBeNull();
       expect((await refused.json()) as Record<string, unknown>).toEqual({
         id: 'api.context.rate_limit.app_error',
         message: 'Too many requests',
         detailed_error: '',
-        request_id: expect.any(String) as unknown,
+        request_id: refused.headers.get('X-Request-Id'),
         status_code: 429
       });
+      expect(server.store.read((state) => state.metrics.errors)).toBe(errorsBefore + 1);
       // A forged entry, even garbage, left of the proxy's hop does not move a client to another bucket.
       expect((await fromClient('198.51.100.7', 'not-an-address, ')).status).toBe(429);
       expect((await fromClient('198.51.100.7', '203.0.113.50, ')).status).toBe(429);
