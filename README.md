@@ -50,7 +50,7 @@ version advertisement, troubleshooting and what the tests establish.
 
 ## Install the backend
 
-Use the [0.10.0 Compose distribution](https://github.com/ChefTaco/ChatterMost/releases/tag/v0.10.0).
+Use the [0.11.0 Compose distribution](https://github.com/ChefTaco/ChatterMost/releases/tag/v0.11.0).
 It includes the application, Postgres, persistent attachments/profile images and
 optional Redis for rate limiting. Public images support `linux/amd64` and
 `linux/arm64`; no source checkout, Node installation, registry login or local
@@ -69,7 +69,7 @@ provides a copyable installation runbook for coding and Hermes agents.
 
 The bundle pins image digests. Keep one application instance: Redis supplies abuse
 counters; runtime writes and WebSocket delivery remain local to that instance.
-For existing installations, the supported upgrade source for **0.10.0** is the **0.9.0** stepping stone, through the [release manager](docs/upgrading.md), preserving
+For existing installations, the supported upgrade sources for **0.11.0** are **0.10.0** and the **0.9.0** stepping stone, through the [release manager](docs/upgrading.md), preserving
 credentials and data. Installations on 0.8.0 upgrade to 0.9.0 first, and installations on 0.3.2 to 0.7.2 upgrade to 0.8.0 and then 0.9.0. Native-to-Compose moves use the separate
 [migration procedure](docs/container-migration.md).
 
